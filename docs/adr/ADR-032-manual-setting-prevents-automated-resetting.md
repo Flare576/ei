@@ -215,3 +215,84 @@ needed in either direction.
 - `src/core/handlers/human-matching.ts:160` — extraction's clear-when-grown rule, unchanged by this decision
 - `src/core/state/human.ts:65,90` — the upsert choke points, which already own server-computed fields
 - `src/cli/corrections-endpoints.ts:88,314-333` — where the floor is currently dropped
+
+## Amendment — 2026-08-09
+
+**Status of the amendment: enacted.** This ADR's mechanism — compute at the upsert choke point, let automation
+opt out — is still directionally correct and shipped substantially as designed. One piece of its vocabulary did
+not survive contact with the real call sites, and this amendment records what was built instead and why, per this
+project's "wrong turns stay on the map" convention: the original text below is left intact, not silently rewritten.
+
+### What the original design assumed
+
+The Decision section's table reads a caller's INTENT off the shape of the object it hands to `topic_upsert`/
+`person_upsert`: the field **absent** from the object means "compute it"; **`null`** on the object means "clear
+it"; **a number** on the object means "use this." That assumes a caller can construct an object where the field
+is genuinely missing, as distinct from present-with-a-stale-value.
+
+### The discovery: the object's own shape is not a reliable intent channel, for two different reasons
+
+Auditing every actual call site (`src/core/handlers/rewrite.ts`, `human-matching.ts`, `heartbeat.ts`, `dedup.ts`,
+and the merge-patch candidate resolvers in `src/core/corrections.ts`) found call sites built two genuinely
+different shapes, and **both** defeat "read absence off the object":
+
+- **Updating an existing record**, every one of these callers builds its record with `{...current, ...changes}` —
+  a spread over the currently-stored object. That spread *always* copies whatever `rewrite_length_floor` value
+  `current` already had onto the new object, forwarded byte-for-byte, unless the writer's own `changes`
+  explicitly overwrites it. For this shape, **the field is never genuinely absent** — it is either the old stored
+  value, riding along for free, or a value the writer deliberately set. Reading
+  `incoming.rewrite_length_floor === undefined` here would see "the spread happened to carry `undefined` forward,"
+  a coincidence of what `current` held, not a signal of intent.
+- **Creating a brand-new record**, extraction's `handleTopicUpdate`/`handlePersonUpdate` (`isNewItem` branch) and
+  ReWrite's own new-item `baseFields` build a fresh object literal with no prior record to spread over — here the
+  field genuinely *is* absent. But that fact alone still doesn't make the object a trustworthy channel: the SAME
+  handler function contains both shapes in different branches (a new-item literal in one call, a
+  spread-over-existing in another, sometimes for the SAME id across two calls in a single request), so a chokepoint
+  reading the object's own field would need to special-case "which branch built this" per caller — exactly the
+  kind of coupling a dedicated parameter exists to avoid.
+
+Neither shape supports one uniform "read the object" rule; a caller-supplied parameter sidesteps both problems at
+once, for every call site, regardless of which shape it happens to build.
+
+### What was built instead
+
+`topic_upsert` (`src/core/state/human.ts`) gained a second parameter, `floorOverride?: number | null` —
+`person_upsert` gained the SAME parameter as its **third**, after the pre-existing `excludeIds?: readonly
+string[]` — threaded through `StateManager.human_topic_upsert`/`human_person_upsert` at the same positions. The
+choke point's resolver (`resolveRewriteLengthFloor`) never reads `incoming.rewrite_length_floor` at all — reading
+it is exactly the mistake this amendment exists to avoid. Instead:
+
+| `floorOverride` | Meaning | Who does this |
+|---|---|---|
+| `null` | Clear it, explicitly | Extraction, when an EXISTING stored floor is reached/exceeded by the new description |
+| a number | Use this value, explicitly | Extraction (preserving its shrink-under-an-existing-floor case), ReWrite (its own recomputed value) |
+| omitted | Decide from state (see below) | Extraction, when there is no stored floor to grow past — a new record, or an existing record that is already floorless — plus every other writer: CLI/MCP correction drain, heartbeat, dedup, and any future writer that doesn't know this field exists |
+
+When `floorOverride` is omitted, the choke point compares `existing.description` to `incoming.description`: a
+**new record, or a description that actually changed**, gets a fresh floor computed from the new length
+(`computeRewriteLengthFloor`, extracted to `src/core/utils/rewrite-floor.ts`); an **unrelated-field-only write**
+(same description, something else changed) leaves the stored floor exactly as it was, whatever that value is.
+
+### Why the fallback recomputes on content-change rather than always preserving
+
+A tempting simplification, once the override channel exists, is to make the no-override default just "preserve
+whatever is stored" — simpler than a description comparison. That is exactly Alternative D, already rejected
+above: it "trades an over-eager rewrite for a rewrite that can never happen" — a record whose description grows
+from 800 to 8,000 characters would keep an 880 floor forever and never be reconsidered. Comparing descriptions
+preserves Alternative D's appeal (an edit that didn't touch content doesn't disturb the floor) while still closing
+that failure mode (an edit that DID grow the content gets a floor sized to the new content, not the old one) — the
+same shape of guarantee the original Decision's "absent → compute" branch was reaching for, just keyed off an
+observable fact (did the content change?) instead of an unobservable one (did the caller think about this field?).
+
+### Consequence for the original Decision table
+
+The original table's **rows are still the right three cases** — clear / set / decide-from-state — and the
+ReWrite and extraction-when-grown rows are unchanged. Only the **left column changed shape**: "what the caller
+passes on the object" became "what the caller passes as `floorOverride`," and the "absent" row's meaning changed
+from "the object doesn't have this key" (not a reliable signal either way — see the discovery above) to "the
+parameter wasn't supplied" (a real, distinguishable state on a dedicated channel). No caller needed to change its
+own object-construction style —
+extraction and ReWrite pass their explicit values through the new parameter instead of embedding them in the
+record; every other caller is untouched and gets the decide-from-state default for free, which is the ADR's
+original goal ("a new write path inherits correct behaviour without knowing the field exists") delivered by a
+mechanism the original prose didn't quite describe.

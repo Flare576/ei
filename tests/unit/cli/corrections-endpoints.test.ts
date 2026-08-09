@@ -241,11 +241,20 @@ describe("corrections endpoints", () => {
     expect(updated).not.toHaveProperty("last_ei_asked");
 
     // The strip is a RESPONSE-shaping concern only -- the persisted record
-    // still needs these System Hidden fields for real (rewrite_length_floor
-    // is recomputed by the ceremony, last_ei_asked by proactive-ask logic).
+    // still needs these System Hidden fields for real. rewrite_length_floor
+    // is NOT expected to survive unchanged here: this update's patch
+    // genuinely changes `description`, and the upsert choke point
+    // (src/core/state/human.ts's resolveRewriteLengthFloor, ADR-032)
+    // recomputes the floor from the NEW description whenever content
+    // actually changed -- rejecting the seeded stale value of 42 the same
+    // way it would reject `undefined`. Preserving a stale floor across a
+    // real content edit was ADR-032's explicitly rejected Alternative D
+    // ("a record edited from 800 to 8,000 characters keeps its 880 floor
+    // and is never re-evaluated"). `last_ei_asked` is untouched by this
+    // patch (only `description` is submitted) and survives byte-for-byte.
     const persisted = await loadLatestState();
     const person = persisted!.human.people.find((p) => p.id === "person_1")!;
-    expect(person.rewrite_length_floor).toBe(42);
+    expect(person.rewrite_length_floor).toBe(Math.max(750, Math.ceil("Updated description".length * 1.1)));
     expect(person.last_ei_asked).toBe(INITIAL_NOW);
   });
 

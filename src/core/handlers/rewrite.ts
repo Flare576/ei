@@ -17,10 +17,9 @@ import type {
 import { buildPersonRewriteSplitPrompt } from "../../prompts/ceremony/people-rewrite.js";
 import { buildTopicRewriteSplitPrompt } from "../../prompts/ceremony/topic-rewrite.js";
 import { getEmbeddingService, getItemEmbeddingText } from "../embedding-service.js";
+import { computeRewriteLengthFloor } from "../utils/rewrite-floor.js";
 
 import { searchHumanData } from "../human-data-manager.js";
-
-const MIN_REWRITE_FLOOR = 750;
 
 /**
  * handleRewriteScan — Phase 1 of Rewrite.
@@ -42,16 +41,17 @@ export async function handleRewriteScan(response: LLMResponse, state: StateManag
     const human = state.getHuman();
     if (itemType === "topic") {
       const topic = human.topics.find(t => t.id === itemId);
-      if (topic) state.human_topic_upsert({
-        ...topic,
-        rewrite_length_floor: Math.max(MIN_REWRITE_FLOOR, Math.ceil((topic.description?.length ?? 0) * 1.1)),
-      });
+      if (topic) state.human_topic_upsert(
+        { ...topic },
+        computeRewriteLengthFloor(topic.description?.length ?? 0)
+      );
     } else if (itemType === "person") {
       const person = human.people.find(p => p.id === itemId);
-      if (person) state.human_person_upsert({
-        ...person,
-        rewrite_length_floor: Math.max(MIN_REWRITE_FLOOR, Math.ceil((person.description?.length ?? 0) * 1.1)),
-      });
+      if (person) state.human_person_upsert(
+        { ...person },
+        undefined,
+        computeRewriteLengthFloor(person.description?.length ?? 0)
+      );
     }
     return;
   }
@@ -177,7 +177,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
       console.warn(`[handleRewriteRewrite] Failed to compute embedding for existing ${resolvedType} "${item.name}":`, err);
     }
 
-    const existingFloor = Math.max(MIN_REWRITE_FLOOR, Math.ceil(item.description.length * 1.1));
+    const existingFloor = computeRewriteLengthFloor(item.description.length);
     switch (resolvedType) {
       case "topic": {
         const existing = human.topics.find(t => t.id === item.id)!;
@@ -188,8 +188,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
           sentiment: item.sentiment ?? existing.sentiment,
           last_updated: now,
           embedding,
-          rewrite_length_floor: existingFloor,
-        });
+        }, existingFloor);
         break;
       }
       case "person": {
@@ -201,8 +200,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
           sentiment: item.sentiment ?? existing.sentiment,
           last_updated: now,
           embedding,
-          rewrite_length_floor: existingFloor,
-        });
+        }, undefined, existingFloor);
         break;
       }
     }
@@ -225,7 +223,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
       console.warn(`[handleRewriteRewrite] Failed to compute embedding for new ${item.type} "${item.name}":`, err);
     }
 
-    const newFloor = Math.max(MIN_REWRITE_FLOOR, Math.ceil(item.description.length * 1.1));
+    const newFloor = computeRewriteLengthFloor(item.description.length);
     const baseFields = {
       id: crypto.randomUUID(),
       name: item.name,
@@ -237,7 +235,6 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
       persona_groups: unionGroups,
       interested_personas: unionPersonas,
       embedding,
-      rewrite_length_floor: newFloor,
     };
 
     switch (item.type) {
@@ -251,7 +248,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
           exposure_current: 0.5,
           exposure_desired: 0.5,
         };
-        state.human_topic_upsert(topic);
+        state.human_topic_upsert(topic, newFloor);
         break;
       }
       case "person": {
@@ -266,7 +263,7 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
           exposure_current: 0.5,
           exposure_desired: 0.5,
         };
-        state.human_person_upsert(person);
+        state.human_person_upsert(person, undefined, newFloor);
         break;
       }
       default:
@@ -278,16 +275,17 @@ export async function handleRewriteRewrite(response: LLMResponse, state: StateMa
   const updatedHuman = state.getHuman();
   if (itemType === "topic") {
     const original = updatedHuman.topics.find(t => t.id === itemId);
-    if (original) state.human_topic_upsert({
-      ...original,
-      rewrite_length_floor: Math.max(MIN_REWRITE_FLOOR, Math.ceil((original.description?.length ?? 0) * 1.1)),
-    });
+    if (original) state.human_topic_upsert(
+      { ...original },
+      computeRewriteLengthFloor(original.description?.length ?? 0)
+    );
   } else if (itemType === "person") {
     const original = updatedHuman.people.find(p => p.id === itemId);
-    if (original) state.human_person_upsert({
-      ...original,
-      rewrite_length_floor: Math.max(MIN_REWRITE_FLOOR, Math.ceil((original.description?.length ?? 0) * 1.1)),
-    });
+    if (original) state.human_person_upsert(
+      { ...original },
+      undefined,
+      computeRewriteLengthFloor(original.description?.length ?? 0)
+    );
   }
 
   console.log(`[handleRewriteRewrite] Complete for ${itemType} "${itemId}": ${existingCount} existing updated, ${newCount} new created`);

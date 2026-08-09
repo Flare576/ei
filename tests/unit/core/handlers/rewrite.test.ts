@@ -55,8 +55,8 @@ function createMockStateManager() {
     getHuman: vi.fn(() => human),
     setHuman: vi.fn((h: HumanEntity) => Object.assign(human, h)),
     human_fact_upsert: vi.fn((fact: Fact) => human.facts.push(fact)),
-    human_topic_upsert: vi.fn((topic: Topic) => human.topics.push(topic)),
-    human_person_upsert: vi.fn((person: Person) => human.people.push(person)),
+    human_topic_upsert: vi.fn((topic: Topic, _floorOverride?: number | null) => human.topics.push(topic)),
+    human_person_upsert: vi.fn((person: Person, _excludeIds?: readonly string[], _floorOverride?: number | null) => human.people.push(person)),
     queue_enqueue: vi.fn(),
     _human: human,
   };
@@ -191,7 +191,8 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
       expect(state.human_topic_upsert).toHaveBeenCalledTimes(1);
       expect(state.human_topic_upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "bloated-topic-1", rewrite_length_floor: Math.ceil(800 * 1.1) })
+        expect.objectContaining({ id: "bloated-topic-1" }),
+        Math.ceil(800 * 1.1)
       );
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
@@ -217,7 +218,9 @@ describe("Rewrite Handlers - Phase 1 (Scan)", () => {
 
       expect(state.human_person_upsert).toHaveBeenCalledTimes(1);
       expect(state.human_person_upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "bloated-person-1", rewrite_length_floor: Math.ceil(800 * 1.1) })
+        expect.objectContaining({ id: "bloated-person-1" }),
+        undefined,
+        Math.ceil(800 * 1.1)
       );
       expect(state.queue_enqueue).not.toHaveBeenCalled();
     });
@@ -580,7 +583,8 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       expect(state.human_topic_upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           persona_groups: ["group-a"],
-        })
+        }),
+        expect.anything()
       );
     });
 
@@ -649,8 +653,8 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       const updatedTopic = state.human_topic_upsert.mock.calls[0][0];
       expect(updatedTopic.name).toBe("Software Engineering (Focused)");
 
-      const markingCall = state.human_topic_upsert.mock.calls[1][0];
-      expect(markingCall.rewrite_length_floor).toBeDefined();
+      const markingCall = state.human_topic_upsert.mock.calls[1];
+      expect(markingCall[1]).toBe(Math.ceil(800 * 1.1));
 
       const newPerson = state.human_person_upsert.mock.calls[0][0];
       expect(newPerson.name).toBe("New Person From Rewrite");
@@ -677,10 +681,10 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       await handlers.handleRewriteRewrite(response, state as any);
 
       const markingCall = state.human_topic_upsert.mock.calls.find(
-        ([t]: [Topic]) => t.id === "bloated-topic-1" && t.rewrite_length_floor !== undefined
+        (call) => call[0].id === "bloated-topic-1"
       );
       expect(markingCall).toBeDefined();
-      expect(markingCall![0].rewrite_length_floor).toBe(Math.ceil(800 * 1.1));
+      expect(markingCall![1]).toBe(Math.ceil(800 * 1.1));
     });
 
     it("sets rewrite_length_floor on original person after processing completes", async () => {
@@ -713,10 +717,10 @@ describe("Rewrite Handlers - Phase 2 (Rewrite)", () => {
       await handlers.handleRewriteRewrite(response, state as any);
 
       const markingCall = state.human_person_upsert.mock.calls.find(
-        ([p]: [Person]) => p.id === "bloated-person-1" && p.rewrite_length_floor !== undefined
+        (call) => call[0].id === "bloated-person-1"
       );
       expect(markingCall).toBeDefined();
-      expect(markingCall![0].rewrite_length_floor).toBe(Math.ceil(800 * 1.1));
+      expect(markingCall![2]).toBe(Math.ceil(800 * 1.1));
     });
   });
 });

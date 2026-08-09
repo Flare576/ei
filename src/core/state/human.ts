@@ -1,4 +1,5 @@
-import type { HumanEntity, Fact, Topic, Person, Quote } from "../types.js";
+import type { HumanEntity, Fact, Topic, Person, Quote, DataItemBase } from "../types.js";
+import { computeRewriteLengthFloor } from "../utils/rewrite-floor.js";
 
 export function createDefaultHumanEntity(): HumanEntity {
   return {
@@ -18,6 +19,47 @@ export function createDefaultHumanEntity(): HumanEntity {
       },
     },
   };
+}
+
+/**
+ * The one place that decides what `rewrite_length_floor` becomes on a
+ * topic_upsert/person_upsert call (ADR-032, amended). The ADR's original
+ * absent/`null`/number vocabulary assumed a caller could construct an
+ * object with the field genuinely absent, as a reliable third state
+ * distinct from present-with-a-stale-value. Neither real call-site shape
+ * supports that: a caller updating an existing record builds its object
+ * via `{...current, ...changes}` (extraction, ReWrite, heartbeat, dedup,
+ * the merge-patch candidate resolvers), so the field is never genuinely
+ * absent there — it always carries whatever was already stored, unless
+ * explicitly overwritten. A caller CREATING a brand-new record (no prior
+ * state to spread over) genuinely has no key at all, but the same handler
+ * function builds both shapes in different branches, so reading
+ * `incoming.rewrite_length_floor` still can't be trusted uniformly.
+ * `floorOverride` is the caller's one honest channel instead: `null` to
+ * clear (extraction, when an existing floor is reached/exceeded), a
+ * number to set explicitly (ReWrite, or extraction preserving its
+ * shrink-under-floor case), or omit it entirely and let this function
+ * decide from state.
+ *
+ * Absent an override, a genuinely changed description gets a fresh floor
+ * computed from its new length (new record, or an edit — manual or
+ * extraction's own, when there is no existing floor to grow past — that
+ * actually touched the content; Alternative D in ADR-032 was rejected for
+ * exactly the failure mode of never recomputing). An unrelated-field
+ * write (heartbeat's `last_ei_asked`, a dedup merge that didn't touch
+ * description) leaves the stored floor exactly as it was.
+ */
+function resolveRewriteLengthFloor(
+  existing: DataItemBase | undefined,
+  incoming: DataItemBase,
+  override?: number | null
+): number | undefined {
+  if (override === null) return undefined;
+  if (typeof override === "number") return override;
+  if (!existing || existing.description !== incoming.description) {
+    return computeRewriteLengthFloor(incoming.description.length);
+  }
+  return existing.rewrite_length_floor;
 }
 
 export class HumanState {
@@ -62,8 +104,9 @@ export class HumanState {
   }
 
 
-  topic_upsert(topic: Topic): void {
+  topic_upsert(topic: Topic, floorOverride?: number | null): void {
     const idx = this.human.topics.findIndex((t) => t.id === topic.id);
+    topic.rewrite_length_floor = resolveRewriteLengthFloor(idx >= 0 ? this.human.topics[idx] : undefined, topic, floorOverride);
     topic.last_updated = new Date().toISOString();
     if (idx >= 0) {
       this.human.topics[idx] = topic;
@@ -87,7 +130,7 @@ export class HumanState {
     return false;
   }
 
-  person_upsert(person: Person): void {
+  person_upsert(person: Person, floorOverride?: number | null): void {
     const identifiers = person.identifiers ?? [];
     person = { ...person, identifiers };
     const primary = identifiers.find(i => i.is_primary) ?? identifiers[0];
@@ -95,6 +138,7 @@ export class HumanState {
       person = { ...person, name: primary.value };
     }
     const idx = this.human.people.findIndex((p) => p.id === person.id);
+    person.rewrite_length_floor = resolveRewriteLengthFloor(idx >= 0 ? this.human.people[idx] : undefined, person, floorOverride);
     person.last_updated = new Date().toISOString();
     if (idx >= 0) {
       this.human.people[idx] = person;

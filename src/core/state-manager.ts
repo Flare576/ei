@@ -715,8 +715,8 @@ export class StateManager {
   }
 
 
-  human_topic_upsert(topic: Topic): void {
-    this.humanState.topic_upsert(topic);
+  human_topic_upsert(topic: Topic, floorOverride?: number | null): void {
+    this.humanState.topic_upsert(topic, floorOverride);
     this.scheduleSave();
   }
 
@@ -808,9 +808,9 @@ export class StateManager {
    * report channel might be missing, so `messages_append` below always
    * succeeds; the delivery check remains only as a defensive backstop.
    */
-  human_person_upsert(person: Person, excludeIds?: readonly string[]): void {
+  human_person_upsert(person: Person, excludeIds?: readonly string[], floorOverride?: number | null): void {
     const { person: guarded, refusals } = guardPersonUpsert(person, this.getHuman().people, excludeIds);
-    this.humanState.person_upsert(guarded);
+    this.humanState.person_upsert(guarded, floorOverride);
     this.scheduleSave();
     if (refusals.length > 0) {
       this.ensureEiPersonaExists();

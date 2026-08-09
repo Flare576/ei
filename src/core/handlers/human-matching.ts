@@ -139,6 +139,17 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
 
   const newDescLen = resolvedDescription?.length ?? 0;
   const existingFloor = existingTopic?.rewrite_length_floor;
+  // No stored floor to grow past (new record, or an existing record that's
+  // already floorless) -- omit the override so the choke point's own
+  // default computes a fresh floor from the new description (ADR-032
+  // amendment). Only an existing floor the new description actually
+  // reaches/exceeds gets the explicit clear.
+  const floorOverride =
+    existingFloor === undefined
+      ? undefined
+      : newDescLen < existingFloor
+        ? existingFloor
+        : null;
   const topic: Topic = {
     id: itemId,
     name: resolvedName,
@@ -156,9 +167,8 @@ export async function handleTopicUpdate(response: LLMResponse, state: StateManag
     sources: sources.length > 0 ? sources : undefined,
     persona_groups: personaGroupsMerged,
     embedding,
-    rewrite_length_floor: existingFloor !== undefined && newDescLen < existingFloor ? existingFloor : undefined,
   };
-  state.human_topic_upsert(topic);
+  state.human_topic_upsert(topic, floorOverride);
 
   await validateAndStoreQuotes(result.quotes, messages_analyze, itemId, personaDisplayName, allPersonaGroups, state);
 
@@ -309,6 +319,17 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     ?? resolvedIdentifiers.find(i => i.type !== 'Ei Persona')?.value
     ?? candidateName;
 
+  const personExistingFloor = existingPerson?.rewrite_length_floor;
+  const personNewLen = resolvedDescription?.length ?? 0;
+  // Same reasoning as handleTopicUpdate's floorOverride above: no stored
+  // floor to grow past omits the override (fresh compute); only reaching
+  // or exceeding an EXISTING floor gets the explicit clear.
+  const floorOverride =
+    personExistingFloor === undefined
+      ? undefined
+      : personNewLen < personExistingFloor
+        ? personExistingFloor
+        : null;
   const person: Person = {
     id: itemId,
     name: personName,
@@ -328,13 +349,8 @@ export async function handlePersonUpdate(response: LLMResponse, state: StateMana
     sources: personSources.length > 0 ? personSources : undefined,
     persona_groups: personaGroupsMerged,
     embedding,
-    rewrite_length_floor: (() => {
-      const floor = existingPerson?.rewrite_length_floor;
-      const newLen = resolvedDescription?.length ?? 0;
-      return floor !== undefined && newLen < floor ? floor : undefined;
-    })(),
   };
-  state.human_person_upsert(person);
+  state.human_person_upsert(person, undefined, floorOverride);
 
   await validateAndStoreQuotes(result.quotes, messages_analyze, itemId, personaDisplayName, allPersonaGroups, state);
 
