@@ -37,11 +37,11 @@ Ei can import sessions from your coding tools and extract what you've been worki
 
 Supported tools: OpenCode, Claude Code, Cursor, Codex, and Pi/OMP. Full setup in the [TUI README → Coding Tool Integrations](./tui/README.md#coding-tool-integrations).
 
-Agents aren't read-only anymore. Run `bunx ei-tui` — the onboarding wizard walks you through setup and installs the `ei-curate` skill (memory corrections) and `ei-persona` skill (persona authoring) for your detected coding tools, plus context injection hooks and a persona identity plugin where supported. Both skills walk the agent through explicit confirmation before every write, letting it correct bad extracted data, split merged records, repoint mis-attributed quotes, and create or direct a persona's identity (display name, traits, topics) — all without you hand-editing JSON. Re-run the wizard anytime with `/onboarding`.
+Agents aren't read-only anymore. Run `bunx ei-tui` — the onboarding wizard walks you through setup and installs Ei's skills for your detected coding tools, plus two hooks per tool: one that injects relevant memory before each prompt, and one that tells the agent which Ei persona it *is* at session start. Four of the skills write, each walking the agent through explicit confirmation before every write: `ei-curate` corrects bad extracted data, splits merged records, and repoints mis-attributed quotes; `ei-persona` creates or directs a persona's identity (display name, traits, topics); `ei-rewrite` slims a Person or Topic record that's grown into a catch-all, redistributing the overflow instead of discarding it; and `ei-reflect` lets an agent reflect on its own accumulated record. Two are read-only: `ei-search` for deliberate mid-conversation lookups, and `ei-generate` for turning what Ei knows about a subject into a document you can hand to someone. All of it without hand-editing JSON — full table in the [CLI README → Shipped Skills](./src/cli/README.md#shipped-skills). Re-run the wizard anytime with `/onboarding`.
 
 The same corrections are also available as MCP tools (`ei_create`, `ei_update`, `ei_remove`) alongside the existing search/lookup tools, but MCP is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](./src/cli/README.md#mcp-server) for manual MCP setup.
 
-Quotes are their own case. Because a quote claims a real person said a specific thing, the four commands that touch one are deliberately narrower than the generic trio: `ei create quote` and `ei fix quote` (MCP: `ei_quote_create`, `ei_quote_fix`) only accept text they can actually find in the source message, and refuse outright otherwise; `ei relink quote` (MCP: `ei_quote_relink`) only moves which facts, topics, or people a quote is attached to; `ei remove quote` (MCP: `ei_remove`) deletes one. Nothing on the public surface can invent a quote's speaker, channel, or timestamp — see the [CLI README](./src/cli/README.md#memory-management) for the full reference.
+Quotes are their own case. Because a quote claims a real person said a specific thing, the four commands that touch one are deliberately narrower than the generic trio: `ei create quote` and `ei fix quote` (MCP: `ei_quote_create`, `ei_quote_fix`) only accept text they can actually find in the source message, and refuse outright otherwise; `ei relink quote` (MCP: `ei_quote_relink`) only moves which facts, topics, or people a quote is attached to; `ei remove quote` (MCP: `ei_remove`) deletes one. One consequence worth knowing before you use them: if a verified span overlaps a quote already on that message, `create quote` and `fix quote` merge the two into a single record rather than leaving near-duplicates side by side — so a `create` can return an existing quote it widened instead of a new one, and a `fix` can absorb its neighbour, which then no longer exists. Nothing on the public surface can invent a quote's speaker, channel, or timestamp — see the [CLI README](./src/cli/README.md#memory-management) for the full reference.
 
 ## Document Import
 
@@ -139,7 +139,7 @@ Ei can operate with three types of input, and three types of output.
                        ^
                     Sessions
                        |
-          [OpenCode / Claude Code / Cursor / Codex]
+          [OpenCode / Claude Code / Cursor / Codex / Pi / OMP]
 ```
 
 ```
@@ -147,7 +147,7 @@ Ei can operate with three types of input, and three types of output.
                           |
                        CLI Data
                           v
-              [OpenCode / Claude Code / Cursor / Codex]
+              [OpenCode / Claude Code / Cursor / Codex / Pi / OMP]
 ```
 
 Optionally, users can opt into a server-side data sync. This is ideal for users who want to use multiple devices or switch between TUI and Web throughout the day. All data is encrypted _before_ being sent to the server, using a key that only the user can generate (your `username` and `passphrase` never leave your device - I couldn't decrypt your data if I wanted to).

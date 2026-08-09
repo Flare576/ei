@@ -212,7 +212,8 @@ Options:
   --json-file <path>  Same body as --json, read from a file instead of argv — prefer this for large or
                        sensitive payloads (persona reflection especially) so the JSON never appears in
                        process listings/shell history. Exactly one of --json/--json-file is required for
-                       create/update; passing both, or neither, is a usage error.
+                       create/update; passing both, or neither, is a usage error. create/update only —
+                       the quote verbs take --json and ignore this flag.
 
 Examples:
   ei "debugging"                         # Search everything
@@ -229,7 +230,9 @@ Examples:
   ei create fact --json '{"name":"Field of Study","description":"CS","sentiment":0,"validated_date":""}'
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'  # fact: full record, the permanent exception
   ei update topic abc-123 --json '{"category":"Project"}'  # topic/person/persona: merge patch — only the changed field, everything else untouched
-  ei update person abc-123 --json '{"relationship":null}'  # null clears a field (RFC 7396); omitted fields are simply left alone
+  ei update person abc-123 --json '{"validated_date":null}'  # null clears a clearable field (RFC 7396); omitted fields are left alone. Clearable:
+                                                            #   topic.category, person.name/identifiers/validated_date, persona.pending_update —
+                                                            #   null on a required or defaulted field (e.g. person.relationship) rejects the write
   ei create quote --message-id "opencode:my-machine:ses_abc:msg_def" --text "you guessed it"  # Attest a quote against its source message
   ei fix quote --quote-id abc-123 --text "you guessed it, again"   # Re-verify corrected text against the quote's existing source
   ei relink quote abc-123 --to person-b-id  # Repoint a quote after splitting a bad merge

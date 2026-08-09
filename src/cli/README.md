@@ -16,11 +16,11 @@ ei --persona "Beta" --recent           # Most recently mentioned items Beta has 
 ei --id <id>                   # Look up entity by ID — or fetch a message by FQ ID
 echo <id> | ei --id            # Look up entity by ID from stdin
 ei --identifier <type> <value>  # Look up a person by identifier type + value (case-insensitive type, exact value), e.g. --identifier "GitHub" "flare576"
-ei --install                   # Wire Ei into Claude Code, Cursor, Codex, and OpenCode (skills + context hooks + persona plugin where supported; MCP is removed by default on Claude Code/Cursor/Codex — see "MCP Server" below)
+ei --install                   # Wire Ei into Claude Code, Codex, Cursor, OpenCode, Pi, and OMP (skills + per-prompt memory hook + per-session identity hook; MCP is removed by default on Claude Code/Cursor/Codex — see "MCP Server" below)
 ei --sync                      # Pull latest state from remote sync server into state.backup.json (no TUI required)
 ei mcp                         # Start the Ei MCP stdio server (for Claude Code/Cursor/Codex)
-ei create <type> --json '<json>'       # Create a new entity (fact/topic/person/persona)
-ei update <type> <id> --json '<json>'  # Update an entity by ID (merge patch for topic/person/persona; full record for fact — never quote)
+ei create <type> --json '<json>' | --json-file <path>       # Create a new entity (fact/topic/person/persona)
+ei update <type> <id> --json '<json>' | --json-file <path>  # Update an entity by ID (merge patch for topic/person/persona; full record for fact — never quote)
 ei remove <type> <id>                  # Remove an entity by ID (fact/topic/person/quote/persona)
 ei create quote | fix quote | relink quote | remove quote   # Quote writes have their own verbs — `ei update` on a quote always rejects (see "Quote commands")
 ```
@@ -49,7 +49,7 @@ ei --id "pi:my-machine:session-uuid:session-uuid/entry-id"
 
 A quote's `id` and its `message_id` are different addresses: `id` identifies the quote record itself (what `ei --id` resolves, and what `ei fix quote`, `ei relink quote`, and `ei remove quote` take), while `message_id` identifies the *source message* it was lifted from — nullable, and shared by several quotes lifted from the same message, and what `ei create quote` quotes *from*. Pipe `message_id` to `ei --id` to read the original conversation; use `id` when you mean one specific quote.
 
-# OpenCode Integration
+# Harness Integrations
 
 ## Quick Install
 
@@ -57,20 +57,26 @@ A quote's `id` and its `message_id` are different addresses: `id` identifies the
 ei --install
 ```
 
-This registers Ei with Claude Code, Cursor, Codex, and OpenCode — skill directories, context injection hooks where supported, and (for OpenCode) a persona identity plugin so agents know who they are before the first message. **MCP is removed by default** on Claude Code, Cursor, and Codex (see [MCP Server](#mcp-server) below) — every capability those MCP tools offered has a skill or CLI equivalent, so there's no longer a persistent `ei mcp` process sitting around per open session:
+This wires Ei into every harness it finds on the machine — Claude Code, Codex, Cursor, OpenCode, Pi, and OMP — installing three things per harness: Ei's shipped skills, a **memory hook** that injects relevant memory before each prompt, and an **identity hook** that injects that harness's Ei persona record at session start. OpenCode is the one exception on the memory hook specifically: it only works through [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode)'s Claude Code compatibility layer, so base OpenCode gets skills and the identity plugin but no per-prompt memory injection. Detection is per-harness (Codex needs the `codex` binary on PATH; Cursor its application-support directory; OpenCode, Pi, and OMP their own config files), while Claude Code and the shared `~/.agents/skills/` directory are wired unconditionally. **MCP is removed by default** on Claude Code, Cursor, and Codex (see [MCP Server](#mcp-server) below) — every capability those MCP tools offered has a skill or CLI equivalent, so there's no longer a persistent `ei mcp` process sitting around per open session:
 
-| Tool | Skills | Context Hook | Persona Plugin |
-|------|--------|-------------|----------------|
-| **Claude Code** | `~/.claude/skills/` + shared `~/.agents/skills/` | `~/.claude/settings.json` (`UserPromptSubmit`) + `~/.claude/hooks/ei-inject.ts` | — |
-| **Cursor** | shared `~/.agents/skills/` (Cursor's own native discovery path) | `~/.cursor/hooks.json` (`beforeSubmitPrompt`) + `~/.cursor/hooks/ei-inject.sh` | — |
-| **Codex** | shared `~/.agents/skills/` (Codex's own native discovery path) | `~/.codex/hooks.json` (`UserPromptSubmit`) + `~/.codex/hooks/ei-inject.ts` | Local Codex agent plugin if installed separately |
-| **OpenCode** | `~/.config/opencode/skills/` | Via Oh My OpenCode compatibility layer (reads `~/.claude/settings.json`) | `~/.config/opencode/plugins/ei-persona.ts` |
-| **Pi** | shared `~/.agents/skills/` (Pi's own native discovery path) | `~/.pi/agent/extensions/ei-integration.ts` | — |
-| **OMP** | `~/.omp/agent/skills/` | `~/.omp/agent/extensions/ei-integration.ts` | — |
+| Tool | Skills | Memory hook (before each prompt) | Identity hook (at session start) |
+|------|--------|----------------------------------|----------------------------------|
+| **Claude Code** | `~/.claude/skills/` | `~/.claude/hooks/ei-inject.ts` on `UserPromptSubmit` (registered in `~/.claude/settings.json`) | `~/.claude/hooks/ei-session-start.ts` on `SessionStart` — the fixed **Claude Code** persona |
+| **Codex** | shared `~/.agents/skills/` | `~/.codex/hooks/ei-inject.ts` on `UserPromptSubmit` (registered in `~/.codex/hooks.json`) | `~/.codex/hooks/ei-session-start.ts` on `SessionStart` — the fixed **Codex** persona |
+| **Cursor** | shared `~/.agents/skills/` | `~/.cursor/hooks/ei-inject.ts` on `beforeSubmitPrompt` (registered in `~/.cursor/hooks.json`) — Cursor's per-turn hook has no context output, so the hook renders `~/.cursor/rules/ei-context.mdc` (`alwaysApply: true`) instead | `~/.cursor/hooks/ei-session-start.ts` on `sessionStart`, via its `additional_context` output — the fixed **Cursor** persona |
+| **OpenCode** | `~/.config/opencode/skills/` | Via [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode)'s Claude Code compatibility layer (reads `~/.claude/settings.json`) | `~/.config/opencode/plugins/ei-persona.ts` — resolves whichever agent the system prompt names |
+| **Pi** | shared `~/.agents/skills/` | `~/.pi/agent/extensions/ei-integration.ts`, on `before_agent_start` | same extension — the fixed **Pi** persona, once per session branch |
+| **OMP** | `~/.omp/agent/skills/` + shared `~/.agents/skills/` | `~/.omp/agent/extensions/ei-integration.ts`, on `before_agent_start` | same extension — the *active* persona, re-announced on every persona switch |
 
-**Context hook**: fires before every message, searches Ei for relevant memory, and injects it silently. No tool call required.
+`~/.agents/skills/` is written on every `ei --install` run whether or not any of its readers are installed: Codex, Cursor, base Pi, and OMP each natively walk up to that cross-tool convention. Claude Code and OpenCode do not read it — they get their own copies above.
 
-**Persona plugin** (OpenCode + [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode) only): injects the agent's Ei relationship record directly into the system prompt at session start — traits, working style, shared context. The agent knows who it is *to you* before it reads a word of your message.
+The Pi and OMP extensions additionally register `ei_search` and `ei_lookup` as **native tools** in that harness, so agents there can query Ei directly without MCP. Codex requires one-time hook trust: run `/hooks` in Codex and approve the two Ei hooks, or they silently never fire.
+
+**Memory hook**: fires before every prompt, searches Ei with your prompt as the query (`-n 5`; `ei --recent -n 5` when the prompt is empty), and injects the result silently — no tool call required. Claude Code and Codex additionally pass the session transcript (Codex also `--session`/`--hook-source codex`) so the search is enriched with recent session context.
+
+It never shows the same memory twice in one session. Each harness records the entity ids it has already surfaced and filters the next search against them, injecting nothing at all when nothing new survives: Claude Code, Codex, and Cursor keep that record in a per-session file under `~/.claude/`, `~/.codex/`, or `~/.cursor/ei-hook-state/<session id>.json` (0700 directory, 0600 files, pruned after 30 days by the identity hook, and the session id is validated before it ever reaches a path); Pi and OMP keep it as non-model-visible entries on the session branch, so a forked branch inherits what was surfaced before the fork and stays blind to its siblings. Cursor is the one that accumulates rather than appends — its shared rules file is re-rendered with this session's whole accumulated view every turn, capped at the 30 most recent items.
+
+**Identity hook**: at session start, injects that harness's persona record — the `<ei-relationship>` block from `ei personas --format prompt` — so the agent knows who it is *to you* before it reads a word of your message. Claude Code, Codex, Cursor, and base Pi each use one fixed persona (**Claude Code**, **Codex**, **Cursor**, **Pi**); OMP resolves the active persona and re-announces on every switch; OpenCode's plugin reads the agent name out of the system prompt. Claude Code's `SessionStart` and Cursor's `sessionStart` are fire-and-forget, so a brand-new session's very first prompt can occasionally race ahead of the block — bounded and self-correcting, recorded in [ADR-034](../../docs/adr/ADR-034-session-boundary-hook-races-accepted.md). Codex, Pi, and OMP await it before the model call.
 
 **OpenCode MCP**: add manually to `~/.config/opencode/opencode.jsonc`:
 
@@ -114,8 +120,8 @@ To re-register it manually:
 
 After `ei --install`, agents receive Ei context without any manual tool calls:
 
-1. **Before each message** — the hook searches Ei using your prompt + recent conversation history as the query, then injects relevant topics into the conversation as `[Ei Memory Context]`. You won't see this in your chat view; the agent does.
-2. **At session start** (OMP, and OpenCode with or without Oh My OpenCode) — the persona extension/plugin finds the agent's Ei persona record and appends it to the system prompt as `<ei-relationship>`. The block carries the persona's base prompt, its strongest traits as **Working Style**, its topics as **Shared Context**, and — when a Person record is linked to the persona — an **Ei Person Log** notice giving that log's current character count, plus a nudge to ask you for a reflection once the count passes 3,000. The agent knows its working style, traits, and shared history with you before the session begins. **Claude Code, Cursor, Codex, and base Pi do not receive this block** — their session hooks inject memory search results only. That gap is open, tracked as [issue #94](https://github.com/Flare576/ei/issues/94).
+1. **Before each message** — the hook searches Ei with your prompt as the query and injects the result silently as `[Ei Memory Context]`. Claude Code and Codex additionally enrich the search with the session transcript; Cursor, Pi, and OMP query the current prompt only. Results are a balanced mix across facts, topics, people, and quotes, not topics alone. You won't see this in your chat view; the agent does.
+2. **At session start** — every harness gets the persona's `<ei-relationship>` block, all from the same `ei personas --format prompt` source. Claude Code, Codex, and Cursor inject it from a session-start hook (fixed **Claude Code** / **Codex** / **Cursor** persona); Pi injects it once per session branch (**Pi**); OMP injects the active persona and re-announces on every switch; OpenCode's plugin appends it to the system prompt for whichever agent it finds there. The block carries the persona's base prompt, its strongest traits as **Working Style**, its topics as **Shared Context**, and — when a Person record is linked to the persona — an **Ei Person Log** notice giving that log's current character count, plus a nudge to ask you for a reflection once the count passes 3,000. The agent knows its working style, traits, and shared history with you before the session begins.
 
 For targeted, explicit mid-session queries — beyond whatever the hook already silently injected — agents reach for the `ei-search` skill (installed by default) to run `ei "query"` / `ei --id <id>` directly. The `ei_search`, `ei_lookup`, and `ei_fetch_message` MCP tools cover the same ground and remain available if you've manually re-registered MCP (see above).
 
@@ -198,15 +204,36 @@ ei remove quote <quote-id>
 
 Personas support create/update/remove too, but through a separate schema (`PersonaEntity`, not the fact/topic/person `DataItemBase` shape) — see the `ei create/update/remove persona` examples below and the `ei-persona` skill for guided authoring.
 
-One persona-only field worth flagging for external callers: `external_reflection_only` skips Ei's automatic Reflection critic for that persona so an external, agent-driven reflection can run first instead — it applies uniformly to every persona, reserved ones (`ei`/`emmet`) included.
+One persona-only field worth flagging for external callers: `external_reflection_only`. Set it, and Ei's automatic Reflection critic skips that persona at **both** gate points — it is never enqueued (`src/core/orchestrators/ceremony.ts`), and a critic already in flight returns without clearing the linked PersonLog or writing a `pending_update` (`src/core/handlers/heartbeat.ts`) — so an external, agent-driven reflection can consume that log first. It applies uniformly to every persona, reserved ones (`ei`/`emmet`) included. Unlike the in-app-only settings listed below, this one *is* externally writable (ADR-031 Full Access — `docs/adr/ADR-007-external-reflection-only.md` exists precisely so an outside agent can set it), through an ordinary persona merge patch:
+
+```sh
+ei update persona <persona-id> --json '{"external_reflection_only": true}'   # opt out of Ei's automatic critic
+ei update persona <persona-id> --json '{"external_reflection_only": false}'  # opt back in
+```
+
+Flipping it on is not retroactive against a live Ei process: a critic dispatched before the correction drains can still clear the log, so re-read with `ei --id <persona-id>` before calling a run protected — see `docs/adr/ADR-008-accepted-write-races.md`. The `ei-reflect` skill drives this whole sequence.
 
 ### Update semantics: a merge patch, except for `fact`
 
-`ei update`/`ei_update` implement RFC 7396 JSON Merge Patch (ADR-029) for topic, person, and persona: send only the fields you're changing. A field you omit is left completely unchanged — no more read-the-whole-record-back-in round trip. Send a field's new value to set it; send `null` to clear it (the only way to clear a persona's `pending_update`, a Critic-proposed identity revision — a non-null value for it is always rejected). Arrays (`traits[]`, `topics[]`, `identifiers[]`, `aliases`, `notes`) replace wholesale when present: sending `traits` means "these are ALL the traits now," not "append this one."
+`ei update`/`ei_update` implement RFC 7396 JSON Merge Patch (ADR-029) for topic, person, and persona: send only the fields you're changing. A field you omit is left completely unchanged — no more read-the-whole-record-back-in round trip. Send a field's new value to set it. Arrays (`traits[]`, `topics[]`, `identifiers[]`, `aliases`, `notes`) replace wholesale when present: sending `traits` means "these are ALL the traits now," not "append this one."
+
+Sending `null` removes a field, but only where the record is still valid without it — RFC 7396 lets a patch null out any member, and the merged result is then re-validated, so a `null` that would leave a required field missing rejects the **whole** write and persists nothing. The fields you can actually clear:
+
+| Type | Clearable with `null` |
+|------|------------------------|
+| Topic | `category` |
+| Person | `name`, `identifiers`, `validated_date` — but not `name` and `identifiers` together, since a Person needs at least one of them |
+| Persona | `pending_update` (a Critic-proposed identity revision; this is the only way to dismiss it, and a non-null value for it is always rejected) |
+
+Everything else is either required (`name`, `description`, `sentiment`) or carries a default that the merged record must still satisfy (`person.relationship`), so `null` on it comes back as e.g. `Invalid person update: relationship: Required` and nothing is written. To blank such a field, send an empty value rather than `null` — `{"relationship":""}`, not `{"relationship":null}`.
 
 `fact` is the one permanent exception (ADR-029's own stated exclusion — it has no defaults, so there's nothing to merge onto): `ei update fact`/`ei_update` with `entity_type: "fact"` still replace the whole record, exactly like before. (Quotes are not updateable this way at all — use the quote verbs above.)
 
-Server-owned or in-app-only fields (`tools`, `model`, `heartbeat_delay_ms`, `context_window_ms`, `include_message_timestamps`, `context_boundary`, `is_paused`, `pause_until`, `is_archived`, `archived_at`, `group_primary`, `groups_visible`, `exposure_current`, `exposure_desired`, `last_ei_asked`, `embedding`, and every provenance field — `learned_by`, `last_changed_by`, `sources`, `interested_personas`, `persona_groups`) are rejected as unrecognized fields on update, for every type that has them — not silently ignored, and not settable on create either (ADR-031).
+Server-owned or in-app-only fields (`tools`, `model`, `heartbeat_delay_ms`, `context_window_ms`, `include_message_timestamps`, `context_boundary`, `is_paused`, `pause_until`, `is_archived`, `archived_at`, `group_primary`, `groups_visible`, `exposure_current`, `exposure_desired`, `last_ei_asked`, `learned_on`, `last_mentioned`, the computed-or-system-written pair `embedding` and `rewrite_length_floor`, and every provenance field — `learned_by`, `last_changed_by`, `sources`, `interested_personas`, `persona_groups`) are rejected as unrecognized fields on update, for every type that has them — not silently ignored, and not settable on create either (ADR-031). `embedding` and `rewrite_length_floor` are still written *for* you during the update; they are simply never yours to supply.
+
+The rejection is deliberately generic — `Invalid <type> update: unrecognized field(s) present`, or `Invalid <type>: ...` on create, with MCP prefixing `Error: `. It does not name the offending key, because a property name is caller-controlled text and one carrying terminal control bytes must not reach stderr or an MCP response verbatim. The list above is therefore the reference for what to remove from your body.
+
+Read-shape fields are the one exception, stripped rather than rejected so the documented `ei --id` → edit → `ei update` round-trip still parses. For fact/topic/person those are `id`, `type`, `last_updated`, and `linked_quotes`. Persona's list is deliberately wider — `id`, `type`, `entity`, `is_static`, `last_updated`, `last_heartbeat`, `description_embedding` — because `ei --id <persona>` spreads the full record plus its own discriminator rather than a narrower projection. `pending_update` is deliberately NOT stripped, so an explicit `pending_update: null` reaches the schema and actually clears it. On create there is no strip at all — an `id` in a create body is rejected like any other unknown key.
 
 ```sh
 # fact: still a full replacement — fetch first, then submit the whole thing
@@ -215,8 +242,30 @@ ei update fact abc-123 --json '{"name":"Field of Study","description":"Software 
 
 # topic/person/persona: a merge patch — only the changed field(s)
 ei update topic abc-123 --json '{"category":"Project"}'
-ei update person abc-123 --json '{"relationship":null}'
+ei update person abc-123 --json '{"validated_date":null}'   # null CLEARS a field — but only where the record stays valid without it (see below)
 ```
+
+### Supplying the body: `--json` or `--json-file`
+
+`ei create` and `ei update` take their JSON body from exactly one of two flags, for fact, topic, person, and persona. Passing both, or neither, is a usage error (exit 1) — there is no default and no stdin fallback.
+
+```sh
+ei update topic abc-123 --json '{"category":"Project"}'       # body on argv
+ei update topic abc-123 --json-file /tmp/patch.json            # body from a file — identical semantics
+```
+
+`--json-file` exists for bodies you don't want on argv: a full persona identity or PersonLog revision is large, and argv is visible in process listings and shell history. Prefer it for anything persona-shaped — the `ei-reflect` skill uses it for exactly this reason. Ei never writes the file itself; you supply the path (a `mktemp` file is the convention), so the flag adds no predictable-path exposure of its own.
+
+The four ways it fails, all exit 1, all before anything is read from or written to your data:
+
+| Condition | Message |
+|---|---|
+| both flags | `ei update: pass either --json or --json-file, not both` |
+| neither flag | `ei update requires --json '<json>' or --json-file <path>` |
+| unreadable path | `Could not read --json-file "<path>": <reason>` |
+| file isn't valid JSON | `Invalid JSON: <reason>` |
+
+**`--json-file` is for `create` and `update` only, and not for quotes at all.** `ei create quote`/`ei fix quote`/`ei relink quote` build their body from their own discrete flags and accept `--json` as an overlay on top of those — they ignore `--json-file` entirely, so passing it there is not a usage error, it just leaves the body empty and you get a schema failure like `Invalid quote (create): message_id: Required; text: Required`. `ei update quote` is narrower still: it's the retired verb (see below) and rejects before either flag is ever read, so neither `--json` nor `--json-file` reaches parsing at all. Use `--json` with the quote verbs above.
 
 ### Examples (from `ei --help`)
 
@@ -259,7 +308,7 @@ Will abort (with a clear error) if `state.json` already exists on this machine �
 - **Claude Code**: `~/.claude/skills/<skill-name>/`
 - **OMP**: `~/.omp/agent/skills/<skill-name>/`
 - **OpenCode**: `~/.config/opencode/skills/<skill-name>/`
-- **Cursor, Codex, Pi (base)**: shared `~/.agents/skills/<skill-name>/` — written unconditionally, once, regardless of which of these three are actually detected on the machine, since all three natively discover this cross-tool convention on their own
+- **Cursor, Codex, Pi (base), OMP**: shared `~/.agents/skills/<skill-name>/` — written unconditionally, once, regardless of which of these are actually detected on the machine, since each of them natively discovers this cross-tool convention on its own (OMP reads it *in addition to* its own `~/.omp/agent/skills/` above). Claude Code does not read this path (confirmed in `install.ts`); OpenCode gets its own copy regardless and whether it also reads the shared path is unconfirmed.
 
 Skills are installed automatically — any directory added under `skills/` in the Ei package gets copied to every location above on the next `ei --install` run.
 
@@ -271,5 +320,5 @@ Skills are installed automatically — any directory added under `skills/` in th
 | `ei-curate` | Safe agent-driven memory curation. Provides verified workflows for fixing merged records, bad attributions, stale facts, and mis-attributed quotes — using `ei create/update/remove` for facts/topics/people and the quote verbs `ei create/fix/relink/remove quote` for quotes, with explicit confirmation before every write. Read the full workflow at `skills/ei-curate/SKILL.md`. Load it in your harness with `/ei-curate`. |
 | `ei-persona` | Safe agent-driven persona authoring. Guides creating, editing (traits/topics/description), archiving, or deleting a persona's *character* via `ei create/update/remove persona` — distinct from `ei-curate`, which corrects learned data rather than authoring identity. Read the full workflow at `skills/ei-persona/SKILL.md`. Load it in your harness with `/ei-persona`. |
 | `ei-reflect` | Manual self-reflection for a coding-harness agent over its own accumulated Person log, for when the log fills faster than Ei's automatic Reflection critic can usefully consume it. Not a single file: a root dispatcher (`skills/ei-reflect/SKILL.md`) over two lenses in `skills/ei-reflect/lenses/`. The **Persona** lens (`lenses/persona.md`) is the identity half — it reviews the log against the current persona identity via the CLI (`ei personas`, `ei --id`) and rewrites traits/topics/descriptions with `ei update persona`. The **Agent** lens (`lenses/agent.md`) is the operating-contract half — the rules, sequences, and tool preferences that govern how the agent works *in this harness* — which it writes into the harness's own instruction files as a marked delimited region, touching no Ei record. The dispatcher resolves the persona, reads the log once, splits the evidence between the lenses, and clears the log with `ei update person` only once both lenses reach a terminal state — never while the Agent lens is still waiting on the user to choose a write target. `skills/ei-reflect/references/` holds the CLI surface, per-harness target files, and the configuration surfaces no file-based tool can reach. Read the full workflow at `skills/ei-reflect/SKILL.md`. Load it in your harness with `/ei-reflect`. |
-| `ei-rewrite` | Manual, on-demand slimming of a bloated Topic or Person record — redistributes correctly-attributed content that's outgrown the record's contract (a Person profile accreting project detail, a Topic becoming a catch-all) into the right existing or new records, with mandatory Ei-native recon before creating anything. Mirrors the automatic Rewrite ceremony (`src/core/handlers/rewrite.ts`) by hand. Distinct from `ei-curate`, which fixes *wrong* data rather than *misplaced* data. Read the full workflow at `skills/ei-rewrite/SKILL.md`. Load it in your harness with `/ei-rewrite`. |
-| `ei-generate` | Agent-driven document synthesis from Ei's memory — a runbook, onboarding doc, status brief, or profile writeup, produced by the coding agent itself (not Ei's queued `/generate` feature) from CLI-only recon (facet search, multi-phrasing, `linked_quotes` graph-walk, self-filtering) plus a risk-triggered gate that asks about names/handles and audience before drafting anything involving a third party. Read-only against Ei; the output file is untracked and placed wherever the user and agent agree. Read the full workflow at `skills/ei-generate/SKILL.md`. Load it in your harness with `/ei-generate`. |
+| `ei-rewrite` | Manual, on-demand slimming of a bloated Topic or Person record — redistributes correctly-attributed content that's outgrown the record's contract (a Person profile accreting project detail, a Topic becoming a catch-all) into the right existing or new records, with mandatory Ei-native recon before creating anything. The on-demand counterpart to the automatic Rewrite ceremony (`src/core/handlers/rewrite.ts`) rather than a strict mirror of it: the manual workflow may spin off a new *Person*, which the automatic Person-rewrite phase's own prompt directs it never to do — that phase is instructed to redistribute into Topics only (not structurally enforced in code, just the prompt's own contract). Distinct from `ei-curate`, which fixes *wrong* data rather than *misplaced* data. Read the full workflow at `skills/ei-rewrite/SKILL.md`. Load it in your harness with `/ei-rewrite`. |
+| `ei-generate` | Agent-driven document synthesis from Ei's memory — a runbook, onboarding doc, profile/job description, RoboBrain learning note, or period performance review, with a generic faceting technique for any type that has no seeded playbook yet — produced by the coding agent itself, not Ei's queued `/generate` feature, from CLI-only recon (facet search, multi-phrasing, `linked_quotes` graph-walk, self-filtering). Two independent gates run before anything is drafted: a names/handles-and-audience gate the moment a third party surfaces, and a persona-contamination gate requiring two independent sources for any character claim, since Ei's own AI personas share a knowledge base with the humans they describe. Read-only against Ei; the output file is untracked and placed wherever the user and agent agree. Read the full workflow at `skills/ei-generate/SKILL.md`. Load it in your harness with `/ei-generate`. |
