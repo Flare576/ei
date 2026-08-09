@@ -46,6 +46,16 @@ interface SettingsModalProps {
   onCustomThemeRemove?: (id: string) => void;
 }
 
+// The Default Context Window input persists `default_context_window_ms`, which every persona
+// with a null `context_window_ms` inherits (prompt-context-builder.ts, heartbeat-manager.ts,
+// message-manager.ts, processor.ts). A value of 0 or a negative computes a context window that
+// starts at or after "now", filtering out every past message -- i.e. it blanks history for every
+// persona at once. `0` is rejected explicitly (not merely caught as a side effect of the minimum)
+// because this codebase's convention elsewhere is `0 = unlimited/never` (message_min_count,
+// message_max_age_days, thinking_budget); silently treating it as "no limit" here would be the
+// opposite of what the arithmetic actually does. See .sisyphus/issues/duration-fields-have-no-lower-bound.md.
+const MIN_CONTEXT_WINDOW_HOURS = 1;
+
 const tabs = [
   { id: 'general', label: 'General', icon: '⚙️' },
   { id: 'appearance', label: 'Appearance', icon: '🎨' },
@@ -122,6 +132,18 @@ export const SettingsModal = ({
 
   const handleChange = useCallback((field: keyof SettingsData, value: string) => {
     onUpdate({ [field]: value });
+  }, [onUpdate]);
+
+  const handleContextWindowChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const hours = Number(e.target.value);
+    if (!Number.isFinite(hours) || hours < MIN_CONTEXT_WINDOW_HOURS) {
+      alert(
+        `Default Context Window must be at least ${MIN_CONTEXT_WINDOW_HOURS} hour(s). ` +
+        `"${e.target.value}" was rejected -- 0 does not mean "unlimited" here.`
+      );
+      return;
+    }
+    onUpdate({ default_context_window_ms: hours * 3600000 });
   }, [onUpdate]);
 
   const handleAccountAdd = useCallback(() => {
@@ -255,7 +277,7 @@ export const SettingsModal = ({
                   className="ei-input"
                   min="1"
                   value={Math.round((settings.default_context_window_ms ?? 28800000) / 3600000)}
-                  onChange={(e) => onUpdate({ default_context_window_ms: Number(e.target.value) * 3600000 })}
+                  onChange={handleContextWindowChange}
                 />
                 <small className="ei-form-hint">How far back to include conversation history</small>
               </div>

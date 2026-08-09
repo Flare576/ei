@@ -236,3 +236,63 @@ describe("SettingsModal provider save - I1 regression guard (real Processor)", (
     await processor.stop();
   });
 });
+
+// duration-fields-have-no-lower-bound: the Web Settings modal wrote
+// default_context_window_ms with zero validation, and a negative or zero
+// value there computes a context window that starts at-or-after "now",
+// filtering out every past message -- i.e. blanking history for every
+// persona that inherits the default. These cases must be rejected with a
+// message naming the valid range, never silently clamped/dropped, and must
+// never reach onUpdate (i.e. never persist). Every case here fails against
+// pre-fix code (onChange called onUpdate unconditionally).
+describe("SettingsModal default context window guard", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["0", "zero (ambiguous with the house 0-means-unlimited convention elsewhere)"],
+    ["-1", "negative"],
+    ["-100", "far negative"],
+    ["0.5", "out-of-range-low (positive but below the 1-hour minimum)"],
+  ])("rejects %s hours (%s) with an alert naming the valid range and does not persist the write", async (input) => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const processor = makeProcessor([]);
+    const onUpdate = renderModal([], processor);
+
+    const contextWindowInput = screen.getByLabelText("Default Context Window (hours)");
+    fireEvent.change(contextWindowInput, { target: { value: input } });
+
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining("at least 1 hour"));
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("accepts a valid positive hour value and persists the converted ms write", async () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const processor = makeProcessor([]);
+    const onUpdate = renderModal([], processor);
+
+    const contextWindowInput = screen.getByLabelText("Default Context Window (hours)");
+    fireEvent.change(contextWindowInput, { target: { value: "4" } });
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(onUpdate).toHaveBeenCalledWith({ default_context_window_ms: 4 * 3600000 });
+  });
+
+  // Pins the inclusive boundary: the reject condition is `hours < 1`, so
+  // exactly 1 hour is the smallest value that must persist. Without this,
+  // a future `<` -> `<=` typo would still pass every other case here
+  // (0, -1, -100, 0.5 stay rejected; 4 stays accepted) while silently
+  // breaking the ">= 1 hour must persist" contract at the boundary itself.
+  it("accepts exactly 1 hour (the inclusive lower bound) and persists the converted ms write", async () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const processor = makeProcessor([]);
+    const onUpdate = renderModal([], processor);
+
+    const contextWindowInput = screen.getByLabelText("Default Context Window (hours)");
+    fireEvent.change(contextWindowInput, { target: { value: "1" } });
+
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(onUpdate).toHaveBeenCalledWith({ default_context_window_ms: 1 * 3600000 });
+  });
+});
