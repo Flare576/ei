@@ -127,7 +127,7 @@ should have covered them.
 | `sentiment` | all | Full Access |
 | `identifiers`, `relationship` | Person | Full Access — `identifiers` is what ADR-010's link guard polices |
 | `category` | Topic | Full Access |
-| `validated_date` | Fact | Full Access — an external curator confirming a fact is the documented `ei-curate` flow |
+| `validated_date` | Fact, Person | Full Access — an external curator confirming a fact or person's details is the documented `ei-curate` flow |
 | `id`, `last_updated` | all | System Visible |
 | `last_ei_asked` | Person, Topic | **System Hidden** — bookkeeping. Ei's own record of what it has asked is debug data, and `state.json` is that surface |
 | `learned_on`, `last_mentioned` | all | System Visible |
@@ -136,6 +136,11 @@ should have covered them.
 | `exposure_current`, `exposure_desired` | Person, Topic | **System Hidden** — see below |
 | `rewrite_length_floor` | all | System Hidden, **but system-written on external update** (ADR-032) |
 | `embedding` | all | System Hidden — computed |
+
+**This table's `validated_date` row originally scoped it to Fact only.** It is also on Person
+(`personBaseShape.validated_date`, `src/core/entity-schemas.ts`) — Full Access there too, and one of
+only three Person fields a merge patch can clear with `null` (the other two are `name` and
+`identifiers`). Topic has no `validated_date` at all. Corrected 2026-08-09.
 
 **Quotes** are unaffected. Their four dedicated verbs (ADR-012) already implement a stricter version of this
 model: `create`/`fix` derive speaker, channel, timestamp, offsets, and embedding server-side and reject
