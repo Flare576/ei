@@ -11,6 +11,8 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-08-09
+
 ### Added
 
 - **Four dedicated quote verbs.** A quote asserts that a real person said a specific thing, so
