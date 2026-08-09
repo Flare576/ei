@@ -31,8 +31,8 @@ import { classifyMalformedRoomPrimary } from "../core/utils/message-refusal.js";
  * key name: Zod's own `unrecognized_keys` issue embeds the raw key text
  * verbatim (`Unrecognized key(s) in object: 'speaker'`), and relying on
  * the SDK's own z.strictObject-triggered error text would reopen the
- * exact class of MCP-text injection formatQuoteValidationIssues()
- * (corrections-endpoints.ts) already closes for the identical failure
+ * exact class of MCP-text injection formatValidationIssues()
+ * (src/core/entity-schemas.ts) already closes for the identical failure
  * mode -- considered and rejected for that reason.
  */
 function rejectUnknownQuoteFields(

@@ -261,7 +261,7 @@ describe("createPersonaEntity", () => {
     writeState(makeState({}));
 
     await expect(createPersonaEntity({ display_name: "Nova", unexpected: true })).rejects.toThrow(
-      /Unrecognized key\(s\) in object: 'unexpected'/
+      /Invalid persona: unrecognized field\(s\) present/
     );
   });
 
@@ -328,7 +328,7 @@ describe("createPersonaEntity", () => {
 
     await expect(
       createPersonaEntity({ display_name: "Nova", tools: { "Brave Search": { "Web Search": true } } })
-    ).rejects.toThrow(/Unrecognized key\(s\) in object: 'tools'/);
+    ).rejects.toThrow(/Invalid persona: unrecognized field\(s\) present/);
 
     // Nothing was written — the whole create is refused, not partially applied.
     const persisted = await loadLatestState();
@@ -434,7 +434,7 @@ describe("updatePersonaEntity", () => {
       writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
       await expect(
         updatePersonaEntity(PERSONA_ID, { display_name: "Renamed", [field]: value })
-      ).rejects.toThrow(new RegExp(`Unrecognized key\\(s\\) in object: '${field}'`));
+      ).rejects.toThrow(/Invalid persona update: unrecognized field\(s\) present/);
       // Nothing was written — the whole update is refused, not partially applied.
       const persisted = await loadLatestState();
       expect(persisted!.personas[PERSONA_ID].entity.display_name).toBe(existing.display_name);
@@ -664,7 +664,7 @@ describe("updatePersonaEntity", () => {
 
     await expect(
       updatePersonaEntity(PERSONA_ID, { display_name: "Renamed", tools: { "Brave Search": { "Web Search": false } } })
-    ).rejects.toThrow(/Unrecognized key\(s\) in object: 'tools'/);
+    ).rejects.toThrow(/Invalid persona update: unrecognized field\(s\) present/);
 
     // Nothing was written — the grant is untouched, the name is untouched.
     const persisted = await loadLatestState();

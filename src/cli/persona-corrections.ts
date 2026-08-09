@@ -67,6 +67,7 @@ import {
   personaPatchSchema,
   personaCandidateSchema,
   stripHiddenPersonaFields,
+  formatValidationIssues,
   type ExternalPersonaEntity,
 } from "../core/entity-schemas.js";
 
@@ -117,7 +118,7 @@ function parsePersonaBody(body: unknown): PersonaEntityInput {
   const result = personaEntitySchema.safeParse(body);
   if (!result.success) {
     throw new CorrectionValidationError(
-      `Invalid persona: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+      `Invalid persona: ${formatValidationIssues(result.error.issues)}`
     );
   }
   return result.data;
@@ -136,7 +137,7 @@ function parsePersonaPatch(body: unknown): PersonaPatchInput {
   const result = personaPatchSchema.safeParse(input);
   if (!result.success) {
     throw new CorrectionValidationError(
-      `Invalid persona update: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+      `Invalid persona update: ${formatValidationIssues(result.error.issues)}`
     );
   }
   return result.data;

@@ -2,11 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { applyCorrectionToHuman, applyCorrectionsToHuman, applyCorrectionToPersonas, applyCorrectionToState, applyCorrectionsToState, assertValidCorrection, applyQuoteOperation } from "../../../src/core/corrections.js";
+import { applyCorrectionToHuman, applyCorrectionsToHuman, applyCorrectionToPersonas, applyCorrectionToState, applyCorrectionsToState, assertValidCorrection, applyQuoteOperation, resolvePersonPatchCandidate, resolvePersonaPatchCandidate } from "../../../src/core/corrections.js";
 import { loadLatestState } from "../../../src/cli/retrieval.js";
 import type { CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRecord, QuoteRemoveRecord } from "../../../src/core/corrections.js";
 import type { Fact, Topic, Person, Quote, HumanEntity, StorageState, PersonaEntity, Message } from "../../../src/core/types.js";
 import { RESERVED_PERSONA_IDS, ContextStatus } from "../../../src/core/types.js";
+import { MergePatchValidationError } from "../../../src/core/corrections-merge.js";
+import type { MergePatch } from "../../../src/core/corrections-merge.js";
 
 const NOW = "2026-01-01T00:00:00Z";
 const EMBEDDING = [1, 2, 3];
@@ -1495,5 +1497,98 @@ describe("applyCorrectionsToState — mixed-type batch in file order", () => {
     ]);
 
     expect(state.personas["persona-1"]).toBeUndefined();
+  });
+});
+
+// ── I1 (.sisyphus/reviews/zod-unrecognized-key-output-sweep.md): a raw
+// external corrections.json record bypasses the CLI's own parseInput/
+// parsePatchInput sanitization entirely -- readCorrections() parses it as
+// a generic patch with no recursive schema check (src/core/corrections.ts's
+// own assertValidCorrection only checks that the patch is an object). A
+// nested unrecognized key inside identifiers[]/traits[]/topics[] therefore
+// survives projectWritable()'s TOP-LEVEL-ONLY projection and reaches the
+// nested strict identifierSchema/personaTraitSchema/personaTopicSchema
+// inside validateCandidate()'s own safeParse -- producing the same raw
+// Zod unrecognized_keys echo the CLI layer already sanitizes, but through
+// resolveTopicPatchCandidate/resolvePersonPatchCandidate/
+// resolvePersonaPatchCandidate's drain-time re-validation instead, where
+// it reaches TUI stderr via Processor.drainCorrections()'s console.error.
+// Called here directly (bypassing parsePatchInput/parsePersonaPatch)
+// because that is exactly what a hand-written corrections.json record
+// does -- the CLI's own patch schema never runs for it.
+describe("resolve*PatchCandidate — a nested unrecognized key inside identifiers[]/traits[]/topics[] is sanitized, never echoed (I1)", () => {
+  const evilKey = "\x1b[31mAUDIT_KEY\x1b[0m";
+
+  it("resolvePersonPatchCandidate: an extra key nested inside identifiers[] produces the fixed generic message, not the raw key", async () => {
+    const existing = makePerson("person-1");
+    // Simulates a raw external corrections.json record: the CLI's own
+    // strict personPatchSchema parse never runs for a hand-written queue
+    // entry, so a nested identifier can carry an unrecognized key here in
+    // a way parseInput/parsePatchInput would already reject.
+    const patch = {
+      identifiers: [{ type: "Nickname", value: "Alice", is_primary: true, [evilKey]: "x" }],
+    } as unknown as MergePatch<Person>;
+
+    let caught: Error | undefined;
+    try {
+      await resolvePersonPatchCandidate(existing, patch);
+    } catch (e) {
+      caught = e as Error;
+    }
+
+    expect(caught).toBeInstanceOf(MergePatchValidationError);
+    expect(caught?.message).toContain("Invalid person update: unrecognized field(s) present");
+    expect(caught?.message).not.toContain(evilKey);
+    expect(caught?.message).not.toContain("AUDIT_KEY");
+    expect(caught?.message).not.toContain("\x1b[31m");
+  });
+
+  it("resolvePersonaPatchCandidate: an extra key nested inside traits[] produces the fixed generic message, not the raw key", async () => {
+    const existing = makePersonaEntity("persona-1");
+    const patch = {
+      traits: [{ name: "Curious", description: "Likes questions", sentiment: 0.5, [evilKey]: "x" }],
+    } as unknown as MergePatch<PersonaEntity>;
+
+    let caught: Error | undefined;
+    try {
+      await resolvePersonaPatchCandidate(existing, patch);
+    } catch (e) {
+      caught = e as Error;
+    }
+
+    expect(caught).toBeInstanceOf(MergePatchValidationError);
+    expect(caught?.message).toContain("Invalid persona update: unrecognized field(s) present");
+    expect(caught?.message).not.toContain(evilKey);
+    expect(caught?.message).not.toContain("AUDIT_KEY");
+    expect(caught?.message).not.toContain("\x1b[31m");
+  });
+
+  it("resolvePersonaPatchCandidate: an extra key nested inside topics[] produces the fixed generic message, not the raw key", async () => {
+    const existing = makePersonaEntity("persona-1");
+    const patch = {
+      topics: [{
+        name: "Distributed Systems",
+        perspective: "p",
+        approach: "a",
+        personal_stake: "s",
+        sentiment: 0.5,
+        exposure_current: 0.2,
+        exposure_desired: 0.7,
+        [evilKey]: "x",
+      }],
+    } as unknown as MergePatch<PersonaEntity>;
+
+    let caught: Error | undefined;
+    try {
+      await resolvePersonaPatchCandidate(existing, patch);
+    } catch (e) {
+      caught = e as Error;
+    }
+
+    expect(caught).toBeInstanceOf(MergePatchValidationError);
+    expect(caught?.message).toContain("Invalid persona update: unrecognized field(s) present");
+    expect(caught?.message).not.toContain(evilKey);
+    expect(caught?.message).not.toContain("AUDIT_KEY");
+    expect(caught?.message).not.toContain("\x1b[31m");
   });
 });

@@ -357,7 +357,7 @@ describe("corrections endpoints", () => {
         ...lookupRecord,
         description: "1984-05-27",
       })
-    ).rejects.toThrow(/Unrecognized key\(s\) in object: 'learned_by'/);
+    ).rejects.toThrow(/Invalid fact: unrecognized field\(s\) present/);
   });
 
   it("rejects user-supplied unknown keys that are outside the round-trip allowlist", async () => {

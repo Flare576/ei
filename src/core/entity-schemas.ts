@@ -110,6 +110,40 @@ export function projectWritable(candidate: object, shape: z.ZodRawShape): Record
 }
 
 /**
+ * Formats zod validation issues into a single `; `-joined message. Every
+ * field on our strict schemas only ever produces a fixed schema field name
+ * or a bounded JS type name in its `.message` -- neither is caller-
+ * controlled. `unrecognized_keys` is the one exception: Zod builds that
+ * issue's own message directly from the caller's literal property names
+ * (node_modules/zod/v3/locales/en.js:17-19), so echoing it verbatim lets an
+ * extra JSON key -- including one decoded from terminal control/ANSI bytes
+ * -- reach CLI/MCP/TUI output unsanitized (I6,
+ * .sisyphus/reviews/wave-2-quote-attestation.md; I1,
+ * .sisyphus/reviews/zod-unrecognized-key-output-sweep.md). That one issue
+ * gets a fixed, generic message instead; every other issue keeps its
+ * normal, already-safe `path: message` text.
+ *
+ * Lives in `src/core` (not `src/cli`) because `validateCandidate()` below
+ * needs the identical sanitization for the drain-time candidate
+ * re-validation path (I1 above) -- core code importing from `src/cli`
+ * would invert this codebase's normal dependency direction (cli depends
+ * on core, not the reverse), so this is the one shared home both layers
+ * import from without a layering violation. `src/cli/corrections-
+ * endpoints.ts` and `src/cli/persona-corrections.ts` both already import
+ * from this file and use this same function for their own parse paths and
+ * for the quote create/fix/relink paths.
+ */
+export function formatValidationIssues(issues: z.ZodIssue[]): string {
+  return issues
+    .map((issue) =>
+      issue.code === z.ZodIssueCode.unrecognized_keys
+        ? "unrecognized field(s) present"
+        : `${issue.path.join(".")}: ${issue.message}`
+    )
+    .join("; ");
+}
+
+/**
  * Validates `candidate`'s writable projection against `candidateSchema`
  * (masked-required, per `deriveSchemaPair` above) and throws a
  * `MergePatchValidationError`-shaped message matching the CLI layer's own
@@ -124,9 +158,7 @@ export function validateCandidate(candidate: object, shape: z.ZodRawShape, candi
   const projected = projectWritable(candidate, shape);
   const result = candidateSchema.safeParse(projected);
   if (!result.success) {
-    throw new MergePatchValidationError(
-      `Invalid ${label} update: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
-    );
+    throw new MergePatchValidationError(`Invalid ${label} update: ${formatValidationIssues(result.error.issues)}`);
   }
 }
 

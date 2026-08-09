@@ -1001,6 +1001,211 @@ describe("CLI create/fix quote — an extra --json key name is sanitized, never 
   });
 });
 
+// ── Sites 1-4 (unrecognized-key echo sanitization — 5 sites): parseInput/
+// parsePatchInput (src/cli/corrections-endpoints.ts) and
+// parsePersonaBody/parsePersonaPatch (src/cli/persona-corrections.ts) all
+// used to interpolate raw Zod issue messages, including
+// `unrecognized_keys`'s own caller-controlled key text, straight into the
+// thrown CorrectionValidationError. Same fix as I6/T17 above (route
+// unrecognized_keys through the shared formatValidationIssues
+// (src/core/entity-schemas.ts) fixed generic message): create fact/topic/
+// person, update fact/topic/person, create persona, update persona.
+describe("CLI create/update fact/topic/person/persona — an extra --json key name is sanitized, never echoed", () => {
+  const evilKey = "\x1b[31mFORGED\x1b[0m";
+
+  it("does not echo the extra key into the create-fact validation error", () => {
+    const result = runCli([
+      "create", "fact", "--json",
+      JSON.stringify({ name: "n", description: "d", sentiment: 0, validated_date: "2026-01-01", [evilKey]: "x" }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid fact: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo the extra key into the create-topic validation error", () => {
+    const result = runCli([
+      "create", "topic", "--json",
+      JSON.stringify({ name: "n", description: "d", sentiment: 0, [evilKey]: "x" }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid topic: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo the extra key into the create-person validation error", () => {
+    const result = runCli([
+      "create", "person", "--json",
+      JSON.stringify({ name: "n", description: "d", sentiment: 0, [evilKey]: "x" }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid person: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo the extra key into the update-fact validation error", () => {
+    // parseInput("fact", body, "update") runs before the fact-existence
+    // check (updateEntity, corrections-endpoints.ts), so a nonexistent id
+    // still reaches the same schema-validation error being tested here.
+    const result = runCli([
+      "update", "fact", "does-not-exist", "--json",
+      JSON.stringify({ name: "n", description: "d", sentiment: 0, validated_date: "2026-01-01", [evilKey]: "x" }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid fact: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo the extra key into the update-topic validation error", () => {
+    const createResult = runCli([
+      "create", "topic", "--json",
+      JSON.stringify({ name: "Original Topic", description: "d", sentiment: 0.1 }),
+    ]);
+    expect(createResult.status).toBe(0);
+    const topicId = JSON.parse(createResult.stdout).id as string;
+
+    const result = runCli(["update", "topic", topicId, "--json", JSON.stringify({ [evilKey]: "x" })]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid topic update: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo the extra key into the update-person validation error", () => {
+    const createResult = runCli([
+      "create", "person", "--json",
+      JSON.stringify({ name: "Original Person", description: "d", sentiment: 0.1 }),
+    ]);
+    expect(createResult.status).toBe(0);
+    const personId = JSON.parse(createResult.stdout).id as string;
+
+    const result = runCli(["update", "person", personId, "--json", JSON.stringify({ [evilKey]: "x" })]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid person update: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  // Beta's review of this ticket's first pass flagged a coverage gap: the
+  // tests above prove a TOP-LEVEL extra key is sanitized through
+  // parseInput/parsePatchInput/parsePersonaBody/parsePersonaPatch, and a
+  // separate core-level test (tests/unit/core/corrections.test.ts) proves
+  // a NESTED extra key inside identifiers[]/traits[]/topics[] is sanitized
+  // at the drain-time validateCandidate() bypass path (a hand-written
+  // corrections.json record). Neither proved a NESTED extra key submitted
+  // through the NORMAL CLI endpoint itself -- `ei update person --json
+  // '{"identifiers":[{...,"EVIL":"z"}]}'` reaching parsePatchInput's own
+  // nested identifierSchema, and the persona equivalent through
+  // parsePersonaPatch's own nested personaTraitSchema/personaTopicSchema.
+  // formatValidationIssues() only branches on issue.code, never
+  // issue.path, so the fix should already cover this identically to the
+  // top-level case -- these tests prove that directly rather than leaving
+  // it inferred.
+  it("does not echo a nested extra key inside identifiers[] into the update-person validation error (parsePatchInput's own nested identifierSchema, not the drain-time bypass)", () => {
+    const createResult = runCli([
+      "create", "person", "--json",
+      JSON.stringify({ name: "Original Person", description: "d", sentiment: 0.1 }),
+    ]);
+    expect(createResult.status).toBe(0);
+    const personId = JSON.parse(createResult.stdout).id as string;
+
+    const result = runCli([
+      "update", "person", personId, "--json",
+      JSON.stringify({ identifiers: [{ type: "Nickname", value: "Alice", [evilKey]: "x" }] }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid person update: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo the extra key into the create-persona validation error", () => {
+    const result = runCli(["create", "persona", "--json", JSON.stringify({ display_name: "P", [evilKey]: "x" })]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid persona: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo the extra key into the update-persona validation error", () => {
+    // parsePersonaPatch runs before the persona-existence check
+    // (updatePersonaEntity, src/cli/persona-corrections.ts), so a
+    // nonexistent id still reaches the same schema-validation error.
+    const result = runCli(["update", "persona", "does-not-exist", "--json", JSON.stringify({ [evilKey]: "x" })]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid persona update: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo a nested extra key inside traits[] into the update-persona validation error (parsePersonaPatch's own nested personaTraitSchema, not the drain-time bypass)", () => {
+    const createResult = runCli(["create", "persona", "--json", JSON.stringify({ display_name: "Nova" })]);
+    expect(createResult.status).toBe(0);
+    const personaId = JSON.parse(createResult.stdout).id as string;
+
+    const result = runCli([
+      "update", "persona", personaId, "--json",
+      JSON.stringify({ traits: [{ name: "Curious", description: "Likes questions", sentiment: 0.5, [evilKey]: "x" }] }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid persona update: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+
+  it("does not echo a nested extra key inside topics[] into the update-persona validation error (parsePersonaPatch's own nested personaTopicSchema, not the drain-time bypass)", () => {
+    const createResult = runCli(["create", "persona", "--json", JSON.stringify({ display_name: "Nova" })]);
+    expect(createResult.status).toBe(0);
+    const personaId = JSON.parse(createResult.stdout).id as string;
+
+    const result = runCli([
+      "update", "persona", personaId, "--json",
+      JSON.stringify({
+        topics: [{
+          name: "Distributed Systems",
+          perspective: "p",
+          approach: "a",
+          personal_stake: "s",
+          sentiment: 0.5,
+          exposure_current: 0.2,
+          exposure_desired: 0.7,
+          [evilKey]: "x",
+        }],
+      }),
+    ]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid persona update: unrecognized field(s) present");
+    expect(result.stderr).not.toContain(evilKey);
+    expect(result.stderr).not.toContain("FORGED");
+    expect(result.stderr).not.toContain("\x1b[31m");
+  });
+});
+
 // ── T4: ei relink quote — process behavior ────────────────────────────────
 describe("CLI relink quote — process behavior (T4)", () => {
   it("relinks a quote's data_item_ids to a new valid target via a real CLI process", () => {

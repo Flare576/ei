@@ -36,6 +36,7 @@ import {
   personPatchSchema,
   personCandidateSchema,
   stripHiddenDataItemFields,
+  formatValidationIssues,
   type ExternalDataItem,
 } from "../core/entity-schemas.js";
 import { resolveTopicPatchCandidate, resolvePersonPatchCandidate } from "../core/corrections.js";
@@ -168,30 +169,6 @@ const quoteRelinkInputSchema = z.strictObject({
 });
 export type QuoteRelinkInput = z.infer<typeof quoteRelinkInputSchema>;
 
-/**
- * Formats zod validation issues for quoteCreateInputSchema/quoteFixInputSchema
- * failures. Every field on these two strict, enum-free schemas
- * (message_id/quote_id/text: string, start/end: number) only ever produces
- * a fixed schema field name or a bounded JS type name in its `.message` --
- * neither is caller-controlled. `unrecognized_keys` is the one exception:
- * Zod builds that issue's own message directly from the caller's literal
- * `--json` property names (node_modules/zod/v3/locales/en.js:17-19), so
- * echoing it verbatim let an extra JSON key -- including one decoded from
- * terminal control/ANSI bytes -- reach CLI/MCP output unsanitized (I6,
- * .sisyphus/reviews/wave-2-quote-attestation.md). That one issue gets a
- * fixed, generic message instead; every other issue keeps its normal,
- * already-safe `path: message` text.
- */
-function formatQuoteValidationIssues(issues: z.ZodIssue[]): string {
-  return issues
-    .map((issue) =>
-      issue.code === z.ZodIssueCode.unrecognized_keys
-        ? "unrecognized field(s) present"
-        : `${issue.path.join(".")}: ${issue.message}`
-    )
-    .join("; ");
-}
-
 const SCHEMAS = { fact: factSchema, topic: topicSchema, person: personSchema } as const;
 const PATCH_SCHEMAS = { topic: topicPatchSchema, person: personPatchSchema } as const;
 
@@ -321,7 +298,7 @@ function parseInput(entityType: NonQuoteType, body: unknown, mode: "create" | "u
   const result = SCHEMAS[entityType].safeParse(input);
   if (!result.success) {
     throw new CorrectionValidationError(
-      `Invalid ${entityType}: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+      `Invalid ${entityType}: ${formatValidationIssues(result.error.issues)}`
     );
   }
   return result.data;
@@ -351,7 +328,7 @@ function parsePatchInput(entityType: "topic" | "person", body: unknown): TopicPa
   const result = PATCH_SCHEMAS[entityType].safeParse(input);
   if (!result.success) {
     throw new CorrectionValidationError(
-      `Invalid ${entityType} update: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+      `Invalid ${entityType} update: ${formatValidationIssues(result.error.issues)}`
     );
   }
   return result.data;
@@ -620,7 +597,7 @@ export async function createQuoteEntity(body: unknown): Promise<Quote | QuoteWri
   const result = quoteCreateInputSchema.safeParse(body);
   if (!result.success) {
     throw new CorrectionValidationError(
-      `Invalid quote (create): ${formatQuoteValidationIssues(result.error.issues)}`
+      `Invalid quote (create): ${formatValidationIssues(result.error.issues)}`
     );
   }
   const { message_id, text, start, end } = result.data;
@@ -750,7 +727,7 @@ export async function fixQuoteEntity(body: unknown): Promise<Quote | QuoteWriteP
   const result = quoteFixInputSchema.safeParse(body);
   if (!result.success) {
     throw new CorrectionValidationError(
-      `Invalid quote (fix): ${formatQuoteValidationIssues(result.error.issues)}`
+      `Invalid quote (fix): ${formatValidationIssues(result.error.issues)}`
     );
   }
   const { quote_id, text, start, end } = result.data;
@@ -943,7 +920,7 @@ export async function relinkQuoteEntity(body: unknown): Promise<Quote | QuoteWri
   const result = quoteRelinkInputSchema.safeParse(body);
   if (!result.success) {
     throw new CorrectionValidationError(
-      `Invalid quote (relink): ${formatQuoteValidationIssues(result.error.issues)}`
+      `Invalid quote (relink): ${formatValidationIssues(result.error.issues)}`
     );
   }
   const { id, data_item_ids } = result.data;
@@ -967,7 +944,7 @@ export async function relinkQuoteEntity(body: unknown): Promise<Quote | QuoteWri
     // I1 (.sisyphus/reviews/wave-3-t4-diff-review.md): never interpolate
     // caller-supplied data_item_ids into a public error -- a control/
     // ANSI-bearing invalid id could otherwise inject into terminal/MCP
-    // output, the same output-injection class formatQuoteValidationIssues()
+    // output, the same output-injection class formatValidationIssues()
     // already prevents for Zod's unrecognized_keys above. The caller
     // already knows what ids they supplied; a fixed, stable refusal is
     // enough -- matches the "quote not found" refusals' own id-free
