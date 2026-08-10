@@ -43,6 +43,7 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [033](ADR-033-message-retention-defaults-to-never-prune.md) | Message Retention Defaults To Never Prune, And `0` Means Disabled | Accepted | 2026-08-04 | Backfill |
 | [034](ADR-034-session-boundary-hook-races-accepted.md) | Session-Boundary Hook Races Are Accepted Across OMP, Claude Code, and Cursor | Accepted | 2026-08-07 | Current |
 | [035](ADR-035-sync-peers-are-the-user-not-an-adversary.md) | A Sync Peer With Valid Credentials Is the User, Not an Adversary | Accepted | 2026-08-07 | Current |
+| [036](ADR-036-instruction-repositioning-is-not-a-validated-fix.md) | Instruction Repositioning Is Not a Validated Fix for Extraction Prompt Data-Handling Defects — Real Failure Cases Come First | Accepted | 2026-08-10 | Current |
 
 ## Conventions
 
