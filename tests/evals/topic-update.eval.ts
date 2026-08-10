@@ -67,6 +67,58 @@ const CLEO_CAT_MESSAGES: Message[] = [
   makeMessage("human", "Absolute chaos agent. Cleo loves him though.", "msg-cat5"),
 ];
 
+// Earlier-Conversation scope: a canary fact already fully reflected in the existing topic record
+// (Mateo/backsplash/$4,100 — "already processed," matching production's real steady state) restated
+// in Earlier Conversation, dressed in heavy Markdown (bullets/table/blockquote/bold). Distinct from
+// a genuinely NEW, held-out incidental detail ("three different suppliers", "until October") that
+// was never promoted to the record and has no reason to resurface. See
+// `docs/adr/ADR-036-instruction-repositioning-is-not-a-validated-fix.md` for the full
+// investigation — this pair is what survived cleanup as durable regression/monitoring coverage.
+const RENOVATION_EARLIER_HEAVY_MARKDOWN: Message[] = [
+  makeMessage("human", `So here's the **latest** on the kitchen:
+
+- Contractor: \`Mateo Reyes\`
+- Overage (unchanged): **$4,100**
+- New wrinkle: had to call **three different suppliers** before finding stock
+
+> Even that one is "back-ordered until October," he said.
+
+| Item | Status |
+|---|---|
+| Backsplash tile | Back-ordered until October |
+| Budget | Still over by $4,100 |
+
+Just wanted to flag it before the next update.`, "msg-earlier-heavy-md"),
+];
+
+// Same heavy formatting, but the incidental detail is topically irrelevant (radio-station chatter,
+// not budget/decision-relevant) — the regression guard for the mechanism behind the limitation above.
+const RENOVATION_EARLIER_HEAVY_MARKDOWN_IRRELEVANT: Message[] = [
+  makeMessage("human", `So here's a **random update** on the kitchen:
+
+- Contractor: \`Mateo Reyes\`
+- Overage (unchanged): **$4,100**
+- Off-topic: he mentioned the only radio station he can get out there plays oldies non-stop
+
+> He joked the crew's been listening to "the same twelve songs on repeat all week."
+
+| Item | Status |
+|---|---|
+| Backsplash tile | Still back-ordered |
+| Budget | Still over by $4,100 |
+
+Just wanted to flag it before the next update.`, "msg-earlier-heavy-md-irrelevant"),
+];
+
+const RENOVATION_MOST_RECENT: Message[] = [
+  makeMessage("human", "Good news — we finally decided on the bathroom floor. Going with in-floor heating, which adds $2,800 to the budget.", "msg-recent-heating"),
+];
+
+const RENOVATION_EXISTING_TOPIC = makeExistingTopic({
+  name: "Home renovation budget",
+  description: "Ongoing kitchen and bathroom renovation. Contractor Mateo flagged a $4,100 overage on the kitchen tile install because of a backsplash tile supply shortage.",
+});
+
 const summary = await runEval(
   [
     {
@@ -255,6 +307,55 @@ const summary = await runEval(
           ].join(" "),
         },
       ],
+    },
+    {
+      description: "Topic-update: known limitation — heavy Markdown (bullets/table/blockquote) in Earlier Conversation leaks an already-processed, topically-relevant incidental detail",
+      tags: ["topic-update", "earlier-conversation-scope", "known-model-limitation:heavy-markdown"],
+      // Monitoring only, never gates — see docs/adr/ADR-036-instruction-repositioning-is-not-a-validated-fix.md.
+      // This is a documented, reproducible limitation at extreme Markdown density (well beyond
+      // typical usage); repositioning + reasoning the scoping instruction did not fix it either.
+      // pass_threshold: 0 means any passRate satisfies the gate — we still want the real rate reported.
+      pass_threshold: 0,
+      repeat: 5,
+      prompt: () => hydratePrompt(
+        buildTopicUpdatePrompt({
+          persona_name: PERSONA_NAME,
+          existing_item: RENOVATION_EXISTING_TOPIC,
+          messages_context: RENOVATION_EARLIER_HEAVY_MARKDOWN,
+          messages_analyze: RENOVATION_MOST_RECENT,
+        }),
+        [...RENOVATION_EARLIER_HEAVY_MARKDOWN, ...RENOVATION_MOST_RECENT]
+      ),
+      assert: [
+        { type: "is-json" as const },
+        {
+          type: "contains-none-of" as const,
+          field: "description",
+          forbidden: ["three different suppliers", "until october"],
+        },
+      ] satisfies Assertion[],
+    },
+    {
+      description: "Topic-update: same heavy Markdown formatting, topically irrelevant detail must stay excluded",
+      tags: ["topic-update", "earlier-conversation-scope", "regression-guard"],
+      repeat: 5,
+      prompt: () => hydratePrompt(
+        buildTopicUpdatePrompt({
+          persona_name: PERSONA_NAME,
+          existing_item: RENOVATION_EXISTING_TOPIC,
+          messages_context: RENOVATION_EARLIER_HEAVY_MARKDOWN_IRRELEVANT,
+          messages_analyze: RENOVATION_MOST_RECENT,
+        }),
+        [...RENOVATION_EARLIER_HEAVY_MARKDOWN_IRRELEVANT, ...RENOVATION_MOST_RECENT]
+      ),
+      assert: [
+        { type: "is-json" as const },
+        {
+          type: "contains-none-of" as const,
+          field: "description",
+          forbidden: ["oldies", "radio station", "twelve songs"],
+        },
+      ] satisfies Assertion[],
     },
   ],
   "tests/evals/results/topic-update-latest.json"
