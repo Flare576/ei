@@ -348,3 +348,32 @@ export function removePersonaLinksToId(people: Person[], personaId: string): voi
     }
   }
 }
+
+/**
+ * Read-time counterpart to `guardPersonaLinks` (Bolt 004, D8/Spec §4.7):
+ * resolves every `Person` record currently linked to `personaId`,
+ * enumerating ALL matches rather than taking the first — mirrors the
+ * deleted `queueReflectionPhase`'s enumerate-all pattern
+ * (ceremony.ts:637-640 pre-deletion, ADR-038 item 5), which the new
+ * Observation→Signal ingestion branch carries forward instead of
+ * `handleReflectionCritic`'s first-match read.
+ *
+ * ADR-006 says a Persona is linked from at most one Person; ADR-010 says
+ * an invalid link is reported, never silently repaired by picking a
+ * "winner." Zero results means this persona has no linked Person record
+ * at all (a legitimate, common state — no `Ei Persona` identifier was
+ * ever created for it, not an error); more than one is the ADR-006
+ * violation this function exists to surface rather than resolve.
+ *
+ * Uses the general `Ei Persona` type predicate (`isEiPersonaIdentifierType`),
+ * not the reserved-id-excluding `isEiPersonaLinkIdentifier` —
+ * `guardPersonaLinks`'s write-time cardinality guard deliberately does not
+ * police the two reserved values ("ei"/"emmet"), but a read still needs to
+ * locate Ei's own Person record by that same identifier, since Ei's own
+ * persona is itself a valid subject of this pipeline (D6).
+ */
+export function resolvePersonaLinkedPeople(personaId: string, allPeople: readonly Person[]): Person[] {
+  return allPeople.filter((p) =>
+    (p.identifiers ?? []).some((i) => isEiPersonaIdentifierType(i.type) && i.value === personaId)
+  );
+}
