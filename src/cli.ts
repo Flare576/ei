@@ -13,13 +13,13 @@
 
 import { parseArgs } from "util";
 import { readFile } from "fs/promises";
-import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState, resolvePersonLogLength } from "./cli/retrieval";
+import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState, resolvePersonaHasActiveSignals } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import { installMcpClients } from "./cli/install.js";
 import { getRecentSessionMessages } from "./cli/session-context.js";
 import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, relinkQuoteEntity, CorrectionValidationError, CORRECTABLE_TYPES, UPDATABLE_TYPES } from "./cli/corrections-endpoints.js";
-import { createPersonaEntity, updatePersonaEntity, removePersonaEntity } from "./cli/persona-corrections.js";
+import { createPersonaEntity, updatePersonaEntity, removePersonaEntity, addPersonaObservation, applyPersonaSignal } from "./cli/persona-corrections.js";
 import type { CorrectableType } from "./core/corrections.js";
 import pkg from "../package.json" assert { type: "json" };
 
@@ -169,6 +169,14 @@ Usage:
                                  merge onto)
   ei remove <type> <id>         Remove an entity by ID (fact/topic/person/quote/persona)
   ei create quote | fix quote | relink quote | remove quote   Quote writes (see Quotes below)
+  ei add observation <personaId> --json '<json>' | --json-file <path>  Assert a PersonaObservation directly,
+                                 attributed to the caller — routed through the same Match/Update-Reduce
+                                 pipeline as an extraction-produced observation (see Persona Signals below)
+  ei confirm signal <personaId> <signalId> --json '<json>' | --json-file <path>  Mark a candidate/recurring
+                                 EmergentSignal reviewed; a Persona-lens signal may include an identity
+                                 delta, PROPOSED via pending_update, never applied directly
+  ei dismiss signal <personaId> <signalId> --json '<json>' | --json-file <path>  Mark a candidate/recurring
+                                 EmergentSignal dismissed — no identity write, either lens
 
 Types:
   quote / quotes      Quotes from conversation history
@@ -190,6 +198,17 @@ Quotes (source-verified — a quote claims someone really said something):
   'relink' and 'remove' assert nothing about text or origin, so they also work on a quote whose
   source no longer resolves. 'ei update' on a quote is retired and always rejects — use
   'fix quote' to correct text, 'relink quote' to change links, 'remove quote' to delete.
+
+Persona Signals (EmergentSignal — corroborated testimony about a persona's identity or operating contract):
+  ei add observation <personaId> --json '{"subject_person_id":"...","observer_kind":"human","dimension":"behavior","direction":"novel","claim":"...","lens":"persona"}'
+  ei confirm signal <personaId> <signalId> --json '{"actor":"flare576"}'  # status transition only, no delta
+  ei confirm signal <personaId> <signalId> --json '{"actor":"flare576","delta":{"short_description":"...","long_description":"...","traits":[],"topics":[]}}'
+  ei dismiss signal <personaId> <signalId> --json '{"actor":"flare576"}'
+  'confirm'/'dismiss' refuse (no state change) against a signal already dismissed or reviewed — reopening a
+  dismissed signal is exclusively the evidence-citing path in the automatic promotion pipeline, never this
+  write surface. A Persona-lens 'confirm' with a delta is refused outright if that persona already has a
+  pending_update set; resolve the existing proposal (the TUI/Web apply-UI) first, then retry. An Agent-lens
+  'confirm' never writes PersonaEntity, even if a delta is supplied — it only marks the signal reviewed.
 
 Options:
   --number, -n        Maximum number of results (default: 10)
@@ -241,6 +260,9 @@ Examples:
   ei update persona abc-123 --json-file /tmp/patch.json  # patch file contains e.g. {"traits":[...]} — only traits changes; display_name/topics/etc stay as stored
   ei remove persona abc-123              # Remove a persona (reserved personas like "ei"/"emmet" can't be removed at all — use the TUI's /archive command instead)
   ei remove fact abc-123                 # Remove a fact by ID
+  ei add observation persona-id --json '{"subject_person_id":"person-id","observer_kind":"human","dimension":"behavior","direction":"novel","claim":"Consistently terse.","lens":"persona"}'  # Assert a claim, routed through Match/Update-Reduce
+  ei confirm signal persona-id signal-id --json '{"actor":"flare576"}'  # Mark a candidate/recurring signal reviewed
+  ei dismiss signal persona-id signal-id --json '{"actor":"flare576"}'  # Mark a candidate/recurring signal dismissed
 `);
 }
 
@@ -534,6 +556,49 @@ async function main(): Promise<void> {
     }
   }
 
+  // "add"/"confirm"/"dismiss" are new, reserved top-level verbs — Bolt 008
+  // (Spec §4.12)'s CLI/MCP write surface, same family as create/update/
+  // remove/fix/relink above. "add" is observation-only ("ei add
+  // observation ..."); "confirm"/"dismiss" are signal-only ("ei confirm
+  // signal <personaId> <signalId> ..." / "ei dismiss signal ..."),
+  // mirroring fix/relink's own "reserved verb, wrong noun is a usage
+  // error" discipline rather than falling through to the search path.
+  if (args[0] === "add") {
+    if (args[1] !== "observation" || !args[2]) {
+      console.error(`Usage: ei add observation <personaId> --json '<json>' | --json-file <path>`);
+      process.exit(1);
+    }
+    const personaId = args[2];
+    const body = await readJsonBody(args, "ei add observation");
+    try {
+      const result = await addPersonaObservation(personaId, body);
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error(e instanceof CorrectionValidationError ? e.message : (e as Error).message);
+      process.exit(1);
+    }
+  }
+
+  if (args[0] === "confirm" || args[0] === "dismiss") {
+    const disposition = args[0] as "confirm" | "dismiss";
+    if (args[1] !== "signal" || !args[2] || !args[3]) {
+      console.error(`Usage: ei ${disposition} signal <personaId> <signalId> --json '<json>' | --json-file <path>`);
+      process.exit(1);
+    }
+    const personaId = args[2];
+    const signalId = args[3];
+    const body = await readJsonBody(args, `ei ${disposition} signal`);
+    try {
+      const result = await applyPersonaSignal(personaId, signalId, disposition, body);
+      console.log(JSON.stringify(result, null, 2));
+      process.exit(0);
+    } catch (e) {
+      console.error(e instanceof CorrectionValidationError ? e.message : (e as Error).message);
+      process.exit(1);
+    }
+  }
+
   if (args[0] === "--sync") {
     const { getDataPath } = await import("./cli/retrieval.js");
     const { RemoteSync } = await import("./storage/remote.js");
@@ -782,13 +847,13 @@ async function main(): Promise<void> {
         process.exit(0);
       }
       // Deliberately dynamic (not top-level static): personas.js pulls in
-      // the embedding service and ceremony orchestrator, and this branch
-      // only runs for the personas --format=prompt path, mirroring the
-      // targetType-parameterized command import above.
+      // the embedding service, and this branch only runs for the personas
+      // --format=prompt path, mirroring the targetType-parameterized
+      // command import above.
       const { buildEiRelationshipBlock } = await import("./cli/commands/personas.js");
-      const personLogState = state ?? await loadLatestState();
-      const personLogLength = personLogState ? resolvePersonLogLength(result[0].id, personLogState) : undefined;
-      process.stdout.write(buildEiRelationshipBlock(result[0], personLogLength) + "\n");
+      const signalState = state ?? await loadLatestState();
+      const hasActiveSignals = signalState ? resolvePersonaHasActiveSignals(result[0].id, signalState) : undefined;
+      process.stdout.write(buildEiRelationshipBlock(result[0], hasActiveSignals) + "\n");
       process.exit(0);
     }
   } else {

@@ -6,7 +6,7 @@ import { spawnSync } from "child_process";
 import type { StorageState } from "../../src/core/types/integrations.js";
 import type { Person, Quote } from "../../src/core/types/data-items.js";
 import { ContextStatus } from "../../src/core/types/enums.js";
-import { PERSON_LOG_REFLECTION_THRESHOLD } from "../../src/core/orchestrators/ceremony.js";
+import type { EmergentSignal } from "../../src/core/types/signals.js";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 const CLI_ARGS = ["src/cli.ts"];
@@ -643,19 +643,19 @@ describe("CLI --help balanced-search contract", () => {
   });
 });
 
-// ── CLI --format prompt: Ei Person Log composition seam ──────────────────────
-// resolvePersonLogLength() and buildEiRelationshipBlock() are each covered
-// directly (tests/unit/cli/personas.test.ts), but a helper-level test can't
-// see whether the real `--format prompt` route (src/cli.ts) actually wires
-// the resolver's output into the formatter correctly. This exercises the
-// full process: a persisted persona linked to a real Person record, through
-// `ei personas <name> --format prompt`, asserting the privacy boundary holds
-// end-to-end and not just at the helper seam.
-describe("CLI --format prompt process behavior — Ei Person Log section", () => {
-  const personaId = "person-log-persona";
-  const personaName = "Person Log Persona";
+// ── CLI --format prompt: Ei Signals invitation composition seam ─────────────
+// resolvePersonaHasActiveSignals() and buildEiRelationshipBlock() are each
+// covered directly (tests/unit/cli/personas.test.ts), but a helper-level
+// test can't see whether the real `--format prompt` route (src/cli.ts)
+// actually wires the resolver's output into the formatter correctly. This
+// exercises the full process: a persisted persona with real signals,
+// through `ei personas <name> --format prompt`, asserting the privacy
+// boundary holds end-to-end and not just at the helper seam.
+describe("CLI --format prompt process behavior — Ei Signals section", () => {
+  const personaId = "signal-persona";
+  const personaName = "Signal Persona";
 
-  function writeStateWithPersonaAndPeople(people: Person[]) {
+  function writeStateWithPersonaSignals(signals?: Partial<{ persona: EmergentSignal[]; agent: EmergentSignal[] }>) {
     const statePath = join(tempDir, "state.json");
     const state: StorageState = {
       ...makeState(),
@@ -665,7 +665,7 @@ describe("CLI --format prompt process behavior — Ei Person Log section", () =>
             id: personaId,
             display_name: personaName,
             entity: "system",
-            long_description: "Base prompt for person log tests.",
+            long_description: "Base prompt for signal tests.",
             traits: [],
             topics: [],
             is_paused: false,
@@ -674,50 +674,105 @@ describe("CLI --format prompt process behavior — Ei Person Log section", () =>
             last_updated: NOW,
           },
           messages: [],
+          signals: signals as { persona: EmergentSignal[]; agent: EmergentSignal[] } | undefined,
         },
       },
-      human: { ...makeState().human, people },
     };
     writeFileSync(statePath, JSON.stringify(state));
   }
 
-  it("emits no Person Log section when the persona has no linked Person record", () => {
-    writeStateWithPersonaAndPeople([]);
+  function makeSignal(overrides: Partial<EmergentSignal> = {}): EmergentSignal {
+    return {
+      id: "signal-1",
+      subject_persona_id: personaId,
+      claim: "SENTINEL_PROCESS_LEVEL_DO_NOT_LEAK_9d21ff",
+      dimension: "behavior",
+      status: "candidate",
+      evidence_ids: ["obs-1"],
+      first_observed_at: NOW,
+      last_observed_at: NOW,
+      observer_kinds: ["human"],
+      recurrence_count: 1,
+      ...overrides,
+    };
+  }
+
+  it("emits no Ei Signals section when the persona has no signals key at all", () => {
+    writeStateWithPersonaSignals(undefined);
 
     const result = runCli(["personas", personaName, "--format", "prompt"]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout).not.toContain("Ei Person Log");
+    expect(result.stdout).not.toContain("Ei Signals");
   });
 
-  it("reports the count and the reflection cue when the linked record is over threshold, and never leaks the log content", () => {
+  it("emits no Ei Signals section when every signal is dismissed", () => {
+    writeStateWithPersonaSignals({ persona: [makeSignal({ status: "dismissed" })], agent: [] });
+
+    const result = runCli(["personas", personaName, "--format", "prompt"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("Ei Signals");
+  });
+
+  it("invites the agent to ask about signals, and never leaks a signal's claim, when an active Persona-lens signal exists", () => {
     const sentinel = "SENTINEL_PROCESS_LEVEL_DO_NOT_LEAK_9d21ff";
-    const description = sentinel + "z".repeat(PERSON_LOG_REFLECTION_THRESHOLD + 100);
-    writeStateWithPersonaAndPeople([
-      makePerson("linked-person", [{ type: "Ei Persona", value: personaId, is_primary: true }], description),
-    ]);
+    writeStateWithPersonaSignals({ persona: [makeSignal({ claim: sentinel, status: "recurring" })], agent: [] });
 
     const result = runCli(["personas", personaName, "--format", "prompt"]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("# Ei Person Log");
-    expect(result.stdout).toContain(`currently ${description.length} characters`);
-    expect(result.stdout).toMatch(/prompt the user to perform a reflection soon/i);
+    expect(result.stdout).toContain("# Ei Signals");
+    expect(result.stdout).toMatch(/ask/i);
     expect(result.stdout).not.toContain(sentinel);
-    expect(result.stdout).not.toContain(description);
+    expect(result.stdout).not.toMatch(/prompt the user to perform a reflection soon/i);
+    expect(result.stdout).not.toMatch(/currently \d+ characters/i);
   });
 
-  it("reports the count with no reflection cue at exactly the threshold (strict >, matching ceremony.ts)", () => {
-    const description = "a".repeat(PERSON_LOG_REFLECTION_THRESHOLD);
-    writeStateWithPersonaAndPeople([
-      makePerson("linked-person", [{ type: "Ei Persona", value: personaId, is_primary: true }], description),
-    ]);
+  it("invites the agent to ask about signals when only the Agent-lens has an active signal", () => {
+    writeStateWithPersonaSignals({ persona: [], agent: [makeSignal({ status: "candidate" })] });
 
     const result = runCli(["personas", personaName, "--format", "prompt"]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain(`currently ${PERSON_LOG_REFLECTION_THRESHOLD} characters`);
-    expect(result.stdout).not.toMatch(/reflection/i);
+    expect(result.stdout).toContain("# Ei Signals");
+  });
+
+  // R4/AT4 (Bolt 007, D4): the raw-state CLI path bypasses PersonaState.load(),
+  // so a persisted `signals` collection with one lens bucket individually
+  // absent (schema drift, partial write) must exit 0 and still surface the
+  // invitation from whichever bucket is actually present, never crash the
+  // process.
+  it("exits 0 and still invites the agent when the persona bucket is present with a candidate signal and the agent bucket key is entirely absent", () => {
+    writeStateWithPersonaSignals({ persona: [makeSignal({ status: "candidate" })] });
+
+    const result = runCli(["personas", personaName, "--format", "prompt"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("# Ei Signals");
+    expect(result.stdout).toMatch(/ask/i);
+  });
+
+  it("exits 0 and still invites the agent when the agent bucket is present with a recurring signal and the persona bucket key is entirely absent", () => {
+    writeStateWithPersonaSignals({ agent: [makeSignal({ status: "recurring" })] });
+
+    const result = runCli(["personas", personaName, "--format", "prompt"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("# Ei Signals");
+    expect(result.stdout).toMatch(/ask/i);
+  });
+
+  it("a dismissed signal in one bucket never masks an active candidate signal in the other bucket", () => {
+    writeStateWithPersonaSignals({
+      persona: [makeSignal({ status: "dismissed" })],
+      agent: [makeSignal({ status: "candidate" })],
+    });
+
+    const result = runCli(["personas", personaName, "--format", "prompt"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("# Ei Signals");
   });
 });
 
