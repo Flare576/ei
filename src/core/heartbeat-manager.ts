@@ -5,6 +5,7 @@ import {
   ContextStatus,
   type HumanEntity,
   type Message,
+  type EmergentSignal,
 } from "./types.js";
 import { StateManager } from "./state-manager.js";
 import { getMessageContent } from "./handlers/utils.js";
@@ -88,6 +89,50 @@ export function countTrailingPersonaMessages(history: Message[]): number {
     }
   }
   return count;
+}
+
+// =============================================================================
+// SIGNAL CANDIDATE ASSEMBLY (Bolt 005, D4)
+// =============================================================================
+
+/**
+ * Assembles `personaId`'s heartbeat-eligible signal candidate list (D2/D4):
+ * reads every `candidate`-status `EmergentSignal` with `recurrence_count >= 2`
+ * across both lenses (persona + agent — Spec §4.9 draws no lens distinction
+ * for surfacing) — the gentle-surface floor that excludes a raw
+ * one-observation candidate (D6/R4) — excludes any
+ * whose resurfacing cooldown hasn't cleared, then stamps `last_surfaced_at`
+ * on every signal it returns. Assembling the candidate list IS the surfacing
+ * event — the stamp lands whether or not the caller's model reply ends up
+ * naming the signal, since the freeform `should_respond`/`topic`/`message`
+ * result has no field naming which shown item was picked.
+ *
+ * Cooldown: a signal whose `last_surfaced_at` is unset is always eligible
+ * (never yet surfaced); one whose `last_surfaced_at` IS set is eligible
+ * again only once `last_observed_at` has moved past it — new corroborating
+ * evidence arrived since the last surfacing (D2/R2).
+ *
+ * A standalone, exported function — never inlined into `queueHeartbeatCheck`
+ * — so `bolt-persona-emergence-signals-011`'s analogous Ei-heartbeat
+ * candidate producer can call this exact eligibility/cooldown/stamp policy
+ * from `queueEiHeartbeat` instead of re-deriving it (D4). This Bolt does not
+ * call it from `queueEiHeartbeat` itself, and does not decide the
+ * cross-surface cooldown-race question Bolt 011 still needs to answer.
+ */
+export function assembleHeartbeatSignalCandidates(sm: StateManager, personaId: string): EmergentSignal[] {
+  const { persona, agent } = sm.signals_get(personaId);
+  const now = new Date().toISOString();
+  const eligible = [...persona, ...agent].filter(
+    (signal) =>
+      signal.status === "candidate" &&
+      signal.recurrence_count >= 2 &&
+      (!signal.last_surfaced_at || signal.last_observed_at > signal.last_surfaced_at)
+  );
+  for (const signal of eligible) {
+    sm.signal_stampSurfaced(personaId, signal.id, now);
+    signal.last_surfaced_at = now;
+  }
+  return eligible;
 }
 
 // =============================================================================
@@ -231,6 +276,28 @@ export async function queueEiHeartbeat(
     });
   }
 
+  // bolt-persona-emergence-signals-011, D1/D3: the missing producer for
+  // Bolt 006's crossFind/handleEiHeartbeat signal-choice consumer. Calls
+  // Bolt 005's own shared assembly function once per persona -- the exact
+  // eligibility/cooldown/stamp policy `queueHeartbeatCheck` uses for that
+  // persona's own heartbeat, never a second Ei-only reimplementation
+  // (R4/AT4). Stamping is a side effect of the call itself, so whichever
+  // surface (Ei's or the subject persona's own heartbeat) assembles first
+  // in a cycle stamps `last_surfaced_at` once and the other's later call
+  // naturally excludes the signal via the same cooldown check (D3/R3/AT3)
+  // -- no separate coordination needed here.
+  for (const p of personas) {
+    for (const signal of assembleHeartbeatSignalCandidates(sm, p.id)) {
+      items.push({
+        id: signal.id,
+        type: "Signal",
+        persona_name: p.display_name,
+        dimension: signal.dimension,
+        claim: signal.claim,
+      });
+    }
+  }
+
   if (items.length === 0) {
     console.log("[queueEiHeartbeat] No items to address, skipping");
     return;
@@ -258,7 +325,7 @@ export async function queueEiHeartbeat(
     user: prompt.user,
     next_step: LLMNextStep.HandleEiHeartbeat,
     model: getModelForPersona(sm, "ei"),
-    data: { personaId: "ei", isTUI, newPersonIds: newPeople.map(p => p.id) },
+    data: { personaId: "ei", isTUI, newPersonIds: newPeople.map(p => p.id), offeredIds: items.map(i => i.id) },
   });
 }
 
@@ -302,6 +369,8 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
     persona.context_boundary
   );
 
+  const signals = assembleHeartbeatSignalCandidates(sm, personaId);
+
   const promptData: HeartbeatCheckPromptData = {
     persona: {
       name: persona.display_name,
@@ -316,6 +385,7 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
     recent_history: prunedHistory.slice(-10),
     temporal_anchors: temporalAnchors,
     inactive_days: inactiveDays,
+    signals,
   };
 
   const prompt = buildHeartbeatCheckPrompt(promptData);
