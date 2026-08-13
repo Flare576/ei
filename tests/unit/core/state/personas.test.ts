@@ -610,6 +610,34 @@ describe("PersonaState", () => {
       expect(state.getAll()).toHaveLength(1);
       expect(state.messages_get(persona.id)).toHaveLength(1);
     });
+
+    it("materializes persona observations and signals for a legacy record through repeated load/export cycles", () => {
+      const persona = makePersona("LegacyBot");
+      // Intentionally old persisted shape: casting stays at this API boundary because
+      // observations and signals are absent from the production type until Bolt 003 lands.
+      const legacyPersonas = {
+        [persona.id]: {
+          entity: persona,
+          messages: [],
+        },
+      } as unknown as Parameters<PersonaState["load"]>[0];
+
+      state.load(legacyPersonas);
+      const firstExport = state.export();
+
+      const reloadedState = new PersonaState();
+      reloadedState.load(firstExport);
+
+      expect(firstExport).toEqual({
+        [persona.id]: {
+          entity: persona,
+          messages: [],
+          observations: [],
+          signals: { persona: [], agent: [] },
+        },
+      });
+      expect(reloadedState.export()).toEqual(firstExport);
+    });
   });
 
   describe("messages_getAlways", () => {
