@@ -4,6 +4,7 @@
  */
 
 import type { HumanEntity, PersonaEntity } from "./entities.js";
+import type { PersonaObservation, PersonaSignalCollections } from "./signals.js";
 import type { Message, LLMRequest } from "./llm.js";
 
 /**
@@ -151,6 +152,15 @@ export interface StorageState {
     {
       entity: PersonaEntity;
       messages: Message[];
+      /** Every observation ever recorded for this persona (D2, Bolt 003).
+       * Absent on a record persisted before this Bolt shipped — hydration
+       * defaults it to `[]` (D4), never a migration failure. */
+      observations?: PersonaObservation[];
+      /** The two non-overlapping lens buckets a persona's signals live in
+       * (D2, Bolt 003). Absent on a record persisted before this Bolt
+       * shipped — hydration defaults it to `{ persona: [], agent: [] }` (D4),
+       * never a migration failure. */
+      signals?: PersonaSignalCollections;
     }
   >;
   rooms?: Record<string, import("./rooms.js").RoomEntity>;
