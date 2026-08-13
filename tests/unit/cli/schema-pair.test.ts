@@ -152,12 +152,11 @@ describe("person schema pair", () => {
 });
 
 describe("persona schema pair", () => {
-  it("patch: an empty patch parses with every field undefined, including formerly-defaulted traits/topics/external_reflection_only", () => {
+  it("patch: an empty patch parses with every field undefined, including formerly-defaulted traits/topics", () => {
     const result = personaPatchSchema.parse({});
     expect(result.display_name).toBeUndefined();
     expect(result.traits).toBeUndefined();
     expect(result.topics).toBeUndefined();
-    expect(result.external_reflection_only).toBeUndefined();
   });
 
   it("patch: accepts pending_update: null (Clearable) and rejects any other value for it", () => {
@@ -184,12 +183,11 @@ describe("persona schema pair", () => {
         display_name: "Nova",
         traits: [],
         topics: [],
-        external_reflection_only: false,
       })
     ).not.toThrow();
   });
 
   it("candidate: rejects a projection missing display_name (cleared by a merge)", () => {
-    expect(() => personaCandidateSchema.parse({ traits: [], topics: [], external_reflection_only: false })).toThrow();
+    expect(() => personaCandidateSchema.parse({ traits: [], topics: [] })).toThrow();
   });
 });

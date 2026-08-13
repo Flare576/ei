@@ -136,6 +136,7 @@ export interface HumanSettings {
   cursor?: import("../../integrations/cursor/types.js").CursorSettings;
   codex?: import("../../integrations/codex/types.js").CodexSettings;
   pi?: import("../../integrations/pi/types.js").PiSettings;
+  omp?: import("../../integrations/omp/types.js").OmpSettings;
   document?: DocumentSettings;
   active_theme?: string;
   custom_themes?: ThemeDefinition[];
@@ -151,6 +152,17 @@ export interface HumanEntity {
   quotes: Quote[];
   last_updated: string;
   settings?: HumanSettings;
+}
+
+/** Persona identity fields a caller may propose changing — the shared
+ * shape between the Critic's own reflection proposal and Bolt 008's
+ * `signal.confirm` delta (§4.12): both land in `pending_update` through
+ * this exact shape, never a bespoke one per producer. */
+export interface PersonaIdentityDelta {
+  short_description: string;
+  long_description: string;
+  traits: PersonaTrait[];
+  topics: PersonaTopic[];
 }
 
 export interface PersonaEntity {
@@ -178,19 +190,14 @@ export interface PersonaEntity {
   last_heartbeat?: string;
   tools?: string[];              // IDs of ToolDefinitions this persona can use. Empty/absent = no tool access.
   description_embedding?: number[]; // Embedding of long_description (short_description fallback). Excludes traits. See embedding-service.ts:getPersonaDescriptionText.
-  pending_update?: {                // Proposed identity revision from ceremony reflection. Cleared when user accepts or dismisses via /reflect apply.
-    short_description: string;
-    long_description: string;
-    traits: import("./data-items.js").PersonaTrait[];
-    topics: import("./data-items.js").PersonaTopic[];
+  pending_update?: PersonaIdentityDelta & {  // Proposed identity revision from ceremony reflection OR Bolt 008's signal.confirm (§4.12). Cleared when user accepts or dismisses via /reflect apply.
     critique: string;              // Analyst's prose — for Ei to use when urgency is high, not surfaced to the persona.
-    created_at: string;            // ISO timestamp of when the Critic ran. Used to name the reflect folder.
+    created_at: string;            // ISO timestamp of when the Critic ran (or when signal.confirm proposed it). Used to name the reflect folder.
   };
   avatar_emoji?: string;            // Single emoji character used as avatar in place of initials.
   avatar_image?: string;            // Base64-encoded 64×64 image used as avatar (takes priority over avatar_emoji).
   preferred_theme?: string;         // Theme ID (built-in name or ThemeDefinition.id). Applied to chat panel when this persona is active.
   notes?: string[];                 // Private scratchpad — up to 20 short-term notes visible in the system prompt. Oldest evicted when full.
-  external_reflection_only?: boolean; // When true, Ei's automatic Reflection critic skips this Persona (queue and handler time) so an external, agent-aware reflection can run first without consuming the linked PersonLog. Absent = false.
 }
 
 export interface PersonaCreationInput {

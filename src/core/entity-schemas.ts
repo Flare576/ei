@@ -296,7 +296,6 @@ export const personaBaseShape = {
   long_description: z.string().optional(),
   traits: z.array(personaTraitSchema).default([]),
   topics: z.array(personaTopicSchema).default([]),
-  external_reflection_only: z.boolean().default(false),
   avatar_emoji: z.string().optional(),
   avatar_image: z.string().optional(),
   preferred_theme: z.string().optional(),
