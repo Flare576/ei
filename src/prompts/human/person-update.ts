@@ -48,9 +48,6 @@ export function buildPersonUpdatePrompt(data: PersonUpdatePromptData): PromptOut
   const personaName = data.persona_name;
   const isNewItem = data.existing_item === null;
   const humanName = data.participant_context?.human_name;
-  const isEiPersona = !isNewItem && (data.existing_item?.identifiers ?? []).some(
-    i => i.type.toLowerCase() === 'ei persona'
-  );
 
   const builtInTypes = ['Full Name', 'First Name', 'Nickname', 'Email', 'GitHub', 'Discord',
     'Roblox', 'Reddit', 'Twitter', 'FF14', 'Relationship', 'Ei Persona'];
@@ -104,10 +101,17 @@ Detail you add should:
 2. **NOT** already be present in the record above`;
 
   // ── DESCRIPTION SECTION ───────────────────────────────────────────────────
-  // Three modes:
-  //   isNewItem        → brief, factual bootstrap (1-3 sentences)
-  //   isEiPersona      → living identity log (accumulate, never truncate)
-  //   existing regular → synthesize to current-state (3-4 sentences)
+  // Two modes:
+  //   isNewItem → brief, factual bootstrap (1-3 sentences)
+  //   existing  → synthesize to current-state (3-4 sentences)
+  //
+  // A third mode used to exist here for a Person record carrying an `Ei
+  // Persona` identifier (a "living identity log": add, never truncate).
+  // Bolt 004 (D2, Spec §4.3) removed it — a Persona-linked Person record
+  // is now routed, before it ever reaches this prompt, into the
+  // Observation→Signal reducer pipeline (`handleHumanPersonScan`'s branch
+  // point routes it to `queuePersonaSignalScan` instead of
+  // `queuePersonUpdate`) — this function no longer needs to special-case it.
 
   let descriptionSection: string;
 
@@ -120,26 +124,6 @@ Detail you add should:
 - If you know their birth date or birth year, include it as a date (e.g. "born 1986-10-28") — never as a current age (ages change, dates don't)
 
 **ABSOLUTELY VITAL**: Do **NOT** embellish. Record only what the user actually said or demonstrated.`;
-
-  } else if (isEiPersona) {
-    descriptionSection = `This record is the HUMAN USER's **observed experience** of ${personName} over time. Think of it as field notes from someone who has been talking with this Persona across many conversations.
-
-## Your job: add, never truncate
-
-The description is allowed to grow. **Never remove or summarize away existing content.**
-
-Add anything from the Most Recent Messages that:
-- Records a specific thing ${personName} said, did, or demonstrated in this conversation
-- Captures how the HUMAN USER experienced or related to ${personName} in this specific exchange
-- Notes behavior that stands out — expected or surprising — based on what the existing log already shows
-
-**Do NOT:**
-- Synthesize the existing description down to fewer sentences
-- Replace specific observations with vague summaries
-- Discard detail to "keep it brief" — brevity is wrong here
-- Add anything that isn't directly observed in the Most Recent Messages
-
-If the new messages add nothing meaningful, return \`{}\`. Otherwise, return the **full updated description** — existing content preserved, new observations woven in.`;
 
   } else {
     descriptionSection = `A concise summary of who this person is and how they relate to the HUMAN USER. Personas use this to recognize this person and engage meaningfully when they come up.

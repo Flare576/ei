@@ -48,23 +48,26 @@ function baseData(person: Person | null, extra?: Partial<PersonUpdatePromptData>
   };
 }
 
-describe("buildPersonUpdatePrompt — Ei Persona branch", () => {
-  it("uses accumulate framing when existing_item has an Ei Persona identifier", () => {
+// Bolt 004 (D2, Spec §4.3): the Ei-Persona "living identity log" branch
+// (add, never truncate) was removed as a prompt mode entirely. A
+// Persona-linked Person record no longer reaches this prompt at all —
+// `handleHumanPersonScan`'s branch point routes it into the
+// Observation→Signal reducer pipeline instead. These tests now prove the
+// removal: an existing_item carrying an `Ei Persona` identifier gets the
+// exact same synthesis framing as any other existing record, never the
+// deleted accumulate framing.
+describe("buildPersonUpdatePrompt — Ei-Persona special-casing removed (D2, Bolt 004)", () => {
+  it("uses the ordinary synthesis framing for an existing_item that happens to carry an Ei Persona identifier", () => {
     const { system } = buildPersonUpdatePrompt(baseData(makeEiPersona()));
 
-    expect(system).toContain("field notes");
-    expect(system).toContain("Never remove or summarize away existing content");
-    expect(system).toContain("add, never truncate");
+    expect(system).toContain("Synthesize, don't accumulate");
+    expect(system).toContain("Not exceed 3-4 sentences");
+    expect(system).not.toContain("field notes");
+    expect(system).not.toContain("add, never truncate");
+    expect(system).not.toContain("Never remove or summarize away existing content");
   });
 
-  it("does NOT include the 3-4 sentence ceiling for Ei Persona records", () => {
-    const { system } = buildPersonUpdatePrompt(baseData(makeEiPersona()));
-
-    expect(system).not.toContain("Not exceed 3-4 sentences");
-    expect(system).not.toContain("3-4 sentences");
-  });
-
-  it("uses synthesis framing for regular people (not Ei Persona)", () => {
+  it("uses synthesis framing for regular people identically", () => {
     const { system } = buildPersonUpdatePrompt(baseData(makeRegularPerson()));
 
     expect(system).toContain("Synthesize, don't accumulate");
@@ -83,7 +86,7 @@ describe("buildPersonUpdatePrompt — Ei Persona branch", () => {
     expect(system).not.toContain("field notes");
   });
 
-  it("identifier type check is case-insensitive (ei persona vs Ei Persona)", () => {
+  it("a legacy-cased Ei Persona identifier (lowercase) also gets ordinary synthesis framing", () => {
     const person = makeEiPersona({
       identifiers: [
         { type: "ei persona", value: "some-uuid", is_primary: false },
@@ -92,8 +95,8 @@ describe("buildPersonUpdatePrompt — Ei Persona branch", () => {
     });
     const { system } = buildPersonUpdatePrompt(baseData(person));
 
-    expect(system).toContain("field notes");
-    expect(system).not.toContain("3-4 sentences");
+    expect(system).toContain("Synthesize, don't accumulate");
+    expect(system).not.toContain("field notes");
   });
 });
 
