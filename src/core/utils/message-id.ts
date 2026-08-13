@@ -5,6 +5,8 @@
  *   claudecode:${machine}:${session}:${nativeId}
  *   cursor:${machine}:${session}:${nativeId}
  *   codex:${machine}:${session}:${nativeId}
+ *   pi:${machine}:${session}:${nativeId}
+ *   omp:${machine}:${session}:${nativeId}
  *   import:document:${slug}:${uuid}
  *   slack:${workspace}:${channel}:${ts}
  */
@@ -16,6 +18,7 @@ export type MessageIdIntegration =
   | "cursor"
   | "codex"
   | "pi"
+  | "omp"
   | "import"
   | "slack"
   | "unknown"
@@ -90,6 +93,16 @@ export function parseMessageId(id: string): ParsedMessageId {
     }
   }
 
+  if (parts[0] === "omp" && parts.length >= 4) {
+    return {
+      integration: "omp",
+      machine: parts[1],
+      session: parts[2],
+      nativeId: parts.slice(3).join(":"),
+      raw: id,
+    }
+  }
+
   if (parts[0] === "import" && parts[1] === "document" && parts.length >= 4) {
     return {
       integration: "import",
@@ -141,6 +154,10 @@ export function qualifyCodexMessage(machine: string, sessionId: string, nativeId
 
 export function qualifyPiMessage(machine: string, sessionId: string, nativeId: string): string {
   return `pi:${machine}:${sessionId}:${nativeId}`
+}
+
+export function qualifyOmpMessage(machine: string, sessionId: string, nativeId: string): string {
+  return `omp:${machine}:${sessionId}:${nativeId}`
 }
 
 export function qualifyDocumentMessage(slug: string, uuid: string): string {

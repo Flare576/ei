@@ -7,6 +7,7 @@ const DEFAULT_CLAUDE_CODE_POLLING_MS = 60000;
 const DEFAULT_CURSOR_POLLING_MS = 60000;
 const DEFAULT_CODEX_POLLING_MS = 60000;
 const DEFAULT_PI_POLLING_MS = 60000;
+const DEFAULT_OMP_POLLING_MS = 60000;
 
 export class IntegrationSyncManager {
   private lastOpenCodeSync = 0;
@@ -19,6 +20,8 @@ export class IntegrationSyncManager {
   private codexImportInProgress = false;
   private lastPiSync = 0;
   private piImportInProgress = false;
+  private lastOmpSync = 0;
+  private ompImportInProgress = false;
   private lastSlackSync = 0;
   private slackImportInProgress = false;
   private personaHistoryImportInProgress = false;
@@ -51,6 +54,10 @@ export class IntegrationSyncManager {
     if (this.piImportInProgress) {
       console.log("[IntegrationSyncManager] Clearing piImportInProgress flag");
       this.piImportInProgress = false;
+    }
+    if (this.ompImportInProgress) {
+      console.log("[IntegrationSyncManager] Clearing ompImportInProgress flag");
+      this.ompImportInProgress = false;
     }
     if (this.slackImportInProgress) {
       console.log("[IntegrationSyncManager] Clearing slackImportInProgress flag");
@@ -105,6 +112,14 @@ export class IntegrationSyncManager {
       this.stateManager.queue_length() === 0
     ) {
       await this.checkAndSyncPi(human, now);
+    }
+
+    if (
+      this.isTUI &&
+      human.settings?.omp?.integration &&
+      this.stateManager.queue_length() === 0
+    ) {
+      await this.checkAndSyncOmp(human, now);
     }
 
     if (
@@ -415,6 +430,59 @@ export class IntegrationSyncManager {
       })
       .finally(() => {
         this.piImportInProgress = false;
+      });
+  }
+
+  private async checkAndSyncOmp(human: HumanEntity, now: number): Promise<void> {
+    if (this.ompImportInProgress) {
+      return;
+    }
+
+    const omp = human.settings?.omp;
+    const pollingInterval = omp?.polling_interval_ms ?? DEFAULT_OMP_POLLING_MS;
+    const lastSync = omp?.last_sync ? new Date(omp.last_sync).getTime() : 0;
+    const timeSinceSync = now - lastSync;
+
+    if (timeSinceSync < pollingInterval && this.lastOmpSync > 0) {
+      return;
+    }
+
+    this.lastOmpSync = now;
+    const syncTimestamp = new Date().toISOString();
+    const currentHuman = this.stateManager.getHuman();
+    this.stateManager.setHuman({
+      ...currentHuman,
+      settings: {
+        ...currentHuman.settings,
+        omp: {
+          ...omp,
+          last_sync: syncTimestamp,
+        },
+      },
+    });
+
+    this.ompImportInProgress = true;
+    import("../integrations/omp/importer.js")
+      .then(({ importOmpSessions }) =>
+        importOmpSessions({
+          stateManager: this.stateManager,
+          interface: this.ei,
+          signal: this.importAbortController.signal,
+        })
+      )
+      .then((result) => {
+        if (result.transcriptsProcessed > 0) {
+          console.log(
+            `[Processor] OMP sync complete: ${result.transcriptsProcessed} CD2+ transcript(s), ` +
+              `${result.scansQueued} scan(s) queued`
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn(`[Processor] OMP sync failed:`, err);
+      })
+      .finally(() => {
+        this.ompImportInProgress = false;
       });
   }
 
