@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -9,6 +9,17 @@ import type { Fact, Topic, Person, Quote, HumanEntity, StorageState, PersonaEnti
 import { RESERVED_PERSONA_IDS, ContextStatus } from "../../../src/core/types.js";
 import { MergePatchValidationError } from "../../../src/core/corrections-merge.js";
 import type { MergePatch } from "../../../src/core/corrections-merge.js";
+
+// Preserve Zod's namespace export under Vitest's bare-specifier interop —
+// same workaround as tests/unit/core/state-manager.test.ts; this file
+// exercises the corrections pipeline, not the schema library.
+vi.mock("zod", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    z: (actual.z ?? actual.default ?? actual) as Record<string, unknown>,
+  };
+});
 
 const NOW = "2026-01-01T00:00:00Z";
 const EMBEDDING = [1, 2, 3];
@@ -1329,7 +1340,7 @@ describe("applyCorrectionToPersonas — upsert/remove against StorageState.perso
       timestamp: NOW,
     });
 
-    expect(personas["persona-1"]).toEqual({ entity, messages: [] });
+    expect(personas["persona-1"]).toEqual({ entity, messages: [], observations: [], signals: { persona: [], agent: [] } });
   });
 
   it("preserves the persona's existing messages array untouched while replacing entity wholesale on upsert", async () => {
@@ -1404,7 +1415,7 @@ describe("applyCorrectionToState — routing personas vs human", () => {
       timestamp: NOW,
     });
 
-    expect(state.personas["persona-1"]).toEqual({ entity, messages: [] });
+    expect(state.personas["persona-1"]).toEqual({ entity, messages: [], observations: [], signals: { persona: [], agent: [] } });
     expect(state.human.facts).toEqual([]);
   });
 
@@ -1483,7 +1494,7 @@ describe("applyCorrectionsToState — mixed-type batch in file order", () => {
       { op: "upsert", entity_type: "fact", id: fact.id, record: fact, timestamp: NOW },
     ]);
 
-    expect(state.personas["persona-1"]).toEqual({ entity, messages: [] });
+    expect(state.personas["persona-1"]).toEqual({ entity, messages: [], observations: [], signals: { persona: [], agent: [] } });
     expect(state.human.facts).toEqual([fact]);
   });
 

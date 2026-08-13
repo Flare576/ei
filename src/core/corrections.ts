@@ -29,17 +29,22 @@
  * See assertValidCorrection and applyQuoteOperation below.
  */
 
-import type { HumanEntity, Fact, Topic, Person, Quote, PersonaEntity, StorageState } from "./types.js";
+import { z } from "zod";
+import type { HumanEntity, Fact, Topic, Person, Quote, PersonaEntity, StorageState, PersonaObservation, PersonaIdentityDelta, LLMRequest } from "./types.js";
 import { isReservedPersonaId } from "./types.js";
 import { guardPersonaLinks, removePersonaLinksToId, sanitizeEiPersonaIdentifiers, type PersonaLinkRefusal } from "./utils/identifier-utils.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
 import { getEmbeddingService, computeDataItemEmbedding, computePersonaDescriptionEmbedding, needsEmbeddingUpdate } from "./embedding-service.js";
 import { HumanState } from "./state/human.js";
+import { PersonaState } from "./state/personas.js";
+import { QueueState } from "./state/queue.js";
+import { queuePersonaSignalMatch } from "./orchestrators/human-extraction.js";
+import type { StateManager } from "./state-manager.js";
 import {
   applyMergePatch,
   type MergePatch,
 } from "./corrections-merge.js";
-import { validateCandidate, topicBaseShape, topicCandidateSchema, personBaseShape, personCandidateSchema, personaBaseShape, personaCandidateSchema } from "./entity-schemas.js";
+import { validateCandidate, topicBaseShape, topicCandidateSchema, personBaseShape, personCandidateSchema, personaBaseShape, personaCandidateSchema, personaTraitSchema, personaTopicSchema, formatValidationIssues } from "./entity-schemas.js";
 export type { MergePatch } from "./corrections-merge.js";
 
 export type CorrectableType = "fact" | "topic" | "person" | "quote" | "persona";
@@ -212,7 +217,240 @@ export interface QuoteCorrectionSkip {
   reason: string;
 }
 
-export type CorrectionRecord = CorrectionUpsert | CorrectionPatch | CorrectionRemove | QuoteCorrectionRecord;
+// ---------------------------------------------------------------------------
+// Persona Signal Corrections Wire Grammar (Bolt 008, Spec §4.12)
+//
+// Two new operations, same family as "patch"/"upsert"/"remove" above but
+// each its own strict, non-overlapping shape (mirroring the quote grammar's
+// own discipline just above): `observation.add` (Add Observation) and
+// `signal.confirm`/`signal.dismiss` (Apply Signal). `entity_type` is always
+// "persona" on every one of these — a signal/observation always belongs to
+// exactly one persona, addressed via `id` exactly like every other
+// persona-entity_type correction above.
+// ---------------------------------------------------------------------------
+
+/**
+ * Add Observation (D1, R1) — asserts a `PersonaObservation` directly,
+ * attributed to the caller, then (at drain time — see
+ * applyObservationAddToState) routes it through Bolt 004's own
+ * Match→Update/Reduce pipeline exactly as an extraction-produced
+ * observation would. Scan/Extract's own job — deriving
+ * claim/dimension/direction/extraction_confidence from a conversation, and
+ * classifying which lens the claim belongs to (`classifyObservationLens`)
+ * — is skipped: there is no conversation to extract from, so the caller
+ * supplies all of it directly, including `lens`.
+ *
+ * `observation` omits `id` (minted at drain time by
+ * `PersonaState.observation_add`, same "collection owns id generation"
+ * convention as every other observation/signal write — never
+ * caller-supplied) and `subject_persona_id` (carried once, via the
+ * wrapper's own `id`, rather than duplicated inside the nested object).
+ */
+export interface CorrectionObservationAdd {
+  op: "observation.add";
+  entity_type: "persona";
+  /** The subject persona this observation is about. */
+  id: string;
+  /** Which lens's open-signal list Match checks this claim against —
+   * Scan/Extract's own classification, skipped here per D1, so the
+   * caller supplies it directly. */
+  lens: "persona" | "agent";
+  // `direct_write` is omitted too (D11): it's provenance derived from
+  // WHICH drain applies this correction, never a caller-settable field —
+  // applyObservationAddToState below stamps it unconditionally, the same
+  // "never a retrofit body field" discipline `id`/`subject_persona_id`
+  // already get here.
+  observation: Omit<PersonaObservation, "id" | "subject_persona_id" | "direct_write">;
+  timestamp: string;
+}
+
+/** Apply Signal — confirm (D2/D3/D5, R2-R5). `delta` is Persona-lens only
+ * — silently ignored for an Agent-lens signal (D2) — and, when present,
+ * is REFUSED (the whole operation, not just the delta) if that Persona's
+ * `pending_update` is already set (D3). */
+export interface CorrectionSignalConfirm {
+  op: "signal.confirm";
+  entity_type: "persona";
+  /** The persona that owns the signal (both lens buckets live under this
+   * same persona). */
+  id: string;
+  signal_id: string;
+  actor: string;
+  delta?: PersonaIdentityDelta;
+  timestamp: string;
+}
+
+/** Apply Signal — dismiss (D4/D5, R6/R7). Never takes a delta — dismiss
+ * has no proposal side effect for either lens. */
+export interface CorrectionSignalDismiss {
+  op: "signal.dismiss";
+  entity_type: "persona";
+  id: string;
+  signal_id: string;
+  actor: string;
+  timestamp: string;
+}
+
+export type PersonaSignalCorrectionRecord = CorrectionObservationAdd | CorrectionSignalConfirm | CorrectionSignalDismiss;
+
+/** The only legal wire values for a persona-signal correction's `op` —
+ * same null-prototype-object discipline as QUOTE_OPS above, for the same
+ * reason (an ordinary object literal's inherited `constructor`/`toString`
+ * would otherwise read back as an allowed op). */
+const PERSONA_SIGNAL_OPS: Record<string, true> = Object.assign(Object.create(null), {
+  "observation.add": true,
+  "signal.confirm": true,
+  "signal.dismiss": true,
+});
+
+/** True when `value`'s `op` is one of the three Persona Signal ops above —
+ * checked ahead of the generic upsert/patch/remove grammar in
+ * assertValidCorrection, mirroring isQuoteCorrectionOp's own placement. */
+export function isPersonaSignalCorrectionOp(value: unknown): value is PersonaSignalCorrectionRecord {
+  return !!value && typeof value === "object" && "op" in value && typeof (value as { op: unknown }).op === "string" && PERSONA_SIGNAL_OPS[(value as { op: string }).op] === true;
+}
+
+/** True when `value` is a parseable ISO 8601 timestamp (a bare date, or a
+ * date+time with an optional fractional-second/offset suffix) — gates
+ * Add-Observation's `observed_at` both before a correction is ever queued
+ * (D6, `observationAddBodySchema`'s own refine in persona-corrections.ts)
+ * and inside assertValidPersonaSignalCorrection's wire grammar below (D7),
+ * so a fabricated value like "fake-day-1" is refused whether it arrives
+ * through the validated CLI/MCP body parse or lands directly in
+ * corrections.json. The regex gate runs FIRST: `Date.parse` alone accepts
+ * far looser strings ("Aug 11 2026", "2026/08/11") that parse to a valid
+ * instant despite not being ISO 8601 shaped at all — exactly the kind of
+ * value this decision means to exclude, not just outright garbage. */
+const ISO_8601_PATTERN = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+export function isParseableIso8601(value: string): boolean {
+  return ISO_8601_PATTERN.test(value) && Number.isFinite(Date.parse(value));
+}
+
+/** Own-property persona resolution (D8, Beta's Bolt-008-review finding
+ * M1) — `state.personas`/`personas` is an ordinary JS object, so a bare
+ * bracket lookup or `!personas[personaId]` existence check on an
+ * attacker-supplied personaId resolves an INHERITED Object.prototype
+ * member (`constructor`, `toString`, ...) as if it were a real record,
+ * instead of failing closed. Every personaId resolution on this Bolt's
+ * write surface — the CLI's own pre-queue existence check and both
+ * drains' own existence check before mutating anything — goes through
+ * this one helper, so a prototype-inherited name is indistinguishable
+ * from a genuinely absent id. */
+export function resolveOwnPersona(
+  personas: StorageState["personas"],
+  personaId: string
+): StorageState["personas"][string] | undefined {
+  return Object.hasOwn(personas, personaId) ? personas[personaId] : undefined;
+}
+
+/**
+ * Runtime shape validation for a PersonaSignalCorrectionRecord read back
+ * from corrections.json — same rationale as assertValidQuoteCorrection:
+ * the TypeScript union is compile-time only, so a malformed-but-valid-JSON
+ * record needs its own runtime check before either drain path
+ * (applyObservationAddToState / applySignalDispositionToPersonas, or
+ * Processor.applyCorrectionRecord) mutates anything.
+ *
+ * D7 (Beta's Bolt-008-review finding I2): every field gets its own enum/
+ * type/range check here, not presence alone — a record that merely HAS a
+ * `dimension` key, or a `delta.traits` key that happens to be an array,
+ * is not enough; each value's own shape is checked too. This is the ONE
+ * grammar both drains call before any observation/signal/PersonaEntity/
+ * queue mutation: applyObservationAddToState/applySignalDispositionToPersonas
+ * call it directly (self-drain), and Processor.applyCorrectionRecord calls
+ * it at the top of its own isPersonaSignalCorrectionOp branch (live-drain),
+ * so a malformed record is rejected atomically on either path with zero
+ * state change.
+ */
+function assertValidPersonaSignalCorrection(value: object): asserts value is PersonaSignalCorrectionRecord {
+  const op = (value as { op: string }).op;
+  if (!("entity_type" in value) || value.entity_type !== "persona") {
+    throw new Error(`Malformed correction record: ${op} requires entity_type "persona", got ${JSON.stringify("entity_type" in value ? (value as { entity_type: unknown }).entity_type : undefined)}`);
+  }
+  if (!("id" in value) || typeof (value as { id: unknown }).id !== "string" || (value as { id: string }).id.length === 0) {
+    throw new Error(`Malformed correction record: ${op} requires a non-empty id`);
+  }
+  if (!("timestamp" in value) || typeof (value as { timestamp: unknown }).timestamp !== "string" || (value as { timestamp: string }).timestamp.length === 0) {
+    throw new Error(`Malformed correction record: ${op} requires a non-empty timestamp`);
+  }
+  if (op === "observation.add") {
+    const record = value as { lens?: unknown; observation?: unknown };
+    if (record.lens !== "persona" && record.lens !== "agent") {
+      throw new Error(`Malformed correction record: observation.add requires lens "persona" or "agent", got ${JSON.stringify(record.lens)}`);
+    }
+    if (!record.observation || typeof record.observation !== "object" || Array.isArray(record.observation)) {
+      throw new Error(`Malformed correction record: observation.add requires an observation object`);
+    }
+    const obs = record.observation as Record<string, unknown>;
+    if (typeof obs.subject_person_id !== "string" || obs.subject_person_id.length === 0) {
+      throw new Error(`Malformed correction record: observation.add's observation.subject_person_id must be a non-empty string, got ${JSON.stringify(obs.subject_person_id)}`);
+    }
+    if (obs.observer_kind !== "human" && obs.observer_kind !== "subject_self" && obs.observer_kind !== "other_persona") {
+      throw new Error(`Malformed correction record: observation.add's observation.observer_kind must be "human", "subject_self", or "other_persona", got ${JSON.stringify(obs.observer_kind)}`);
+    }
+    if (obs.observer_kind === "other_persona" && (typeof obs.observer_persona_id !== "string" || obs.observer_persona_id.length === 0)) {
+      throw new Error(`Malformed correction record: observation.add's observer_kind "other_persona" requires a non-empty observer_persona_id`);
+    }
+    if (obs.observer_persona_id !== undefined && typeof obs.observer_persona_id !== "string") {
+      throw new Error(`Malformed correction record: observation.add's observation.observer_persona_id must be a string when present, got ${JSON.stringify(obs.observer_persona_id)}`);
+    }
+    if (typeof obs.message_id !== "string" || obs.message_id.length === 0) {
+      throw new Error(`Malformed correction record: observation.add's observation.message_id must be a non-empty string, got ${JSON.stringify(obs.message_id)}`);
+    }
+    if (obs.quote_id !== undefined && (typeof obs.quote_id !== "string" || obs.quote_id.length === 0)) {
+      throw new Error(`Malformed correction record: observation.add's observation.quote_id must be a non-empty string when present, got ${JSON.stringify(obs.quote_id)}`);
+    }
+    if (typeof obs.observed_at !== "string" || !isParseableIso8601(obs.observed_at)) {
+      throw new Error(`Malformed correction record: observation.add's observation.observed_at must be a parseable ISO 8601 timestamp, got ${JSON.stringify(obs.observed_at)}`);
+    }
+    if (obs.dimension !== "behavior" && obs.dimension !== "voice" && obs.dimension !== "values" && obs.dimension !== "relationship" && obs.dimension !== "identity") {
+      throw new Error(`Malformed correction record: observation.add's observation.dimension must be one of behavior/voice/values/relationship/identity, got ${JSON.stringify(obs.dimension)}`);
+    }
+    if (obs.direction !== "novel" && obs.direction !== "confirms" && obs.direction !== "challenges") {
+      throw new Error(`Malformed correction record: observation.add's observation.direction must be one of novel/confirms/challenges, got ${JSON.stringify(obs.direction)}`);
+    }
+    if (typeof obs.claim !== "string" || obs.claim.length === 0) {
+      throw new Error(`Malformed correction record: observation.add's observation.claim must be a non-empty string, got ${JSON.stringify(obs.claim)}`);
+    }
+    if (typeof obs.extraction_confidence !== "number" || !Number.isFinite(obs.extraction_confidence) || obs.extraction_confidence < 0 || obs.extraction_confidence > 1) {
+      throw new Error(`Malformed correction record: observation.add's observation.extraction_confidence must be a number in 0.0-1.0, got ${JSON.stringify(obs.extraction_confidence)}`);
+    }
+  } else {
+    const record = value as { signal_id?: unknown; actor?: unknown; delta?: unknown };
+    if (typeof record.signal_id !== "string" || record.signal_id.length === 0) {
+      throw new Error(`Malformed correction record: ${op} requires a non-empty signal_id`);
+    }
+    if (typeof record.actor !== "string" || record.actor.length === 0) {
+      throw new Error(`Malformed correction record: ${op} requires a non-empty actor`);
+    }
+    if (op === "signal.confirm" && record.delta !== undefined) {
+      const delta = record.delta;
+      if (!delta || typeof delta !== "object" || Array.isArray(delta)) {
+        throw new Error(`Malformed correction record: signal.confirm's delta must be an object`);
+      }
+      const d = delta as Record<string, unknown>;
+      if (typeof d.short_description !== "string") {
+        throw new Error(`Malformed correction record: signal.confirm's delta.short_description must be a string, got ${JSON.stringify(d.short_description)}`);
+      }
+      if (typeof d.long_description !== "string") {
+        throw new Error(`Malformed correction record: signal.confirm's delta.long_description must be a string, got ${JSON.stringify(d.long_description)}`);
+      }
+      const traitsResult = z.array(personaTraitSchema).safeParse(d.traits);
+      if (!traitsResult.success) {
+        throw new Error(`Malformed correction record: signal.confirm's delta.traits is invalid: ${formatValidationIssues(traitsResult.error.issues)}`);
+      }
+      const topicsResult = z.array(personaTopicSchema).safeParse(d.topics);
+      if (!topicsResult.success) {
+        throw new Error(`Malformed correction record: signal.confirm's delta.topics is invalid: ${formatValidationIssues(topicsResult.error.issues)}`);
+      }
+    }
+    if (op === "signal.dismiss" && "delta" in value) {
+      throw new Error(`Malformed correction record: signal.dismiss does not accept a delta`);
+    }
+  }
+}
+
+export type CorrectionRecord = CorrectionUpsert | CorrectionPatch | CorrectionRemove | QuoteCorrectionRecord | PersonaSignalCorrectionRecord;
 
 /** The only legal wire values for a quote correction's `op`. Any other value — including the retired generic "upsert"/"remove" — is a pre-cutover or malformed record and is rejected. Built with `Object.create(null)`, not an object literal: an object literal inherits `Object.prototype`, so a truthy lookup like `QUOTE_OPS[value.op]` would treat inherited names such as `constructor`/`toString` as if they were allowed values (I1) — a null-prototype object has no such inherited names to leak through. */
 const QUOTE_OPS: Record<string, true> = Object.assign(Object.create(null), {
@@ -434,6 +672,11 @@ export function assertValidCorrection(value: unknown, human?: HumanEntity): asse
 
   if (isQuoteCorrectionOp(value)) {
     assertValidQuoteCorrection(value, human);
+    return;
+  }
+
+  if (isPersonaSignalCorrectionOp(value)) {
+    assertValidPersonaSignalCorrection(value);
     return;
   }
 
@@ -985,7 +1228,20 @@ export async function resolvePersonPatchCandidate(current: Person, patch: MergeP
  * hazard resolveTopicPatchCandidate's own doc comment describes).
  */
 export async function resolvePersonaPatchCandidate(current: PersonaEntity, patch: MergePatch<PersonaEntity>): Promise<PersonaEntity> {
-  const merged = applyMergePatch(current, patch);
+  // Bolt 002 D3 (Beta's review, I1): `current` may still carry a legacy
+  // `external_reflection_only` value when it reached this function through
+  // a raw-state read that bypasses PersonaState.load()'s own strip (D2) --
+  // src/cli/persona-corrections.ts's preview read and src/cli/
+  // corrections-writer.ts's self-drain both parse state.json directly, and
+  // the live Processor's drain routes through this exact function too.
+  // applyMergePatch below preserves every key `patch` doesn't mention, so a
+  // legacy value on `current` would otherwise survive into `candidate`
+  // unchanged and get re-persisted on the very next patch -- stripping it
+  // here, at the one choke point every persona patch (preview and
+  // drain-time persist alike) already passes through, closes that leak
+  // independently of which raw-state read fed `current` in.
+  const { external_reflection_only: _legacyExternalReflectionOnly, ...currentClean } = current as PersonaEntity & { external_reflection_only?: unknown };
+  const merged = applyMergePatch(currentClean as PersonaEntity, patch);
   const candidate: PersonaEntity = { ...merged, id: current.id, last_updated: new Date().toISOString() };
   validateCandidate(candidate, personaBaseShape, personaCandidateSchema, "persona");
   candidate.description_embedding = candidate.long_description ? await computePersonaDescriptionEmbedding(candidate) : undefined;
@@ -1033,6 +1289,16 @@ export async function resolvePersonaPatchCandidate(current: PersonaEntity, patch
  * throw-on-invalid behavior unchanged.
  */
 export async function applyCorrectionToHuman(human: HumanEntity, correction: CorrectionRecord, allPersonas: readonly PersonaEntity[] = []): Promise<QuoteCorrectionSkip | void> {
+  // A persona-signal correction (entity_type "persona") is ALWAYS
+  // intercepted by applyCorrectionToState before it would ever reach a
+  // HumanEntity-scoped function -- HumanEntity has no observations/signals
+  // of its own (those live on PersonaData, see applyObservationAddToState/
+  // applySignalDispositionToPersonas). Reaching this branch means a caller
+  // routed one directly to applyCorrectionToHuman, bypassing that
+  // dispatch -- a bug, not a malformed record to skip past.
+  if (isPersonaSignalCorrectionOp(correction)) {
+    throw new Error(`Persona signal correction (${correction.op}) must be routed through applyCorrectionToState, not applyCorrectionToHuman`);
+  }
   if (isQuoteCorrectionOp(correction)) {
     const result = applyQuoteOperation(human.quotes, correction, human);
     if (result.skipped) return result.skipped;
@@ -1106,7 +1372,10 @@ export async function applyCorrectionsToHuman(human: HumanEntity, corrections: C
 /**
  * Apply one correction to a StorageState's personas map in place. Personas
  * live outside HumanEntity — src/core/types/integrations.ts's StorageState.personas
- * is a top-level `Record<id, {entity, messages}>` — so they need their own
+ * is a top-level `Record<id, {entity, messages, observations, signals}>` —
+ * `entity` is the only field a patch/upsert may replace; `observations` and
+ * `signals` (D2, Bolt 003) are always carried over from the prior record
+ * (or defaulted for a brand-new persona) so they need their own
  * apply function rather than routing through getCorrectableArray/
  * applyCorrectionToHuman, which only ever resolve arrays on HumanEntity.
  *
@@ -1148,14 +1417,110 @@ export async function applyCorrectionToPersonas(personas: StorageState["personas
       throw new Error(`Cannot update persona ${correction.id}: not found`);
     }
     const candidate = await resolvePersonaPatchCandidate(existing.entity, correction.patch as MergePatch<PersonaEntity>);
-    personas[correction.id] = { entity: candidate, messages: existing.messages };
+    personas[correction.id] = { ...existing, entity: candidate };
     return true;
   }
+  const existing = personas[correction.id];
   personas[correction.id] = {
+    ...existing,
     entity: correction.record as PersonaEntity,
-    messages: personas[correction.id]?.messages ?? [],
+    messages: existing?.messages ?? [],
+    observations: existing?.observations ?? [],
+    signals: existing?.signals ?? { persona: [], agent: [] },
   };
   return true;
+}
+
+/**
+ * Add Observation's own drain-time apply (D1, R1, Spec §4.12) — the
+ * self-drain counterpart to Processor.applyCorrectionRecord's live-drain
+ * branch (processor.ts), sharing the exact same downstream calls
+ * (`PersonaState.observation_add`, `queuePersonaSignalMatch`) rather than
+ * a hand-rolled equivalent. Neither drain path has a live `Processor` to
+ * call directly (Spec §4.12: "neither operation ever calls an in-memory
+ * Processor method directly") — this one has no `StateManager` at all, so
+ * it hydrates scratch `PersonaState`/`QueueState` instances from `state`,
+ * mutates through their real methods, and writes the result back onto
+ * `state.personas`/`state.queue` in place.
+ *
+ * Throws (no mutation) if `correction.id` doesn't resolve to an existing
+ * persona — same "nothing to write onto" contract as the `patch` branch
+ * above. The Match-step request this enqueues is built by the REAL
+ * `queuePersonaSignalMatch` (Bolt 004), via a narrow structural adapter
+ * (`Pick<StateManager, "signals_get" | "queue_enqueue">`) over the scratch
+ * instances — the actual "attach as evidence" step (AT1) only ever
+ * happens later, when that queued request's LLMResponse resolves and
+ * `handlePersonaSignalMatch` runs, exactly as it would for an
+ * extraction-produced observation; this function's own job stops at
+ * getting that request queued.
+ */
+export async function applyObservationAddToState(state: StorageState, correction: CorrectionObservationAdd): Promise<void> {
+  assertValidCorrection(correction);
+  const existing = resolveOwnPersona(state.personas, correction.id);
+  if (!existing) {
+    throw new Error(`Cannot add observation for persona ${correction.id}: not found`);
+  }
+
+  const personaState = new PersonaState();
+  personaState.load({ [correction.id]: existing });
+
+  // `direct_write: true` (D11) is stamped HERE, unconditionally — this
+  // function is the sole drain for `observation.add`, so any observation
+  // it mints came through the write surface, never extraction. Placed
+  // after the spread so it can't be overridden by a forged same-named key
+  // on a hand-edited corrections.json record.
+  const observation = personaState.observation_add(correction.id, { ...correction.observation, subject_persona_id: correction.id, direct_write: true });
+  if (!observation) {
+    throw new Error(`Cannot add observation for persona ${correction.id}: not found`);
+  }
+
+  const queueState = new QueueState();
+  queueState.load(state.queue);
+  const settings = state.human.settings;
+
+  const adapter: Pick<StateManager, "signals_get" | "queue_enqueue"> = {
+    signals_get: (personaId: string) => personaState.signals_get(personaId),
+    queue_enqueue: (request: Omit<LLMRequest, "id" | "created_at" | "attempts" | "state">) =>
+      queueState.enqueue({
+        ...request,
+        model: request.model ?? settings?.conversation_model ?? settings?.default_model,
+      }),
+  };
+  queuePersonaSignalMatch(observation, correction.lens, adapter, undefined);
+
+  state.personas[correction.id] = personaState.export()[correction.id];
+  state.queue = queueState.export();
+}
+
+/**
+ * Apply Signal's own drain-time apply (D2-D5, R2-R7, Spec §4.12) — the
+ * self-drain counterpart to Processor.applyCorrectionRecord's live-drain
+ * branch, sharing `PersonaState.signal_confirm`/`signal_dismiss`. Both
+ * throw on refusal (not found, terminal status, or — confirm only — a
+ * Persona-lens delta colliding with an existing `pending_update`); this
+ * function makes no attempt to catch that and turn it into a softer
+ * no-op, since a refused Apply Signal is a caller-visible rejection, not
+ * an internal inconsistency to paper over — same "throw propagates
+ * through writeCorrection() untouched" contract as `patch`'s own
+ * not-found case above.
+ */
+export async function applySignalDispositionToPersonas(personas: StorageState["personas"], correction: CorrectionSignalConfirm | CorrectionSignalDismiss): Promise<void> {
+  assertValidCorrection(correction);
+  const existing = resolveOwnPersona(personas, correction.id);
+  if (!existing) {
+    throw new Error(`Cannot ${correction.op} signal ${correction.signal_id}: persona ${correction.id} not found`);
+  }
+
+  const personaState = new PersonaState();
+  personaState.load({ [correction.id]: existing });
+  const timestamp = new Date().toISOString();
+  if (correction.op === "signal.confirm") {
+    personaState.signal_confirm(correction.id, correction.signal_id, correction.actor, timestamp, correction.delta);
+  } else {
+    personaState.signal_dismiss(correction.id, correction.signal_id, correction.actor, timestamp);
+  }
+
+  personas[correction.id] = personaState.export()[correction.id];
 }
 
 
@@ -1231,6 +1596,14 @@ export async function applyCorrectionToState(
   correction: CorrectionRecord,
   personLinkRefusals?: PersonaLinkRefusal[]
 ): Promise<QuoteCorrectionSkip | void> {
+  if (isPersonaSignalCorrectionOp(correction)) {
+    if (correction.op === "observation.add") {
+      await applyObservationAddToState(state, correction);
+    } else {
+      await applySignalDispositionToPersonas(state.personas, correction);
+    }
+    return;
+  }
   if (!isQuoteCorrectionOp(correction) && correction.entity_type === "persona") {
     const removed = await applyCorrectionToPersonas(state.personas, correction);
     if (correction.op === "remove" && removed) {
