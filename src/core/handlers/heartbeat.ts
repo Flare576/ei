@@ -6,9 +6,14 @@ import {
 } from "../types.js";
 import type { StateManager } from "../state-manager.js";
 import type { HeartbeatCheckResult, EiHeartbeatResult } from "../../prompts/heartbeat/types.js";
-import type { ReflectionCriticResult } from "../../prompts/reflection/types.js";
 import { crossFind } from "../utils/index.js";
 import { qualifyEiMessage } from "../utils/message-id.js";
+
+// D4 (Bolt-006 review I1): strips C0/C1 control characters — including the
+// ESC lead-in that begins any ANSI/OSC escape sequence — from a string
+// before it reaches a terminal log sink. Never applied to content stored to
+// state; only to log previews.
+const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F-\u009F]/g;
 
 export function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void {
   const personaId = response.request.data.personaId as string;
@@ -53,18 +58,44 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
   if (!result) {
     throw new Error("[EiHeartbeat] No parsed result");
   }
-  console.log(`[EiHeartbeat] Parsed result - should_respond: ${result.should_respond}, id: ${result.id ?? '(none)'}, my_response: ${result.my_response ? '(present)' : '(none)'}`);
+  console.log(`[EiHeartbeat] Parsed result - should_respond: ${result.should_respond}, id: ${String(result.id ?? '(none)').replace(CONTROL_CHARS_RE, "")}, my_response: ${result.my_response ? '(present)' : '(none)'}`);
+  // D6 (Bolt-006 review I5): validate my_response's shape before any state
+  // mutation below. my_response is optional (omitted is fine — no message to
+  // send), but if present it must be a non-empty string; anything else is a
+  // malformed response that must fail the request through the normal
+  // retry/DLQ path with last_heartbeat and the queued response untouched.
+  if (result.my_response !== undefined && (typeof result.my_response !== "string" || result.my_response.length === 0)) {
+    throw new Error(`[EiHeartbeat] Malformed my_response: expected a non-empty string, got ${typeof result.my_response}`);
+  }
+  // bolt-persona-emergence-signals-011, D5 (amended after Beta's wave-1
+  // fix-confirmation, 2026-08-11 -- the first attempt placed this guard
+  // after state.persona_update/state.queue_clearPersonaResponses below, so
+  // a non-offered id still stamped last_heartbeat and cleared the queued
+  // response even though it correctly avoided fact/person/topic mutation):
+  // crossFind below resolves any known fact/person/topic/persona/signal id
+  // globally -- it has no notion of which ids THIS request actually
+  // offered. The queued request's own offeredIds snapshot (heartbeat-
+  // manager.ts's queueEiHeartbeat, D5) is the sole authorization boundary:
+  // a present id the model names that was never offered in this request is
+  // rejected here -- the very first thing this function does once a
+  // present id is confirmed, before ANY state write of any kind (no
+  // last_heartbeat stamp, no queue clear, no crossFind call, no
+  // fact/person/topic mutation) -- never merely logged after the fact. The
+  // documented id-less Temporal Anchor path (result.id === undefined) never
+  // reaches this guard at all and is completely unaffected by it.
+  if (result.id !== undefined) {
+    const offeredIds = response.request.data.offeredIds as string[] | undefined;
+    if (!offeredIds?.includes(result.id)) {
+      console.warn(`[handleEiHeartbeat] Rejected id "${String(result.id).replace(CONTROL_CHARS_RE, "")}" -- not present in this request's offered-id snapshot`);
+      return;
+    }
+  }
+
   const now = new Date().toISOString();
   state.persona_update("ei", { last_heartbeat: now });
   state.queue_clearPersonaResponses("ei", LLMNextStep.HandleEiHeartbeat);
-  if (!result.should_respond || !result.id) {
-    console.log("[EiHeartbeat] Chose not to reach out (should_respond=false or no id)");
-    return;
-  }
-  const isTUI = response.request.data.isTUI as boolean;
-  const found = crossFind(result.id, state.getHuman(), state.persona_getAll());
-  if (!found) {
-    console.warn(`[handleEiHeartbeat] Could not find item with id "${result.id}"`);
+  if (!result.should_respond) {
+    console.log("[EiHeartbeat] Chose not to reach out (should_respond=false)");
     return;
   }
 
@@ -78,6 +109,26 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
     f: true, t: true, p: true,
   });
 
+  if (result.id === undefined) {
+    // ei.ts's own Temporal Anchor contract (no id needed) — should_respond=true
+    // with no id is a deliberate response, never equivalent to
+    // should_respond=false, and must not be silently dropped (Spec §4.10, D2).
+    if (result.my_response) {
+      console.log(`[EiHeartbeat] Sending message (Temporal Anchor): "${result.my_response.replace(CONTROL_CHARS_RE, "").substring(0, 100)}${result.my_response.length > 100 ? '...' : ''}"`);
+      sendMessage(result.my_response);
+    } else {
+      console.log("[EiHeartbeat] should_respond=true but no id and no my_response provided");
+    }
+    return;
+  }
+
+  const isTUI = response.request.data.isTUI as boolean;
+  const found = crossFind(result.id, state.getHuman(), state.persona_getAll(), (personaId) => state.signals_get(personaId));
+  if (!found) {
+    console.warn(`[handleEiHeartbeat] Could not find item with id "${String(result.id).replace(CONTROL_CHARS_RE, "")}"`);
+    return;
+  }
+
   if (found.type === "fact") {
     const factsNav = isTUI ? "using /me facts" : "using \u2630 \u2192 My Data";
     sendMessage(`Another persona updated a fact called "${found.name}" to "${found.description}". If that's right, you can lock it from further changes by ${factsNav}.`);
@@ -87,7 +138,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
   }
 
   if (result.my_response) {
-    console.log(`[EiHeartbeat] Sending message: "${result.my_response.substring(0, 100)}${result.my_response.length > 100 ? '...' : ''}"`);
+    console.log(`[EiHeartbeat] Sending message: "${result.my_response.replace(CONTROL_CHARS_RE, "").substring(0, 100)}${result.my_response.length > 100 ? '...' : ''}"`);
     sendMessage(result.my_response);
   }
 
@@ -103,8 +154,11 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
     case "persona":
       console.log(`[handleEiHeartbeat] Reached out about persona "${found.display_name}"`);
       break;
+    case "signal":
+      console.log(`[handleEiHeartbeat] Reached out about signal "${found.id}" (persona ${found.personaId}, ${found.lens} lens)`);
+      break;
     default:
-      console.warn(`[handleEiHeartbeat] Unexpected item type "${found.type}" for id "${result.id}"`);
+      console.warn(`[handleEiHeartbeat] Unexpected item type "${found.type}" for id "${String(result.id).replace(CONTROL_CHARS_RE, "")}"`);
   }
 
   const newPersonIds = (response.request.data.newPersonIds ?? []) as string[];
@@ -117,74 +171,4 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
       }
     }
   }
-}
-
-export function handleReflectionCritic(response: LLMResponse, state: StateManager): void {
-  const personaId = response.request.data.personaId as string;
-  const personaDisplayName = response.request.data.personaDisplayName as string;
-
-  const persona = state.persona_getById(personaId);
-  if (persona?.external_reflection_only) {
-    console.log(`[ReflectionCritic ${personaDisplayName}] external_reflection_only is set — skipping automatic critic (no clear, no pending_update)`);
-    return;
-  }
-
-  const result = response.parsed as ReflectionCriticResult | undefined;
-  if (!result?.critique) {
-    throw new Error(`[ReflectionCritic ${personaDisplayName}] Invalid or missing parsed result`);
-  }
-
-  const personRecord = state.human_person_getByIdentifier("Ei Persona", personaId);
-  if (personRecord) {
-    // TODO: Remove before v1 — debug logging to inspect person log before it's cleared
-    console.log(`[ReflectionCritic ${personaDisplayName}] person_log_snapshot (${personRecord.description?.length ?? 0} chars): ${personRecord.description ?? ""}`);
-    state.human_person_upsert({
-      ...personRecord,
-      description: "",
-    });
-    console.log(`[ReflectionCritic ${personaDisplayName}] Person record description cleared — ready for fresh evidence after reflection`);
-  }
-
-  // Escape hatch: critic found no meaningful drift — log critique and skip pending_update
-  if (!result.updated_identity) {
-    console.log(`[ReflectionCritic ${personaDisplayName}] No drift detected — skipping pending_update. Critique: ${result.critique}`);
-    return;
-  }
-
-  if (!persona) {
-    throw new Error(`[ReflectionCritic ${personaDisplayName}] Persona not found after critic`);
-  }
-
-  const mergedTopics = result.updated_identity.topics.map(updatedTopic => {
-    const existing = persona.topics.find(t => t.name === updatedTopic.name);
-    return {
-      ...updatedTopic,
-      sentiment: updatedTopic.sentiment ?? existing?.sentiment ?? 0,
-      exposure_current: updatedTopic.exposure_current ?? existing?.exposure_current ?? 0,
-      exposure_desired: updatedTopic.exposure_desired ?? existing?.exposure_desired ?? 0.5,
-    };
-  });
-
-  const sanitizedTraits = result.updated_identity.traits.map(t => ({
-    ...t,
-    name: t.name?.trim() ?? "",
-    description: t.description?.trim() ?? "",
-  }));
-
-  const sanitizedTopics = mergedTopics.map(t => ({
-    ...t,
-    name: t.name?.trim() ?? "",
-  }));
-
-  state.persona_update(personaId, {
-    pending_update: {
-      short_description: result.updated_identity.short_description?.trim() ?? "",
-      long_description: result.updated_identity.long_description?.trim() ?? "",
-      traits: sanitizedTraits,
-      topics: sanitizedTopics,
-      critique: result.critique,
-      created_at: new Date().toISOString(),
-    },
-  });
-  console.log(`[ReflectionCritic ${personaDisplayName}] pending_update written to persona`);
 }

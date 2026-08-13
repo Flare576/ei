@@ -1,4 +1,4 @@
-import type { HumanEntity, PersonaEntity, Fact, PersonaTrait, Topic, Person, Quote, PersonaTopic } from "../types.ts";
+import type { HumanEntity, PersonaEntity, Fact, PersonaTrait, Topic, Person, Quote, PersonaTopic, EmergentSignal, PersonaSignalCollections } from "../types.ts";
 export type CrossFindResult =
   | { type: "fact"        } & Fact
   | { type: "topic"       } & Topic
@@ -6,12 +6,14 @@ export type CrossFindResult =
   | { type: "quote"       } & Quote
   | { type: "persona"     } & PersonaEntity
   | { type: "personaTopic"; personaId: string } & PersonaTopic
-  | { type: "personaTrait"; personaId: string } & PersonaTrait;
+  | { type: "personaTrait"; personaId: string } & PersonaTrait
+  | { type: "signal"; personaId: string; lens: "persona" | "agent" } & EmergentSignal;
 
 export function crossFind(
   id: string,
   human: HumanEntity,
   personas?: PersonaEntity[],
+  getSignals?: (personaId: string) => PersonaSignalCollections | undefined,
 ): CrossFindResult | null {
 
   const fact  = human.facts.find(f => f.id === id);
@@ -35,6 +37,15 @@ export function crossFind(
 
     const pTrait = persona.traits.find(t => t.id === id);
     if (pTrait) return { type: "personaTrait", personaId: persona.id, ...pTrait };
+
+    const signals = getSignals?.(persona.id);
+    if (signals) {
+      const personaSignal = signals.persona.find(s => s.id === id);
+      if (personaSignal) return { type: "signal", personaId: persona.id, lens: "persona", ...personaSignal };
+
+      const agentSignal = signals.agent.find(s => s.id === id);
+      if (agentSignal) return { type: "signal", personaId: persona.id, lens: "agent", ...agentSignal };
+    }
   }
 
   return null;
