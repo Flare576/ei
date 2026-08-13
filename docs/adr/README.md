@@ -10,11 +10,11 @@ This exists because the alternative was observed directly: *"I really wish we ha
 |---|---|---|---|---|
 | [001](ADR-001-persona-agent-separation.md) | Persona Identity and Agent Operating Contract Are Separate Records | Accepted | 2026-08-01 | Current |
 | [002](ADR-002-ei-write-boundary.md) | Ei Writes Only What It Owns | Accepted | 2026-08-01 | Current |
-| [003](ADR-003-personlog-clear-timing.md) | PersonLog Clears at Critic Completion, Not at User Decision | Accepted | 2026-08-01 | Current |
+| [003](ADR-003-personlog-clear-timing.md) | PersonLog Clears at Critic Completion, Not at User Decision | Superseded by ADR-038 | 2026-08-01 | Current |
 | [004](ADR-004-exponential-exposure-decay.md) | Exposure Decays Exponentially at K=0.1, Replacing a Logistic Curve | Accepted | 2026-08-01 | Backfill |
 | [005](ADR-005-generic-user-references.md) | Generic User References (GURs) Define Ei's Design Priority | Accepted | 2026-08-01 | Current |
 | [006](ADR-006-ei-persona-link-multiplicity.md) | A Person Record and a Persona Link One-to-One | Accepted | 2026-08-01 | Current |
-| [007](ADR-007-external-reflection-only.md) | A Persona May Opt Out of the Automatic Reflection Critic | Accepted | 2026-08-01 | Current |
+| [007](ADR-007-external-reflection-only.md) | A Persona May Opt Out of the Automatic Reflection Critic | Superseded by ADR-038 | 2026-08-01 | Current |
 | [008](ADR-008-accepted-write-races.md) | Two Last-Write-Wins Races Are Accepted, Not Fixed | Accepted | 2026-08-01 | Current |
 | [009](ADR-009-tui-yaml-loses-to-concurrent-writes.md) | A Stale TUI YAML Edit Loses to a Concurrent Write | Accepted | 2026-08-01 | Current |
 | [010](ADR-010-invalid-persona-links-are-reported-not-repaired.md) | Invalid Persona Links Are Reported, Never Repaired Automatically | Accepted | 2026-08-01 | Current |
@@ -44,6 +44,8 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [034](ADR-034-session-boundary-hook-races-accepted.md) | Session-Boundary Hook Races Are Accepted Across OMP, Claude Code, and Cursor | Accepted | 2026-08-07 | Current |
 | [035](ADR-035-sync-peers-are-the-user-not-an-adversary.md) | A Sync Peer With Valid Credentials Is the User, Not an Adversary | Accepted | 2026-08-07 | Current |
 | [036](ADR-036-instruction-repositioning-is-not-a-validated-fix.md) | Instruction Repositioning Is Not a Validated Fix for Extraction Prompt Data-Handling Defects — Real Failure Cases Come First | Accepted | 2026-08-10 | Current |
+| [037](ADR-037-extraction-prompts-stay-single-purpose.md) | Extraction and Reducer Prompts Stay Single-Purpose | Accepted | 2026-08-11 | Current |
+| [038](ADR-038-persona-signals-supersede-the-reflection-critic.md) | Attributed Persona Signals Replace the Reflection Critic and Its Append-Only Log | Accepted | 2026-08-11 | Current |
 
 ## Conventions
 
