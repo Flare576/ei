@@ -3,7 +3,7 @@
  * Based on CONTRACTS.md specifications
  */
 
-import type { PersonaTrait, Topic, Person, Message, PersonaTopic } from "../../core/types.js";
+import type { PersonaTrait, Topic, Person, Message, PersonaTopic, EmergentSignal, SignalDimension } from "../../core/types.js";
 import type { PersonaEntity } from "../../core/types/entities.js";
 import type { TemporalAnchor } from "../response/types.js";
 
@@ -32,6 +32,11 @@ export interface HeartbeatCheckPromptData {
   recent_history: Message[];        // Last N messages for context (Always-within-window only)
   temporal_anchors: TemporalAnchor[]; // Always messages that fell outside the context window
   inactive_days: number;            // Days since last activity
+  /** Heartbeat-eligible signals already past cooldown, assembled and
+   * stamped by `assembleHeartbeatSignalCandidates` (Bolt 005, D2/D4) --
+   * omitted/empty means the built prompt omits the Signals section
+   * entirely (R1). */
+  signals?: EmergentSignal[];
 }
 
 /**
@@ -101,6 +106,18 @@ export type EiHeartbeatItem =
       id: string;
       type: "Self Reflection Alert";
       critique: string;
+    }
+  | {
+      // bolt-persona-emergence-signals-011, D2: the missing producer for
+      // Bolt 006's crossFind/handleEiHeartbeat signal-choice consumer.
+      // `id` names an EmergentSignal minted by `signal_add` (never
+      // caller-supplied); only safe, already-abstracted context travels
+      // here -- never raw evidence/observation content (D2, R4/AT4).
+      id: string;
+      type: "Signal";
+      persona_name: string;
+      dimension: SignalDimension;
+      claim: string;
     };
 
 /**
