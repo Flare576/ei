@@ -2,8 +2,8 @@
 name: ei-reflect
 description: >
   Reflection for a coding-harness agent on its own accumulated Ei PersonLog
-  (Beta, Sisyphus, etc). Use when the log fills up faster than the automatic
-  Critic can usefully consume it — coding agents fill it daily, and much of
+  (Beta, Sisyphus, etc). Use when the log fills up daily — there is no
+  automatic Critic left to consume it (ADR-038 deleted it), and much of
   what lands there is not identity at all but operating contract: how the
   agent works in this harness. Runs two lenses over one log — a Persona lens
   that revises identity in Ei, and an Agent lens that revises the harness's
@@ -19,10 +19,11 @@ description: >
 # Ei Reflection — root dispatcher
 
 Your Person record in Ei — the **PersonLog** — is a running log of observed
-behaviors, patterns, and interactions about you. In the normal ceremony
-cycle, a Critic LLM scans it once it exceeds 3,000 characters and proposes
-Persona identity updates, then clears it. Coding agents fill that in a single
-day.
+behaviors, patterns, and interactions about you. Ei used to run an automatic
+Critic LLM that scanned it once it exceeded 3,000 characters, proposed
+Persona identity updates, and cleared it. That Critic no longer exists
+(ADR-038) — nothing automatic reads or clears this log anymore. Coding agents
+fill it in a single day regardless.
 
 Two different kinds of evidence pile into that one log:
 
@@ -31,11 +32,13 @@ Two different kinds of evidence pile into that one log:
 | **Identity** | *Who is this agent, and how does it relate?* | Ei's own Persona record |
 | **Operating contract** | *How does this agent work, in this harness?* | The harness's own instruction files |
 
-The automatic Critic can only revise identity. Every observation in the
-second column that reaches it is read, judged irrelevant, and **discarded
-along with the rest of the log** when the log is cleared. For a coding agent
-that is usually most of the log — a record three times over the threshold,
-largely runtime discipline, with nowhere for that half to go.
+The deleted Critic could only ever have revised identity — every observation
+in the second column would have been read, judged irrelevant, and
+**discarded along with the rest of the log** the moment it cleared. For a
+coding agent that is usually most of the log — a record three times over the
+old threshold, largely runtime discipline, with nowhere for that half to go.
+With no automatic process at all now, both piles simply accumulate until a
+run of this skill resolves them.
 
 That is why reflection is two lenses over one log.
 
@@ -66,12 +69,10 @@ Each lens reports exactly one of its states back here when it returns. You
 record both, then evaluate the gate below. Nothing else in this skill clears
 a log.
 
-**`RETAIN` means "this skill does not clear the log."** On a *protected* run
-that is the whole story. On an *unprotected* run — one where the user declined
-the opt-out in Step 1b — Ei's automatic critic can still consume the same log
-while you work, so `RETAIN` stops meaning "it will still be there." Step 1b
-defines both runs, and every retention sentence in this file is conditioned on
-which one you are in.
+**`RETAIN` means "this skill does not clear the log."** With no automatic
+Critic left to consume it out from under you (ADR-038; see Step 1b), that is
+the whole story — nothing else in the system can clear it either, so
+`RETAIN` always means "it will still be there."
 
 ### The joint clear gate
 
@@ -118,7 +119,7 @@ is still deciding where that evidence should be written destroys the exact
 thing this entire feature exists to protect, and there is no undo — Ei's
 writes are append-only corrections, and the prior description is gone.
 
-When you land here, say so and stop. On a **protected** run:
+When you land here, say so and stop:
 
 > "I've applied the identity changes we agreed on. For the operating-contract
 > side I found two places it could go — your project `AGENTS.md`, or the
@@ -126,18 +127,9 @@ When you land here, say so and stop. On a **protected** run:
 > leaving your log intact until you do**, so nothing gets lost. Just tell me
 > which one and I'll pick this straight back up."
 
-On an **unprotected** run, say the same thing without the guarantee you don't
-have — and re-offer the protection, because this is the exact moment it starts
-costing something:
-
-> "…I'd rather you pick than guess. **I'm not going to clear your log**, but
-> I should be straight with you: Ei's automatic pass still can, and it doesn't
-> ask. Want me to switch that off while you decide? One command, and then this
-> conversation is the only thing that touches it."
-
 The next run re-reads the same log and resumes. That is the design working,
-not a retry — on a protected run it is also guaranteed to work, and on an
-unprotected one it is a good bet rather than a promise.
+not a retry — and it is guaranteed to work, since nothing but this skill can
+clear the log.
 
 ---
 
@@ -166,12 +158,11 @@ and you never need to stop Ei to run a reflection.
 
 ---
 
-## Step 1 — Resolve yourself, settle the critic, enumerate the record
+## Step 1 — Resolve yourself, note what the critic left behind, enumerate the record
 
-Three things have to be true before you read a single line of the log: you
-know **which Persona you are** by its immutable id, you have settled what the
-automatic critic is allowed to do to your log while you work, and you know
-**which Person record** is the log.
+Two things have to be true before you read a single line of the log: you
+know **which Persona you are** by its immutable id, and you know **which
+Person record** is the log.
 
 ### 1a. Establish your Persona id
 
@@ -243,16 +234,13 @@ Read that record back and confirm with the user that the `display_name` and
 description are the persona you both mean, before anything writes. If the
 lookup returns nothing, stop.
 
-### 1b. Note what the critic already proposed, then settle the critic
+### 1b. Note what the critic already proposed
 
 ```bash
 PERSONA_SNAPSHOT=$(mktemp)
 ei --id "$PERSONA_ID" > "$PERSONA_SNAPSHOT"
-jq '{ external_reflection_only: (.external_reflection_only // false),
-      has_pending_update: has("pending_update") }' "$PERSONA_SNAPSHOT"
+jq '{ has_pending_update: has("pending_update") }' "$PERSONA_SNAPSHOT"
 ```
-
-#### First: note `pending_update`, if there is one
 
 If `has_pending_update` came back `true`, **read that object out of
 `$PERSONA_SNAPSHOT` now** — `critique`, `short_description`,
@@ -263,101 +251,35 @@ left behind that nobody ever applied, and it is about to be resolved either
 way.
 
 > Reading it now, rather than waiting until the Persona lens re-reads the
-> record fresh, is still worth doing even though the opt-out write below no
-> longer threatens it (`ei update` is a merge patch now — a write that
-> doesn't mention `pending_update` leaves it alone, see
-> `references/cli.md` → "`pending_update` no longer clears itself"). The
-> residual reason: on an **unprotected** run, Ei's own automatic critic can
-> still overwrite this proposal with a fresh one while you're mid-conversation
-> with the user, so capturing its current content early is cheap insurance,
-> not a workaround for this skill's own write.
+> record fresh, is still worth doing even though nothing else can touch it in
+> the meantime (`ei update` is a merge patch now — a write that doesn't
+> mention `pending_update` leaves it alone, see `references/cli.md` →
+> "`pending_update` no longer clears itself"). It's simply one fewer read
+> later.
 
 Then `rm -f "$PERSONA_SNAPSHOT"` — it holds the full persona identity.
 
-#### Then: the automatic critic
-
-This skill's retention promise is only real if Ei's automatic Reflection
-critic is held off, because it consumes and clears the same log the moment the
-log exceeds the threshold — including while you're waiting on the user to pick
-a write target.
-
-The Persona field `external_reflection_only` is what holds it off; the
-ceremony skips any Persona that has it set. It **defaults to off, and is
-absent from the record entirely when unset** — which is why the check above
-reads it as `// false`.
-
-- **`true`** — the automatic critic will leave this log alone. This is a
-  **protected run**. Continue.
-- **`false`** — say plainly what that means and offer to change it:
-
-  > "One thing before we start: Ei's automatic reflection is still switched
-  > on for you. If it runs while we're partway through — say, while you're
-  > deciding where the workflow rules should go — it will consume and wipe
-  > this same log, and there's no undo. I can switch it off so this
-  > conversation is the only thing that clears it. Want me to?"
-
-  **Approved** → send `{"external_reflection_only": true}` as a merge-patch
-  Persona update (→ `references/cli.md`), re-read to confirm it stuck, then
-  continue as a **protected run**. This is now an ordinary single-field
-  patch — it does not touch `pending_update` at all, so there's no ordering
-  hazard to manage around it.
-
-
-  The setting takes effect on Ei's next drain tick — ordinarily inside about
-  100 ms — and holds from then on. A critic run that was already dispatched
-  before that tick still finishes, so tell them so as you confirm:
-
-  > "Done — automatic reflection is off for you now. If a pass was already
-  > underway when I flipped it, that one will still finish; everything after
-  > it leaves your log alone."
-
-  **Declined** → **the skill still runs, as an unprotected run.** Say once,
-  plainly, what that changed:
-
-  > "Understood. Then Ei's automatic pass can still clear this log while
-  > we work. I won't clear it myself, but I can't promise it survives — so
-  > let's try to finish in one sitting. Say the word any time and I'll switch
-  > the setting on."
-
-#### Protected and unprotected runs
-
-Carry the distinction through the rest of the run. Both lenses and the final
-report depend on it.
-
-| | Protected run | Unprotected run |
-|---|---|---|
-| `external_reflection_only` | verified `true` | left `false` |
-| A `RETAIN` row means | this skill won't clear the log, **and** it will still be there | this skill won't clear the log — nothing beyond that is promised |
-| Parking at `needs_target_selection` | the normal path; a later run resumes | still allowed, but the evidence is exposed for as long as the user thinks |
-| What you may say | "your log is safe until we finish" | "I won't clear it — I can't promise Ei's automatic pass won't" |
-
-A run that became protected *during* this step is protected from the next
-drain tick — about 100 ms — not retroactively: a critic already dispatched
-before it can still clear the log. After that tick the table above holds.
-
-**Why a decline does not stop the run — and why this should not be
-re-litigated into a hard gate.** Declining puts the log at no *new* risk: the
-automatic critic consumes over-threshold logs whether or not this skill ever
-runs, and that is precisely the status quo this skill exists to improve on.
-Refusing to run would leave the operating-contract evidence with no path at
-all — strictly worse for the user than a run with an honest caveat — and it
-would override an informed choice this skill has no standing to override.
-What a decline invalidates is not the work; it is the *promise*. So the
-promise is what changes, and only the promise.
-
-The one thing an unprotected run must never do is repeat a retention promise
-it cannot keep. And whenever such a run is about to wait on the user, the
-protection is still one command away — offer it again, then.
+**There is no automatic critic left to race against.** ADR-007 used to let a
+Persona opt out of Ei's automatic Reflection Critic via a per-persona
+`external_reflection_only` flag, so an external, agent-aware reflection like
+this one could run first without the Critic consuming the log out from under
+it. ADR-038 deleted the Critic itself — the periodic pass that read the log,
+proposed an identity revision, and cleared it — and, with nothing left to opt
+out of, deleted the flag too. Every run this skill performs now has the same
+retention guarantee unconditionally: nothing but this skill's own Step 6 can
+ever clear the PersonLog. The "protected run" / "unprotected run" distinction
+this section used to draw, and the opt-out offer that went with it, no longer
+apply — there is only one kind of run.
 
 ### 1c. Enumerate **every** linked Person record
 
 `ei --identifier "Ei Persona" "$PERSONA_ID"` looks tempting and is the wrong
 tool here: it returns the **first** matching Person, and the CLI's own
 documentation concedes the result is arbitrary when the identifier isn't
-unique. Meanwhile Ei's automatic ceremony, which sees all of them, **refuses
-to run reflection at all** for a Persona linked to more than one Person
-record and writes the user a warning instead. A silent first-match pick here
-clears the wrong log.
+unique. A silent first-match pick here risks clearing the wrong log, and
+there is no automatic critic left to catch that mistake after the fact
+(ADR-038) — so this skill enumerates every linked record itself instead of
+trusting a first match.
 
 → **`references/cli.md` → "Enumerating every linked Person record"** has the
 exact command. Follow it. It is a real all-match enumeration, not a
@@ -365,9 +287,10 @@ best-effort one.
 
 - **Exactly one match** — that's your log. Note its `id` (`PERSON_LOG_ID`).
 - **More than one** — **stop and ask the user which one is the log.** Show
-  them the names and rough sizes; don't pick. This is the same condition the
-  automatic ceremony refuses on, and it is usually a real identifier problem
-  worth fixing (→ `ei-curate`) rather than something to work around.
+  them the names and rough sizes; don't pick. This is this skill's own
+  duplicate-link stop (Step 1c's own enumeration rule, not a leftover from
+  the deleted Critic), and it is usually a real identifier problem worth
+  fixing (→ `ei-curate`) rather than something to work around.
 - **Zero** — no Person record is linked to your persona yet. That happens for
   a brand-new persona that hasn't been through extraction. There's no log, so
   there's nothing to reflect on and nothing to clear. Stop; check back after
@@ -456,10 +379,9 @@ It writes only to Ei's Persona record. It never clears the log.
 
 → **`lenses/agent.md`**
 
-Hand it: `$PERSONA_ID`, the operating-contract pile from Step 3, and **whether
-this is a protected or unprotected run** (Step 1b) — the lens handles an
-undecided user differently in each. It returns `not_applicable`, `no_change`,
-`approved_and_applied`, `blocked`, or `needs_target_selection`.
+Hand it: `$PERSONA_ID` and the operating-contract pile from Step 3. It
+returns `not_applicable`, `no_change`, `approved_and_applied`, `blocked`, or
+`needs_target_selection`.
 
 It writes only into the harness's own instruction files, always as a marked
 delimited region, always after explicit approval. It never touches Ei
@@ -484,10 +406,11 @@ Take a **fresh** read — not the Step 2 copy; the lenses took real time and
 the record may have moved. If `description` isn't already empty, send a
 patch containing ONLY `{"description": ""}` — no other field.
 
-If that fresh read comes back with `description` already empty on an
-unprotected run, the automatic critic got there first. Don't report a clear
-you didn't perform — say what happened, and say whether the evidence reached
-Ei and the harness file before it went.
+If that fresh read comes back with `description` already empty, something
+else cleared it while you worked — a concurrent run of this skill, or a
+manual TUI edit. Don't report a clear you didn't perform — say what
+happened, and say whether the evidence reached Ei and the harness file
+before it went.
 
 → `references/cli.md` → "Clearing the PersonLog" for the exact command and
 the merge-patch write.
@@ -515,9 +438,7 @@ Tell the user, in plain language and in this order:
 2. What changed in your operating instructions, and **which file** — name the
    path, since that file is theirs and they may be about to commit it.
 3. Anything you disclosed as unreachable (→ `references/unreachable-surfaces.md`).
-4. Whether the log was cleared, and **if not, exactly what's still open** —
-   and on an unprotected run, that you are not clearing it but cannot promise
-   Ei's automatic pass won't.
+4. Whether the log was cleared, and **if not, exactly what's still open.**
 
 Never present a cleared log as the definition of success. The log clearing is
 bookkeeping; the disposition of the evidence is the result.
@@ -531,10 +452,9 @@ bookkeeping; the disposition of the evidence is the result.
   `blocked` retains because the write *failed* and the evidence exists
   nowhere else. Terminal is not the same question as clearable, and this is
   the one irreversible mistake this skill can make.
-- **Never promise retention you can't deliver.** On an unprotected run
-  (Step 1b) Ei's automatic critic can consume the log at any moment. Say "I
-  won't clear it", never "it'll still be there", and re-offer the opt-out
-  every time the run is about to wait on the user.
+- **Never present the retention guarantee as anything less than
+  unconditional.** Nothing but this skill's own Step 6 can clear the log —
+  say "your log is safe until we finish," not a hedge you no longer need.
 - **`pending_update` no longer clears itself on write.** Every persona
   update is a merge patch now — omitting `pending_update` leaves it exactly
   as it was. The Persona lens's write must include `"pending_update": null`

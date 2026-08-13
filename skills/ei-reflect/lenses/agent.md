@@ -4,16 +4,15 @@
 **Question:** *How does this agent work, in this harness?*
 **Receives from `../SKILL.md`:** `$PERSONA_ID` (the Persona id resolved in
 Step 1a — this is the region's marker key; don't assume it's a UUID, the
-built-ins are `ei` and `emmet`), the operating-contract pile, and whether this
-is a **protected** or **unprotected** run (Step 1b).
+built-ins are `ei` and `emmet`) and the operating-contract pile.
 **Returns to `../SKILL.md`:** `not_applicable` · `no_change` ·
 `approved_and_applied` · `blocked` · `needs_target_selection`
 
 The Persona lens revises who you are. This lens revises **how you operate** —
 the rules, sequences, tool preferences, and prohibitions that govern work in
 *this* repo, on *this* machine, under *this* harness. That material has been
-accumulating in your PersonLog alongside your identity, and Ei's automatic
-critic has no way to act on it. This lens is the only path it has.
+accumulating in your PersonLog alongside your identity, with nothing
+automatic to act on it (ADR-038). This lens is the only path it has.
 
 Nothing here touches an Ei record. Every write goes into a file the **user**
 owns, as a marked delimited region, after they approve the exact text.
@@ -33,10 +32,6 @@ they haven't picked by the time you return, you return
 `needs_target_selection` and **you do not clear the log**. That is not you
 failing to finish — it is the design. `../SKILL.md` explains why clearing on
 that state is the worst thing this skill can do.
-
-On an **unprotected** run that is still exactly what you do — but it is *all*
-you can do, because Ei's automatic critic can consume the same log while the
-user is thinking. Section 4 says how to handle that without over-promising.
 
 ---
 
@@ -186,18 +181,9 @@ Recommending is fine. Deciding is not.
 they want to think, they asked you to check something first — return
 `needs_target_selection`.** Do not pick the "obvious" one to be helpful.
 
-What you *tell* them depends on the run:
-
-- **Protected run** — the log is being kept intact until they decide, and a
-  later run picks up exactly here. That's true, so say it.
-- **Unprotected run** — say what you will do, and stop there: *"I won't touch
-  your log."* Do **not** say it will still be there, because Ei's automatic
-  pass can take it while they think. This is the moment the opt-out is finally
-  worth something, so offer it again, once, in the same breath: *"want me to
-  switch the automatic reflection off so this keeps until you've decided?"* If
-  they say yes, set it (→ `../SKILL.md` Step 1b) and the run is protected from
-  the next drain tick — about 100 ms — onward. A pass already underway can
-  still finish, so say "from here on", not "it was never at risk".
+Tell them the log is being kept intact until they decide, and a later run
+picks up exactly here. That's true — nothing but this skill's own clear gate
+(`../SKILL.md` Step 6) can ever touch this log.
 
 If no candidate file exists at all and the harness offers a documented path
 you could create, offer to create it — and let the user approve the *path*,
@@ -295,9 +281,8 @@ remaining copy. The distinction still matters for what you *tell* the user:
 `needs_target_selection` is a question awaiting an answer, `blocked` is a
 problem awaiting a fix.
 
-`RETAIN` is a rule about what *this skill* does. On an unprotected run it is
-not a guarantee that the log survives — `../SKILL.md` Step 1b has the wording
-that stays honest about the difference.
+`RETAIN` is a rule about what *this skill* does, and since nothing else can
+clear the log either (ADR-038), it's also a guarantee that the log survives.
 
 If the reason you can't write is *"I don't know where"*, that is
 `needs_target_selection` — always, even if it feels like a dead end. Only use

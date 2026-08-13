@@ -4,10 +4,11 @@
 **Question:** *Who is this agent, and how does it relate?*
 **Returns to `../SKILL.md`:** `no_change` · `approved_and_applied` · `blocked`
 
-This is the lens Ei's automatic Reflection critic runs on a schedule. You are
-running it by hand because you can read the log better than the critic can —
-it cannot tell "fixed a type error in 14 files" apart from a genuine identity
-signal, and it cannot ask the user a question.
+This is the lens Ei's automatic Reflection critic used to run on a schedule,
+before ADR-038 deleted it. You are running it by hand because you can read
+the log better than the critic ever could — it couldn't tell "fixed a type
+error in 14 files" apart from a genuine identity signal, and it couldn't ask
+the user a question.
 
 You read your own log. You're the critic. The user is an outside observer who
 fact-checks the log and shares their reactions. This lens does **not** clear
@@ -41,9 +42,7 @@ else changed (→ "Apply your edits" below).
 during preflight, before anything writes, and that capture is your source:
 
 - Step 1b reported a pending proposal **and handed you the snapshot** → use
-  the snapshot. If Step 1b enabled the opt-out, expect the read above to show
-  no `pending_update` at all: that write deleted it, which is precisely why
-  Step 1b captures first (→ `../references/cli.md` → "Server-managed fields").
+  the snapshot.
 - Step 1b reported no pending proposal → there wasn't one. Nothing to fold in.
 - Step 1b reported one and you don't have its contents → **stop and say so.**
   Don't proceed as though the critic never ran, and don't go looking for it:
@@ -201,8 +200,9 @@ Build a patch containing **only** the fields you and the user agreed on:
 
 `update` is now a merge patch (ADR-029): every field you leave OUT of the
 patch is left completely unchanged on the stored record — including
-`external_reflection_only`, which used to silently reset to `false` on
-every write (GH-82) and no longer does. Do not send `traits`/`topics`
+`avatar_emoji`, `preferred_theme`, and `notes`, which used to silently reset
+to their defaults on every write (GH-82) and no longer do. Do not send
+`traits`/`topics`
 unless you're actually changing them; sending either means "these are ALL
 the entries now," so a partial array would delete every entry you didn't
 include.
@@ -272,11 +272,8 @@ If you return `blocked`, say exactly what failed and what state the record is
 in now. The log is **retained** in that case: the identity evidence never
 reached Ei, and the log is the only remaining copy of it.
 
-Say that too — but at the strength the run actually supports. On a
-**protected** run the retry material is safe, full stop. On an **unprotected**
-one (`../SKILL.md` Step 1b) the only thing you can promise is that *this
-skill* won't clear it; Ei's automatic pass still can. Never tell a user their
-evidence is safe when the only thing you control is your own restraint.
+Say that plainly: the retry material is safe, full stop — nothing but this
+skill's own clear gate (`../SKILL.md` Step 6) can ever touch this log.
 
 ---
 
@@ -292,7 +289,7 @@ evidence is safe when the only thing you control is your own restraint.
 - **The session that runs this skill** will itself generate new person-log
   entries. That's expected — the log starts fresh after this conversation
   ends.
-- **Don't rush it.** The whole point is to catch signals the automatic critic
-  would miss because it can't tell the difference between you debugging a
-  build and you demonstrating a genuine character trait. Trust the
-  conversation.
+- **Don't rush it.** The whole point is to catch signals nothing automatic
+  catches anymore — the deleted critic couldn't tell the difference between
+  you debugging a build and you demonstrating a genuine character trait, and
+  now nothing tries. Trust the conversation.

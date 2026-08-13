@@ -65,13 +65,12 @@ the identifier isn't unique under its type. `Ei Persona` is *meant* to be
 unique — one Persona id per persona — but the case this check exists for is exactly
 the case where that assumption has already broken.
 
-Ei's automatic ceremony, which reads state directly and therefore sees every
-linked record, **refuses to run reflection at all** when a Persona is linked
-to more than one Person record. It writes the user a message instead:
-*"…is connected to multiple person records: X and Y… Reflection has been
-paused until this is resolved."* If a first-match pick here quietly returns
-one of those two, you would then clear the wrong log — the one thing the
-automatic path was careful enough to avoid.
+There is no automatic ceremony left to catch a bad pick — ADR-038 deleted
+it, along with everything else that used to read state directly. That is
+exactly why this skill enumerates every linked record itself instead of
+trusting a first match: if a first-match pick here quietly returns one of
+two records linked to the same Persona, you would clear the wrong log with
+nothing else in the system positioned to notice.
 
 ### The all-match enumeration
 
@@ -151,16 +150,19 @@ include `"pending_update": null` explicitly — that is the only value it
 accepts (a non-null value is always rejected; this field is Clearable, not
 settable). See `../lenses/persona.md` for exactly when this applies.
 
-### The omitted-boolean hazard — fixed, not just documented
+### The omitted-boolean hazard — moot for personas now
 
-`is_paused`/`is_archived`/`tools`/`model` and several other persona settings
-left the external write contract entirely (ADR-031) — there is no flag or
-JSON field that touches them through this CLI/MCP path at all anymore, so
-there is nothing to omit. `external_reflection_only` stays externally
-writable, and — this is the actual fix, not a workaround — omitting it from
-a patch now means exactly what it should: unchanged. If Step 1b turned it
-on to protect a log mid-reflection, a later patch that never mentions it
-can no longer silently turn it back off.
+`is_paused`/`is_archived`/`tools`/`model`/`external_reflection_only` and
+several other persona settings left the external write contract entirely
+(ADR-031's sweep, and ADR-038's deletion of `external_reflection_only`
+specifically) — there is no flag or JSON field that touches any of them
+through this CLI/MCP path at all anymore, so there is nothing to omit and
+nothing this hazard can bite. Every persona field still in the write
+contract (`display_name`, `aliases`, `short_description`,
+`long_description`, `traits`, `topics`, `avatar_emoji`, `avatar_image`,
+`preferred_theme`, `notes`) is a string, array, or object, never a bare
+boolean — GH-82's fix (below) is what makes omitting any of them mean
+"leave unchanged" rather than "reset to default".
 
 ### Server-managed fields
 
