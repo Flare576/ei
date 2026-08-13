@@ -51,9 +51,14 @@ export enum LLMNextStep {
   HandleRoomJudge = "handleRoomJudge",
   HandlePersonaPreview = "handlePersonaPreview",
   HandleTopicValidate = "handleTopicValidate",
-  HandleReflectionCritic = "handleReflectionCritic",
   HandleDocumentSegmentation = "handleDocumentSegmentation",
   HandleKnowledgeSynthesis = "handleKnowledgeSynthesis",
+  // Observation→Signal reducer pipeline (Bolt 004, ADR-037/D1). Three
+  // single-purpose LLM steps; Update/Reduce (step 3) is deterministic code
+  // with no next_step of its own — see PersonaState.signal_reduce.
+  HandlePersonaSignalScan = "handlePersonaSignalScan",
+  HandlePersonaSignalMatch = "handlePersonaSignalMatch",
+  HandlePersonaSignalValidate = "handlePersonaSignalValidate",
 }
 
 export enum ProviderType {

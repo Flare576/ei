@@ -4,13 +4,13 @@ import type { ResponseHandler } from "./persona-response.js";
 export type { ResponseHandler } from "./persona-response.js";
 
 import { handlePersonaResponse, handleToolContinuation, handleOneShot, handleOneShotJSON } from "./persona-response.js";
-import { handleHeartbeatCheck, handleEiHeartbeat, handleReflectionCritic } from "./heartbeat.js";
+import { handleHeartbeatCheck, handleEiHeartbeat } from "./heartbeat.js";
 import { handlePersonaGeneration, handlePersonaTraitExtraction } from "./persona-generation.js";
 import {
   handlePersonaTopicRating,
 } from "./persona-topics.js";
-import { handleFactFind, handleHumanTopicScan, handleHumanPersonScan, handleEventScan } from "./human-extraction.js";
-import { handleTopicMatch, handleTopicUpdate, handlePersonUpdate } from "./human-matching.js";
+import { handleFactFind, handleHumanTopicScan, handleHumanPersonScan, handleEventScan, handlePersonaSignalScan } from "./human-extraction.js";
+import { handleTopicMatch, handleTopicUpdate, handlePersonUpdate, handlePersonaSignalMatch, handlePersonaSignalValidate } from "./human-matching.js";
 import { handleRewriteScan, handleRewriteRewrite } from "./rewrite.js";
 import { handleDedupCurate } from "./dedup.js";
 import { handleRoomResponse, handleRoomJudge } from "./rooms.js";
@@ -42,7 +42,9 @@ export const handlers: Record<LLMNextStep, ResponseHandler> = {
   handleRoomJudge,
   handlePersonaPreview,
   [LLMNextStep.HandleTopicValidate]: handleDedupCurate,
-  [LLMNextStep.HandleReflectionCritic]: handleReflectionCritic,
   [LLMNextStep.HandleDocumentSegmentation]: handleDocumentSegmentation,
   [LLMNextStep.HandleKnowledgeSynthesis]: handleKnowledgeSynthesis,
+  [LLMNextStep.HandlePersonaSignalScan]: handlePersonaSignalScan,
+  [LLMNextStep.HandlePersonaSignalMatch]: handlePersonaSignalMatch,
+  [LLMNextStep.HandlePersonaSignalValidate]: handlePersonaSignalValidate,
 };
