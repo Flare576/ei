@@ -7,14 +7,15 @@ import {
 } from "../types.js";
 import type { PersonIdentifier } from "../types/data-items.js";
 import type { StateManager } from "../state-manager.js";
-import type { ItemMatchResult, ExposureImpact, TopicUpdateResult, PersonUpdateResult } from "../../prompts/human/types.js";
-import { queueTopicUpdate, queueTopicValidate, type ExtractionContext } from "../orchestrators/index.js";
+import type { ItemMatchResult, ExposureImpact, TopicUpdateResult, PersonUpdateResult, PersonaSignalValidateResult, PersonaSignalMerge } from "../../prompts/human/types.js";
+import { queueTopicUpdate, queueTopicValidate, queuePersonaSignalValidate, type ExtractionContext } from "../orchestrators/index.js";
 import { getEmbeddingService, getTopicEmbeddingText, getPersonEmbeddingText } from "../embedding-service.js";
 import { calculateExposureCurrent } from "../utils/exposure.js";
 import { mergeOverlappingQuotes, unionIds } from "../corrections.js";
 
 
 import { resolveMessageWindow, getMessageText } from "./utils.js";
+import type { PersonaObservation } from "../types/signals.js";
 import { sanitizeEiPersonaIdentifiers, normalizeIdentifierType, isEiPersonaIdentifierType } from "../utils/identifier-utils.js";
 
 export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
@@ -596,4 +597,129 @@ async function validateAndStoreQuotes(
 }
 
 
+/**
+ * Match — step 2 of the Observation→Signal reducer (D3, Spec §4.17). One
+ * job: given Match's decision for the drafted observation (an existing
+ * open signal's id in the SAME lens, or "new"), run Update/Reduce
+ * (deterministic — `PersonaState.signal_reduce`) and then always queue
+ * Validate (step 4) — every case runs the same three-LLM-call sequence
+ * (Scan/Extract, Match, Validate), Update/Reduce being the sole
+ * deterministic step in between (AT-R17).
+ *
+ * D11 (Beta's Bolt-review finding I1, 2026-08-11): the ONLY two accepted
+ * decisions are the explicit literal `"new"` and a string that resolves
+ * to one of the open same-lens signal ids this call was actually shown
+ * as `matched_guid`. Everything else — missing, `null`, a non-string, or
+ * a well-formed-looking string that simply doesn't resolve (a stale,
+ * dismissed, or forged id) — is a no-op: no `signal_reduce` call, no
+ * Validate request queued. Silently coercing any of those into `"new"`
+ * (the prior behavior, and still `handleTopicMatch`'s own Topic-pipeline
+ * convention) would let a garbled or hallucinated response durably mint
+ * a signal exactly as if the model had deliberately said "new".
+ */
+export function handlePersonaSignalMatch(response: LLMResponse, state: StateManager): void {
+  const result = response.parsed as ItemMatchResult | undefined;
+  const rawGuid = result?.matched_guid;
 
+  const subjectPersonaId = response.request.data.subjectPersonaId as string;
+  const observationId = response.request.data.observationId as string;
+  const lens = response.request.data.lens as "persona" | "agent";
+  const extractionModel = response.request.data.extraction_model as string | undefined;
+
+  let matched: string | null;
+  if (rawGuid === "new") {
+    matched = null;
+  } else if (typeof rawGuid === "string" && rawGuid.length > 0) {
+    const openIds = new Set(
+      state.signals_get(subjectPersonaId)[lens]
+        .filter((s) => s.status === "candidate" || s.status === "recurring")
+        .map((s) => s.id)
+    );
+    if (!openIds.has(rawGuid)) {
+      console.warn(`[handlePersonaSignalMatch] matched_guid "${rawGuid}" not in ${lens} open list — no-op per D11, never coerced to "new"`);
+      return;
+    }
+    matched = rawGuid;
+  } else {
+    console.warn(`[handlePersonaSignalMatch] Malformed matched_guid ${JSON.stringify(rawGuid)} — no-op per D11 (no signal_reduce call, no Validate queued)`);
+    return;
+  }
+
+  const observation = state.observations_get(subjectPersonaId).find((o: PersonaObservation) => o.id === observationId);
+  if (!observation) {
+    console.warn(`[handlePersonaSignalMatch] Observation ${observationId} not found for persona ${subjectPersonaId}`);
+    return;
+  }
+
+  const reduceResult = state.signal_reduce(subjectPersonaId, lens, observation, matched ?? "new");
+  if (!reduceResult) {
+    console.warn(`[handlePersonaSignalMatch] signal_reduce rejected observation ${observationId}`);
+    return;
+  }
+
+  console.log(`[handlePersonaSignalMatch] ${reduceResult.outcome} for persona ${subjectPersonaId} (${lens})`);
+  queuePersonaSignalValidate(subjectPersonaId, lens, state, extractionModel);
+}
+
+/**
+ * Validate — step 4 of the Observation→Signal reducer (D5, Spec §4.17).
+ * Applies any near-duplicate merges the LLM proposes over the subject
+ * Persona's `candidate`+`recurring` signals in this lens.
+ * `PersonaState.signal_merge` structurally refuses to touch a `dismissed`
+ * signal (D5) or a cross-dimension pair (D13), so this handler never
+ * needs its own defensive check for either.
+ *
+ * D12 (Beta's Bolt-review finding I2, 2026-08-11): a structurally
+ * well-formed `{keep_id, merge_id}` shape isn't enough — every entry
+ * must also NAME two currently-open signals in this lens before ANY
+ * entry in the batch is applied. A single malformed or non-resolving
+ * entry anywhere in the array voids the WHOLE batch: zero signals
+ * removed or changed, and — because nothing mutated — no partial,
+ * state-changing attempt left behind for a later corrected retry to
+ * build on top of.
+ */
+function isWellFormedMerge(merge: unknown): merge is PersonaSignalMerge {
+  return !!merge && typeof merge === "object"
+    && typeof (merge as PersonaSignalMerge).keep_id === "string" && (merge as PersonaSignalMerge).keep_id.length > 0
+    && typeof (merge as PersonaSignalMerge).merge_id === "string" && (merge as PersonaSignalMerge).merge_id.length > 0;
+}
+
+export function handlePersonaSignalValidate(response: LLMResponse, state: StateManager): void {
+  const result = response.parsed as PersonaSignalValidateResult | undefined;
+  if (!result?.merges || !Array.isArray(result.merges) || result.merges.length === 0) {
+    console.debug("[handlePersonaSignalValidate] No near-duplicate signals to merge");
+    return;
+  }
+
+  const personaId = response.request.data.personaId as string;
+  const lens = response.request.data.lens as "persona" | "agent";
+
+  for (const merge of result.merges) {
+    if (!isWellFormedMerge(merge)) {
+      console.warn(`[handlePersonaSignalValidate] Malformed merge entry voids the whole batch (D12): ${JSON.stringify(merge)}`);
+      return;
+    }
+    const openSignals = state.signals_get(personaId)[lens].filter((s) => s.status === "candidate" || s.status === "recurring");
+    const namesTwoOpenSignals = merge.keep_id !== merge.merge_id
+      && openSignals.some((s) => s.id === merge.keep_id)
+      && openSignals.some((s) => s.id === merge.merge_id);
+    if (!namesTwoOpenSignals) {
+      console.warn(`[handlePersonaSignalValidate] Merge entry doesn't name two distinct open ${lens} signals — voids the whole batch (D12): ${JSON.stringify(merge)}`);
+      return;
+    }
+  }
+
+  // Every entry named two distinct, currently-open, same-lens signals —
+  // only now is it safe to mutate. A cross-dimension pair still refuses
+  // per-entry inside `signal_merge` itself (D13); that's a business-rule
+  // rejection of one entry, not a malformed shape, so it doesn't void
+  // siblings that already cleared this batch-level check.
+  for (const merge of result.merges as PersonaSignalMerge[]) {
+    const merged = state.signal_merge(personaId, lens, merge.keep_id, merge.merge_id);
+    if (merged) {
+      console.log(`[handlePersonaSignalValidate] Merged signal ${merge.merge_id} into ${merge.keep_id} (${lens})`);
+    } else {
+      console.warn(`[handlePersonaSignalValidate] Could not merge ${merge.merge_id} into ${merge.keep_id} — refused by signal_merge (e.g. cross-dimension, D13)`);
+    }
+  }
+}

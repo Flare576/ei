@@ -1,4 +1,4 @@
-import type { LLMResponse, Fact, Person } from "../types.js";
+import { ContextStatus, type LLMResponse, type Fact, type Person, type Message, type PersonaEntity } from "../types.js";
 import type { PersonIdentifier } from "../types/data-items.js";
 import type { StateManager } from "../state-manager.js";
 import type {
@@ -7,12 +7,17 @@ import type {
   PersonScanResult,
   TopicScanCandidate,
   ItemMatchResult,
+  PersonaSignalScanResult,
+  PersonaObservationDraft,
 } from "../../prompts/human/types.js";
-import { queueTopicMatch, queuePersonUpdate, type ExtractionContext } from "../orchestrators/index.js";
-import { markMessagesExtracted, resolveMessageWindow } from "./utils.js";
+import { queueTopicMatch, queuePersonUpdate, queuePersonaSignalScan, queuePersonaSignalMatch, type ExtractionContext } from "../orchestrators/index.js";
+import { markMessagesExtracted, resolveMessageWindow, getMessageText } from "./utils.js";
+import { matchQuoteInMessage } from "./human-matching.js";
 import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 import { getEmbeddingService, getItemEmbeddingText, cosineSimilarity, getPersonEmbeddingText } from "../embedding-service.js";
 import { levenshtein, normalizeForMatch } from "../utils/levenshtein.js";
+import { isEiPersonaIdentifierType, resolvePersonaLinkedPeople } from "../utils/identifier-utils.js";
+import { classifyObservationLens } from "../utils/persona-signal-lens.js";
 
 export type PersonMatchStrength = 'strong' | 'weak';
 export interface PersonMatch { person: Person; strength: PersonMatchStrength; }
@@ -223,6 +228,27 @@ async function confirmMatchByCosine(
   }
 }
 
+/**
+ * D8/§4.7 soft-alert: a Persona linked to more than one Person record gets
+ * neither a first-match pick nor a silent update — it's written to Ei's
+ * own conversation as a system message and the observation is dropped.
+ * Mirrors the deleted `queueReflectionPhase`'s own multiplicity warning
+ * (ADR-038 item 5), adapted to this ingestion branch.
+ */
+function warnPersonaLinkMultiplicity(state: StateManager, persona: PersonaEntity, people: Person[]): void {
+  const names = people.map(p => `"${p.name}"`).join(" and ");
+  console.warn(`[handleHumanPersonScan] ${persona.display_name} is linked to multiple person records (${names}) — skipping persona-signal observation, writing Ei warning`);
+  const warning: Message = {
+    id: crypto.randomUUID(),
+    role: "system",
+    content: `While processing a conversation, I noticed that **${persona.display_name}** is connected to multiple person records: ${names}. This might be intentional — if you created a composite persona — but if not, you may want to check the identifiers on those records. I've skipped recording new signals for ${persona.display_name} until this is resolved.`,
+    timestamp: new Date().toISOString(),
+    read: false,
+    context_status: ContextStatus.Always,
+  };
+  state.messages_append("ei", warning);
+}
+
 export async function handleHumanPersonScan(response: LLMResponse, state: StateManager): Promise<void> {
   const result = response.parsed as PersonScanResult | undefined;
   
@@ -370,6 +396,49 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
       continue;
     }
 
+    // D2/§4.3 branch point: a matched Person record carrying an `Ei
+    // Persona` identifier is a Persona's own observed-identity record —
+    // route it into the Observation→Signal reducer pipeline instead of
+    // the generic full-record-replace `queuePersonUpdate` path. D8/§4.7:
+    // resolve "the linked Person record for this Persona" by
+    // enumerate-all, never first-match — a Persona linked to more than
+    // one Person record soft-alerts and skips rather than picking either.
+    const linkedPersonaId = matchedPerson?.identifiers?.find(i => isEiPersonaIdentifierType(i.type))?.value;
+    if (matchedPerson && linkedPersonaId) {
+      const subjectPersona = state.persona_getById(linkedPersonaId);
+      const linkedPeople = resolvePersonaLinkedPeople(linkedPersonaId, human.people);
+      if (subjectPersona && linkedPeople.length > 1) {
+        warnPersonaLinkMultiplicity(state, subjectPersona, linkedPeople);
+        continue;
+      }
+      if (subjectPersona && linkedPeople.length === 1) {
+        // Forwarded defensively: ordinary in-Ei conversation (this scan's
+        // own source) never carries verified execution provenance, so
+        // this is always undefined today — classifyObservationLens then
+        // correctly resolves to the Persona lens (D6). The field exists
+        // here so a future caller that DOES attach provenance to a
+        // person-scan request (e.g. a CD2+ ingestion path reusing this
+        // same scan/match machinery, per Bolt 009's own design) is never
+        // silently dropped at this branch point.
+        const agentProvenance = response.request.data.agentProvenance as Parameters<typeof queuePersonaSignalScan>[5];
+        queuePersonaSignalScan(
+          { ...context, messages_context, messages_analyze },
+          subjectPersona,
+          linkedPeople[0].id,
+          state,
+          extractionModel,
+          agentProvenance
+        );
+        console.debug(`[handleHumanPersonScan] person "${candidate.name}": routed to persona-signal pipeline for ${subjectPersona.display_name}`);
+        continue;
+      }
+      // linkedPeople.length === 0 or subjectPersona missing — the
+      // identifier didn't resolve to a live persona/person pair. Extremely
+      // unlikely (matchedPerson itself just proved at least one link
+      // exists), but fall through defensively to the generic path rather
+      // than silently dropping this candidate.
+    }
+
     const matchResult: ItemMatchResult = { matched_guid: matchedPerson?.id ?? null };
     queuePersonUpdate(matchResult, {
       ...context,
@@ -423,3 +492,163 @@ export async function handleEventScan(response: LLMResponse, state: StateManager
   console.log(`[handleEventScan] Queued ${result.events.length} event(s) for matching`);
 }
 
+const VALID_SIGNAL_DIMENSIONS = new Set(["identity", "values", "relationship", "behavior", "voice"]);
+const VALID_SIGNAL_DIRECTIONS = new Set(["novel", "confirms", "challenges"]);
+const VALID_OBSERVER_KINDS = new Set(["human", "subject_self", "other_persona"]);
+
+/**
+ * Rejects a drafted observation whose shape, scalar/enum fields, or
+ * `other_persona` attribution don't hold up — never persisted as-is (P0
+ * review finding, hardened further per a second review pass). `draft` is
+ * treated as `unknown`, not `PersonaObservationDraft`: `response.parsed`
+ * is an `as`-asserted cast over untrusted LLM JSON, so a compile-time
+ * type guarantees nothing about the runtime shape of any one array
+ * element — `null`, a number, or a value with the wrong field types must
+ * all be caught here before anything downstream reads a property off it.
+ *
+ * Beyond the enum/id checks: `quote_text`/`claim` must be non-empty
+ * strings (a non-string `claim` would reach `PersonaObservation.claim` —
+ * typed `string` everywhere downstream — and crash the first
+ * `.toLowerCase()` call `claimsMatch` makes during a later dismissed-
+ * signal reopen check); `extraction_confidence` must additionally fall
+ * within the prompt's own declared 0.0-1.0 range, not merely be finite
+ * (a stray `-5` or `100` is still "a number" but never a valid
+ * confidence). An unvalidated `observer_persona_id` is a promotion
+ * exploit, not just a data-quality nit: `observationContextKey` treats
+ * each distinct `other_persona` id as its own independent witness, so a
+ * forged, missing-but-required, or self-referential id can manufacture
+ * false independence (D9) or let self-testimony masquerade as
+ * corroboration from someone else.
+ */
+function validatePersonaObservationDraft(
+  draft: unknown,
+  subjectPersonaId: string,
+  state: StateManager
+): { ok: true; draft: PersonaObservationDraft } | { ok: false; reason: string } {
+  if (!draft || typeof draft !== "object" || Array.isArray(draft)) {
+    return { ok: false, reason: `draft is not an object (got ${JSON.stringify(draft)})` };
+  }
+  const candidate = draft as Record<string, unknown>;
+
+  if (typeof candidate.quote_text !== "string" || candidate.quote_text.length === 0) {
+    return { ok: false, reason: `invalid quote_text "${JSON.stringify(candidate.quote_text)}"` };
+  }
+  if (typeof candidate.claim !== "string" || candidate.claim.length === 0) {
+    return { ok: false, reason: `invalid claim "${JSON.stringify(candidate.claim)}"` };
+  }
+  if (typeof candidate.dimension !== "string" || !VALID_SIGNAL_DIMENSIONS.has(candidate.dimension)) {
+    return { ok: false, reason: `invalid dimension "${JSON.stringify(candidate.dimension)}"` };
+  }
+  if (typeof candidate.direction !== "string" || !VALID_SIGNAL_DIRECTIONS.has(candidate.direction)) {
+    return { ok: false, reason: `invalid direction "${JSON.stringify(candidate.direction)}"` };
+  }
+  if (typeof candidate.observer_kind !== "string" || !VALID_OBSERVER_KINDS.has(candidate.observer_kind)) {
+    return { ok: false, reason: `invalid observer_kind "${JSON.stringify(candidate.observer_kind)}"` };
+  }
+  if (
+    typeof candidate.extraction_confidence !== "number" ||
+    !Number.isFinite(candidate.extraction_confidence) ||
+    candidate.extraction_confidence < 0 ||
+    candidate.extraction_confidence > 1
+  ) {
+    return { ok: false, reason: `invalid extraction_confidence "${JSON.stringify(candidate.extraction_confidence)}" (must be a number in 0.0-1.0)` };
+  }
+  if (candidate.observer_kind === "other_persona") {
+    const observerId = candidate.observer_persona_id;
+    if (!observerId || typeof observerId !== "string") {
+      return { ok: false, reason: "other_persona observer_kind requires a observer_persona_id" };
+    }
+    if (observerId === subjectPersonaId) {
+      return { ok: false, reason: "observer_persona_id cannot equal the subject persona — self-testimony mislabeled as other_persona" };
+    }
+    const observerPersona = state.persona_getById(observerId);
+    if (!observerPersona || observerPersona.is_archived) {
+      return { ok: false, reason: `observer_persona_id "${observerId}" does not resolve to an active persona` };
+    }
+  }
+  return { ok: true, draft: candidate as unknown as PersonaObservationDraft };
+}
+
+/**
+ * Scan/Extract — step 1 of the Observation→Signal reducer (D1, Spec
+ * §4.17). One job: resolve each drafted claim's true speaker (already
+ * done by the prompt, per D7) and source message, classify its lens
+ * (D6/§4.5), persist it as a durable `PersonaObservation`, then hand it to
+ * Match (step 2). No promotion decision, no signal write here.
+ */
+export async function handlePersonaSignalScan(response: LLMResponse, state: StateManager): Promise<void> {
+  const result = response.parsed as PersonaSignalScanResult | undefined;
+  if (!result?.observations || !Array.isArray(result.observations) || result.observations.length === 0) {
+    console.debug("[handlePersonaSignalScan] No persona observations detected");
+    return;
+  }
+
+  const subjectPersonaId = response.request.data.subjectPersonaId as string;
+  const subjectPersonId = response.request.data.subjectPersonId as string;
+  const agentProvenance = response.request.data.agentProvenance as Parameters<typeof classifyObservationLens>[1];
+  const extractionModel = response.request.data.extraction_model as string | undefined;
+
+  const subjectPersona = state.persona_getById(subjectPersonaId);
+  if (!subjectPersona) {
+    console.warn(`[handlePersonaSignalScan] Subject persona ${subjectPersonaId} not found — dropping ${result.observations.length} draft(s)`);
+    return;
+  }
+
+  const { messages_analyze } = resolveMessageWindow(response, state);
+
+  let queued = 0;
+  for (const rawDraft of result.observations as unknown[]) {
+    const validation = validatePersonaObservationDraft(rawDraft, subjectPersonaId, state);
+    if (!validation.ok) {
+      console.warn(`[handlePersonaSignalScan] Dropping malformed observation draft: ${validation.reason}`);
+      continue;
+    }
+    const draft = validation.draft;
+
+    const sourceMessage = messages_analyze.find(m => matchQuoteInMessage(draft.quote_text, getMessageText(m)) !== null);
+    if (!sourceMessage) {
+      console.debug(`[handlePersonaSignalScan] Could not resolve source message for claim "${draft.claim}" — dropping`);
+      continue;
+    }
+
+    const classification = classifyObservationLens(subjectPersona, agentProvenance);
+    if (classification.lens === "needs_agent_provenance") {
+      console.debug(`[handlePersonaSignalScan] Provenance incomplete for ${subjectPersona.display_name} — dropping Agent-lens claim "${draft.claim}"`);
+      continue;
+    }
+
+    // Stint holistic review Bucket 1, finding I1 (2026-08-11): the five
+    // derived provenance fields reached `classifyObservationLens` above as
+    // transient queue-request data, but nothing persisted them onto the
+    // durable record — persist them here, on the same Agent-lens branch
+    // that already required them to be complete, never on the Persona
+    // lens (which carries no provenance at all).
+    const observation = state.observation_add(subjectPersonaId, {
+      subject_person_id: subjectPersonId,
+      subject_persona_id: subjectPersonaId,
+      observer_kind: draft.observer_kind,
+      observer_persona_id: draft.observer_kind === "other_persona" ? draft.observer_persona_id : undefined,
+      message_id: sourceMessage.id,
+      observed_at: sourceMessage.timestamp,
+      dimension: draft.dimension,
+      direction: draft.direction,
+      claim: draft.claim,
+      extraction_confidence: draft.extraction_confidence,
+      ...(classification.lens === "agent"
+        ? {
+            harness: classification.provenance.harness,
+            agent_id: classification.provenance.agent_id,
+            agent_definition_ref: classification.provenance.agent_definition_ref,
+            definition_revision: classification.provenance.definition_revision,
+            mode: classification.provenance.mode,
+          }
+        : {}),
+    });
+    if (!observation) continue;
+
+    queuePersonaSignalMatch(observation, classification.lens, state, extractionModel);
+    queued++;
+  }
+
+  console.log(`[handlePersonaSignalScan] Queued ${queued} of ${result.observations.length} persona observation(s) for ${subjectPersona.display_name}`);
+}
