@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { yoloMerge } from "../../../src/storage/merge.js";
 import { ProviderType } from "../../../src/core/types/enums.js";
-import type { StorageState, ToolProvider, ToolDefinition } from "../../../src/core/types.js";
-import type { ProviderAccount, ModelConfig, HumanEntity } from "../../../src/core/types/entities.js";
+import type { StorageState, ToolProvider, ToolDefinition, PersonaObservation, EmergentSignal } from "../../../src/core/types.js";
+import type { ProviderAccount, ModelConfig, HumanEntity, PersonaEntity } from "../../../src/core/types/entities.js";
 
 function makeHuman(overrides: Partial<HumanEntity> = {}): HumanEntity {
   return {
@@ -448,5 +448,166 @@ describe("yoloMerge() — settings whitelist: conversation_model/extraction_mode
 
     expect(result.human.settings?.conversation_model).toBe("local-convo");
     expect(result.human.settings?.extraction_model).toBe("local-extract");
+  });
+});
+
+describe("yoloMerge() — persona observations and signals (Bolt 003, D7)", () => {
+  const PERSONA_ID = "witness-id";
+
+  function makePersonaEntity(overrides: Partial<PersonaEntity> = {}): PersonaEntity {
+    return {
+      id: PERSONA_ID,
+      display_name: "Witness",
+      entity: "system",
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: "2024-01-01T00:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  function makeObservation(overrides: Partial<PersonaObservation> = {}): PersonaObservation {
+    return {
+      id: crypto.randomUUID(),
+      subject_person_id: "person-1",
+      subject_persona_id: PERSONA_ID,
+      observer_kind: "other_persona",
+      message_id: "message-1",
+      observed_at: "2024-01-01T00:00:00.000Z",
+      dimension: "behavior",
+      direction: "novel",
+      claim: "claim",
+      extraction_confidence: 0.8,
+      ...overrides,
+    };
+  }
+
+  function makeSignal(overrides: Partial<EmergentSignal> = {}): EmergentSignal {
+    return {
+      id: crypto.randomUUID(),
+      subject_persona_id: PERSONA_ID,
+      claim: "claim",
+      dimension: "behavior",
+      status: "candidate",
+      evidence_ids: [],
+      first_observed_at: "2024-01-01T00:00:00.000Z",
+      last_observed_at: "2024-01-01T00:00:00.000Z",
+      observer_kinds: ["other_persona"],
+      recurrence_count: 1,
+      ...overrides,
+    };
+  }
+
+  function makePersonaState(
+    observations: PersonaObservation[],
+    signals: { persona: EmergentSignal[]; agent: EmergentSignal[] },
+  ): StorageState {
+    return makeState({
+      personas: {
+        [PERSONA_ID]: {
+          entity: makePersonaEntity(),
+          messages: [],
+          observations,
+          signals,
+        },
+      },
+    });
+  }
+
+  it("unions each side's own-only observations and signals — never a last-writer-wins drop", () => {
+    const localOnlyObservation = makeObservation({ id: "obs-local" });
+    const remoteOnlyObservation = makeObservation({ id: "obs-remote" });
+    const localOnlySignal = makeSignal({ id: "sig-local" });
+    const remoteOnlySignal = makeSignal({ id: "sig-remote" });
+    const localOnlyAgentSignal = makeSignal({ id: "agent-local" });
+    const remoteOnlyAgentSignal = makeSignal({ id: "agent-remote" });
+
+    const local = makePersonaState(
+      [localOnlyObservation],
+      { persona: [localOnlySignal], agent: [localOnlyAgentSignal] },
+    );
+    const remote = makePersonaState(
+      [remoteOnlyObservation],
+      { persona: [remoteOnlySignal], agent: [remoteOnlyAgentSignal] },
+    );
+
+    const merged = yoloMerge(local, remote);
+    const mergedPersona = merged.personas[PERSONA_ID];
+
+    expect(mergedPersona.observations).toHaveLength(2);
+    expect(mergedPersona.observations!.map((o) => o.id).sort()).toEqual(["obs-local", "obs-remote"]);
+
+    expect(mergedPersona.signals!.persona.map((s) => s.id).sort()).toEqual(["sig-local", "sig-remote"]);
+    expect(mergedPersona.signals!.agent.map((s) => s.id).sort()).toEqual(["agent-local", "agent-remote"]);
+  });
+
+  it("collapses a duplicate-id observation present on both sides to local's version, not two entries", () => {
+    const sharedId = "shared-obs";
+    const localVersion = makeObservation({ id: sharedId, claim: "local claim" });
+    const remoteVersion = makeObservation({ id: sharedId, claim: "remote claim" });
+
+    const local = makePersonaState([localVersion], { persona: [], agent: [] });
+    const remote = makePersonaState([remoteVersion], { persona: [], agent: [] });
+
+    const merged = yoloMerge(local, remote);
+    const mergedPersona = merged.personas[PERSONA_ID];
+
+    expect(mergedPersona.observations).toHaveLength(1);
+    expect(mergedPersona.observations![0]).toEqual(localVersion);
+  });
+
+  it("collapses a duplicate-id signal present on both sides' persona bucket to local's version, not two entries", () => {
+    const sharedId = "shared-sig";
+    const localVersion = makeSignal({ id: sharedId, claim: "local claim" });
+    const remoteVersion = makeSignal({ id: sharedId, claim: "remote claim" });
+
+    const local = makePersonaState([], { persona: [localVersion], agent: [] });
+    const remote = makePersonaState([], { persona: [remoteVersion], agent: [] });
+
+    const merged = yoloMerge(local, remote);
+    const mergedPersona = merged.personas[PERSONA_ID];
+
+    expect(mergedPersona.signals!.persona).toHaveLength(1);
+    expect(mergedPersona.signals!.persona[0]).toEqual(localVersion);
+  });
+
+  it("best-effort concatenates a legacy local signal lacking a stable id with a remote signal, rather than dropping either", () => {
+    const legacyLocalSignal = { ...makeSignal(), id: undefined } as unknown as EmergentSignal;
+    const remoteSignal = makeSignal({ id: "sig-remote-legacy-case" });
+
+    const local = makePersonaState([], { persona: [legacyLocalSignal], agent: [] });
+    const remote = makePersonaState([], { persona: [remoteSignal], agent: [] });
+
+    const merged = yoloMerge(local, remote);
+    const mergedPersona = merged.personas[PERSONA_ID];
+
+    expect(mergedPersona.signals!.persona).toHaveLength(2);
+    expect(mergedPersona.signals!.persona).toContainEqual(legacyLocalSignal);
+    expect(mergedPersona.signals!.persona).toContainEqual(remoteSignal);
+  });
+
+  it("hydrates a persona present in both sides where one side lacks observations/signals entirely (D4 default), without dropping the other side's entries", () => {
+    const remoteOnlyObservation = makeObservation({ id: "obs-remote-only" });
+    const remoteOnlySignal = makeSignal({ id: "sig-remote-only" });
+
+    const local = makeState({
+      personas: {
+        [PERSONA_ID]: {
+          entity: makePersonaEntity(),
+          messages: [],
+          // observations/signals absent entirely — pre-Bolt-003 persisted record (D4).
+        },
+      },
+    });
+    const remote = makePersonaState([remoteOnlyObservation], { persona: [remoteOnlySignal], agent: [] });
+
+    const merged = yoloMerge(local, remote);
+    const mergedPersona = merged.personas[PERSONA_ID];
+
+    expect(mergedPersona.observations).toEqual([remoteOnlyObservation]);
+    expect(mergedPersona.signals).toEqual({ persona: [remoteOnlySignal], agent: [] });
   });
 });

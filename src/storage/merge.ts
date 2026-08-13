@@ -120,6 +120,35 @@ export function yoloMerge(local: StorageState, remote: StorageState): StorageSta
     }
     
     localPersonaData.messages.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+    // D7: never a last-writer-wins overwrite of observations/signals —
+    // union both, mirroring the .messages merge just above.
+    const localObservations = localPersonaData.observations ?? [];
+    const observationIds = new Set(localObservations.map((o) => o.id));
+    for (const observation of remotePersonaData.observations ?? []) {
+      if (!observationIds.has(observation.id)) {
+        localObservations.push(observation);
+      }
+    }
+    localPersonaData.observations = localObservations;
+
+    const localSignals = localPersonaData.signals ?? { persona: [], agent: [] };
+    const remoteSignals = remotePersonaData.signals ?? { persona: [], agent: [] };
+    for (const lens of ["persona", "agent"] as const) {
+      const localBucket = localSignals[lens];
+      // Best-effort: a legacy local signal predating D5's stable id has no
+      // `id` to dedupe against — concatenate rather than drop in that case.
+      const localSignalIds = new Set(
+        localBucket.filter((s) => typeof s.id === "string").map((s) => s.id)
+      );
+      for (const signal of remoteSignals[lens]) {
+        if (typeof signal.id === "string" && localSignalIds.has(signal.id)) {
+          continue;
+        }
+        localBucket.push(signal);
+      }
+    }
+    localPersonaData.signals = localSignals;
     
     if (remotePersonaData.entity.last_updated > localPersonaData.entity.last_updated) {
       localPersonaData.entity = { ...localPersonaData.entity, ...remotePersonaData.entity };
