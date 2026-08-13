@@ -17,6 +17,10 @@ import type {
   RoomCreationInput,
   HumanSettings,
   ProviderAccount,
+  PersonaObservation,
+  EmergentSignal,
+  PersonaSignalCollections,
+  PersonaIdentityDelta,
 } from "./types.js";
 import { RoomMode, RESERVED_PERSONA_IDS, ContextStatus } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
@@ -34,6 +38,7 @@ import {
   RoomState,
   createDefaultHumanEntity,
 } from "./state/index.js";
+import type { SignalReduceResult } from "./state/index.js";
 
 export class StateManager {
   private humanState = new HumanState();
@@ -1033,6 +1038,82 @@ export class StateManager {
   messages_markPersonaExtracted(personaId: string, messageIds: string[], shortId: string): number {
     const result = this.personaState.messages_markPersonaExtracted(personaId, messageIds, shortId);
     if (result > 0) this.scheduleSave();
+    return result;
+  }
+
+  observations_get(personaId: string): PersonaObservation[] {
+    return this.personaState.observations_get(personaId);
+  }
+
+  observation_add(personaId: string, observation: Omit<PersonaObservation, "id">): PersonaObservation | null {
+    const full = this.personaState.observation_add(personaId, observation);
+    if (full) this.scheduleSave();
+    return full;
+  }
+
+  signals_get(personaId: string): PersonaSignalCollections {
+    return this.personaState.signals_get(personaId);
+  }
+
+  signal_add(personaId: string, lens: "persona" | "agent", signal: Omit<EmergentSignal, "id">): EmergentSignal | null {
+    const full = this.personaState.signal_add(personaId, lens, signal);
+    if (full) this.scheduleSave();
+    return full;
+  }
+
+  /** Bolt 005's own write primitive (D2/D4) — stamps `last_surfaced_at`
+   * on a signal already persisted in either lens bucket. See
+   * `PersonaState.signal_stampSurfaced` for the full contract. */
+  signal_stampSurfaced(personaId: string, signalId: string, timestamp: string): EmergentSignal | null {
+    const stamped = this.personaState.signal_stampSurfaced(personaId, signalId, timestamp);
+    if (stamped) this.scheduleSave();
+    return stamped;
+  }
+
+  /** Update/Reduce (Bolt 004, D4/D9) — attaches `observation` as evidence
+   * on an existing open signal, creates a new `candidate`, or reopens a
+   * `dismissed` signal via `supersedes_signal_id`, per `matchDecision`
+   * from the Match step. See `PersonaState.signal_reduce` for the full
+   * contract. */
+  signal_reduce(
+    personaId: string,
+    lens: "persona" | "agent",
+    observation: PersonaObservation,
+    matchDecision: string | "new"
+  ): SignalReduceResult | null {
+    const result = this.personaState.signal_reduce(personaId, lens, observation, matchDecision);
+    if (result) this.scheduleSave();
+    return result;
+  }
+
+  /** Validate's write primitive (Bolt 004, D5) — merges `mergeId`'s
+   * evidence into `keepId` and drops `mergeId`. Rejects (no mutation) if
+   * either id is not currently `candidate`/`recurring` in `lens`. */
+  signal_merge(personaId: string, lens: "persona" | "agent", keepId: string, mergeId: string): EmergentSignal | null {
+    const merged = this.personaState.signal_merge(personaId, lens, keepId, mergeId);
+    if (merged) this.scheduleSave();
+    return merged;
+  }
+
+  /** Apply Signal — confirm (Bolt 008 D2/D3/D5). Delegates to
+   * `PersonaState.signal_confirm`, which throws on any refusal (not
+   * found, terminal status, or a Persona-lens delta colliding with an
+   * existing `pending_update`) — this wrapper only adds the drain-time
+   * timestamp and the `scheduleSave()` a successful write needs; a
+   * thrown rejection never reaches `scheduleSave()`. */
+  signal_confirm(personaId: string, signalId: string, actor: string, delta?: PersonaIdentityDelta): EmergentSignal {
+    const result = this.personaState.signal_confirm(personaId, signalId, actor, new Date().toISOString(), delta);
+    this.scheduleSave();
+    return result;
+  }
+
+  /** Apply Signal — dismiss (Bolt 008 D4/D5). Delegates to
+   * `PersonaState.signal_dismiss`, which throws on any refusal (not
+   * found, or already terminal) — this wrapper only adds the drain-time
+   * timestamp and the `scheduleSave()` a successful write needs. */
+  signal_dismiss(personaId: string, signalId: string, actor: string): EmergentSignal {
+    const result = this.personaState.signal_dismiss(personaId, signalId, actor, new Date().toISOString());
+    this.scheduleSave();
     return result;
   }
 

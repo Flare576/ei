@@ -34,6 +34,7 @@ import {
   assertValidCorrection,
   applyQuoteOperation,
   isQuoteCorrectionOp,
+  isPersonaSignalCorrectionOp,
   resolveMergedEmbedding,
   resolveTopicPatchCandidate,
   resolvePersonPatchCandidate,
@@ -61,7 +62,7 @@ import { createFetchMemoryExecutor } from "./tools/builtin/fetch-memory.js";
 import { createFetchMessageExecutor } from "./tools/builtin/fetch-message.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { EMMETT_PERSONA_DEFINITION } from "../templates/emmett.js";
-import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueReflectionDrain, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction, queueTargetedPersonUpdate, queueTargetedTopicUpdate } from "./orchestrators/index.js";
+import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueReflectionDrain, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction, queueTargetedPersonUpdate, queueTargetedTopicUpdate, queuePersonaSignalMatch } from "./orchestrators/index.js";
 import { finishDocumentBatch } from "./handlers/document-segmentation.js";
 import { buildSynthesisPrompt } from "../prompts/synthesis/index.js";
 import { DEFAULT_SEED_TRAITS } from "./constants/seed-traits.js";
@@ -628,6 +629,13 @@ export class Processor {
 
         if (!isBackingOff) {
           let request = this.stateManager.queue_claimHighest();
+          if (request && !handlers[request.next_step]) {
+            console.warn(
+              `[Processor ${this.instanceId}] claimed request ${request.id} has no registered handler for next_step "${request.next_step}"; deleting instead of dispatching`
+            );
+            this.stateManager.queue_deleteItems([request.id]);
+            continue;
+          }
           if (request) {
             request = this.augmentRoomRequest(request);
             const personaId = request.data.personaId as string | undefined;
@@ -846,6 +854,49 @@ const toolNextSteps = new Set([
       }
       human.quotes = result.quotes;
       this.stateManager.setHuman(human);
+      return;
+    }
+
+    if (isPersonaSignalCorrectionOp(record)) {
+      // Bolt 008 (D1, Spec §4.12): live-drain counterpart to
+      // corrections.ts's applyObservationAddToState/
+      // applySignalDispositionToPersonas — same downstream calls
+      // (observation_add + queuePersonaSignalMatch, or
+      // signal_confirm/signal_dismiss), against the real live
+      // StateManager instead of scratch PersonaState/QueueState
+      // instances. D7 (Beta's Bolt-008-review finding I2): this branch
+      // used to forward straight to the StateManager with no shape
+      // validation at all — assertValidCorrection's own persona-signal
+      // grammar (enum/type/range on every field, not presence alone)
+      // now runs FIRST, before observation_add/signal_confirm/
+      // signal_dismiss ever touches state, exactly mirroring the
+      // self-drain functions above which already call it before their
+      // own first mutation. signal_confirm/signal_dismiss throw on
+      // refusal (not found, terminal status, or a delta/pending_update
+      // collision) — left uncaught here, exactly like every other
+      // malformed/rejected record, so drainCorrections()'s own
+      // try/catch logs it and moves on without wedging the queue.
+      assertValidCorrection(record);
+      if (record.op === "observation.add") {
+        // `direct_write: true` (D11) is stamped HERE too, unconditionally
+        // -- this is the live-drain twin of corrections.ts's
+        // applyObservationAddToState, and must agree with it: an
+        // observation.add correction is a direct write regardless of
+        // which drain applies it, so a live Ei instance can't accidentally
+        // let a self-attested other_persona claim count toward automatic
+        // promotion just because it happened to drain live instead of
+        // synchronously (placed after the spread so a forged same-named
+        // key on a hand-edited corrections.json record can't override it).
+        const observation = this.stateManager.observation_add(record.id, { ...record.observation, subject_persona_id: record.id, direct_write: true });
+        if (!observation) {
+          throw new Error(`Cannot add observation for persona ${record.id}: not found`);
+        }
+        queuePersonaSignalMatch(observation, record.lens, this.stateManager, undefined);
+      } else if (record.op === "signal.confirm") {
+        this.stateManager.signal_confirm(record.id, record.signal_id, record.actor, record.delta);
+      } else {
+        this.stateManager.signal_dismiss(record.id, record.signal_id, record.actor);
+      }
       return;
     }
 

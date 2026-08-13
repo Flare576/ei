@@ -2,7 +2,17 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { StateManager } from "../../../src/core/state-manager.js";
 import { LLMRequestType, LLMPriority, LLMNextStep, ContextStatus } from "../../../src/core/types.js";
 import { createMockStorage, createDefaultTestState } from "../../helpers/mock-storage.js";
-import type { Fact, Topic, Person, PersonaEntity, Message, ToolProvider, ToolDefinition } from "../../../src/core/types.js";
+import type { Fact, Topic, Person, PersonaEntity, Message, ToolProvider, ToolDefinition, StorageState } from "../../../src/core/types.js";
+// Preserve Zod's namespace export under Vitest's bare-specifier interop;
+// this test exercises StateManager, not the schema library.
+vi.mock("zod", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    z: (actual.z ?? actual.default ?? actual) as Record<string, unknown>,
+  };
+});
+
 
 describe("StateManager", () => {
   let sm: StateManager;
@@ -121,6 +131,123 @@ describe("StateManager", () => {
       sm.persona_delete("bot-id");
       
       expect(sm.persona_getById("bot-id")).toBeNull();
+    });
+  });
+
+  describe("persona observations and signals (Bolt 003 — StateManager delegation)", () => {
+    const makePersona = (id: string, name: string): PersonaEntity => ({
+      id,
+      display_name: name,
+      entity: "system",
+      aliases: [name],
+      short_description: `${name} description`,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: new Date().toISOString(),
+    });
+
+    it("observation_add mints a stable id, delegates to PersonaState, and is read back via observations_get", () => {
+      sm.persona_add(makePersona("bot-id", "Bot"));
+
+      const observation = sm.observation_add("bot-id", {
+        subject_person_id: "person-1",
+        subject_persona_id: "bot-id",
+        observer_kind: "human",
+        message_id: "message-1",
+        observed_at: new Date().toISOString(),
+        dimension: "voice",
+        direction: "novel",
+        claim: "Prefers short replies.",
+        extraction_confidence: 0.9,
+      });
+
+      expect(observation).not.toBeNull();
+      expect(sm.observations_get("bot-id")).toEqual([observation]);
+    });
+
+    it("observation_add is a silent no-op (null) for a persona that doesn't exist", () => {
+      const result = sm.observation_add("no-such-persona", {
+        subject_person_id: "person-1",
+        subject_persona_id: "no-such-persona",
+        observer_kind: "human",
+        message_id: "message-1",
+        observed_at: new Date().toISOString(),
+        dimension: "voice",
+        direction: "novel",
+        claim: "Prefers short replies.",
+        extraction_confidence: 0.9,
+      });
+
+      expect(result).toBeNull();
+    });
+
+    it("signal_add persists into the requested lens bucket, delegates to PersonaState, and is read back via signals_get", () => {
+      sm.persona_add(makePersona("bot-id", "Bot"));
+      const observation = sm.observation_add("bot-id", {
+        subject_person_id: "person-1",
+        subject_persona_id: "bot-id",
+        observer_kind: "human",
+        message_id: "message-1",
+        observed_at: new Date().toISOString(),
+        dimension: "voice",
+        direction: "novel",
+        claim: "Prefers short replies.",
+        extraction_confidence: 0.9,
+      })!;
+
+      const signal = {
+        subject_persona_id: "bot-id",
+        claim: observation.claim,
+        dimension: "voice" as const,
+        status: "candidate" as const,
+        evidence_ids: [observation.id],
+        first_observed_at: observation.observed_at,
+        last_observed_at: observation.observed_at,
+        observer_kinds: ["human" as const],
+        recurrence_count: 1,
+      };
+      const added = sm.signal_add("bot-id", "persona", signal);
+
+      expect(added).not.toBeNull();
+      expect(sm.signals_get("bot-id")).toEqual({ persona: [added], agent: [] });
+    });
+
+    it("signal_add is a silent no-op (null) for a persona that doesn't exist", () => {
+      const added = sm.signal_add("no-such-persona", "agent", {
+        subject_persona_id: "no-such-persona",
+        claim: "unreachable",
+        dimension: "behavior",
+        status: "candidate",
+        evidence_ids: [],
+        first_observed_at: new Date().toISOString(),
+        last_observed_at: new Date().toISOString(),
+        observer_kinds: [],
+        recurrence_count: 0,
+      });
+
+      expect(added).toBeNull();
+    });
+
+    it("signal_add rejects an evidence id that doesn't resolve to one of that persona's own observations, leaving both signal buckets unchanged", () => {
+      sm.persona_add(makePersona("bot-id", "Bot"));
+
+      const rejected = sm.signal_add("bot-id", "persona", {
+        subject_persona_id: "bot-id",
+        claim: "unreachable",
+        dimension: "voice",
+        status: "candidate",
+        evidence_ids: ["not-a-real-observation-id"],
+        first_observed_at: new Date().toISOString(),
+        last_observed_at: new Date().toISOString(),
+        observer_kinds: ["human"],
+        recurrence_count: 1,
+      });
+
+      expect(rejected).toBeNull();
+      expect(sm.signals_get("bot-id")).toEqual({ persona: [], agent: [] });
     });
   });
 
@@ -981,6 +1108,81 @@ describe("StateManager", () => {
       expect(result).toHaveLength(2);
       expect(result.map(t => t.id)).toContain(TOOL_ID_1);
       expect(result.map(t => t.id)).toContain(TOOL_ID_2);
+    });
+
+  });
+  describe("legacy persona signal hydration", () => {
+    const makeLegacyState = (persona: PersonaEntity): StorageState => {
+      const legacyState = {
+        ...createDefaultTestState(),
+        personas: {
+          [persona.id]: {
+            entity: persona,
+            messages: [],
+          },
+        },
+      };
+
+      // Intentionally old persisted shape: casting stays at this storage boundary because
+      // observations and signals are absent from the production type until Bolt 003 lands.
+      return legacyState as unknown as StorageState;
+    };
+
+    const expectDefaultSignalCollections = (state: StorageState, persona: PersonaEntity) => {
+      expect(state.personas).toEqual({
+        [persona.id]: {
+          entity: persona,
+          messages: [],
+          observations: [],
+          signals: { persona: [], agent: [] },
+        },
+      });
+    };
+
+    it("materializes persona observations and signals when initialize hydrates a legacy state", async () => {
+      const persona: PersonaEntity = {
+        id: "legacy-initialize",
+        display_name: "Legacy Initialize",
+        entity: "system",
+        aliases: [],
+        short_description: "A legacy persona",
+        traits: [],
+        topics: [],
+        is_paused: false,
+        is_archived: false,
+        is_static: false,
+        last_updated: new Date().toISOString(),
+      };
+      const legacyState = makeLegacyState(persona);
+      const storage = createMockStorage();
+      vi.mocked(storage.load).mockResolvedValue(legacyState);
+      const stateManager = new StateManager();
+
+      await stateManager.initialize(storage);
+
+      expectDefaultSignalCollections(stateManager.getStorageState(), persona);
+    });
+
+    it("materializes persona observations and signals when restoreFromState hydrates a legacy state", async () => {
+      const persona: PersonaEntity = {
+        id: "legacy-restore",
+        display_name: "Legacy Restore",
+        entity: "system",
+        aliases: [],
+        short_description: "A legacy persona",
+        traits: [],
+        topics: [],
+        is_paused: false,
+        is_archived: false,
+        is_static: false,
+        last_updated: new Date().toISOString(),
+      };
+      const stateManager = new StateManager();
+      await stateManager.initialize(createMockStorage());
+
+      stateManager.restoreFromState(makeLegacyState(persona));
+
+      expectDefaultSignalCollections(stateManager.getStorageState(), persona);
     });
   });
 });
