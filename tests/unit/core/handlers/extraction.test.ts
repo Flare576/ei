@@ -4,6 +4,7 @@ import {
   LLMRequestType,
   LLMPriority,
   RoomMode,
+  ContextStatus,
 
   type LLMRequestState,
   type LLMResponse,
@@ -17,11 +18,31 @@ import {
   type Quote,
   type RoomMessage,
   type RoomEntity,
+  type PersonaObservation,
+  type EmergentSignal,
 } from "../../../../src/core/types.js";
 import { StateManager } from "../../../../src/core/state-manager.js";
 import { filterQuotesByPersonaGroupVisibility } from "../../../../src/core/group-visibility.js";
 import { createMockStorage } from "../../../helpers/mock-storage.js";
+import { classifyObservationLens, type AgentProvenance } from "../../../../src/core/utils/persona-signal-lens.js";
+import { resolvePersonaLinkedPeople } from "../../../../src/core/utils/identifier-utils.js";
 import type * as OrchestratorsModule from "../../../../src/core/orchestrators/index.js";
+
+// Preserve Zod's namespace export under Vitest's bare-specifier interop —
+// same workaround as tests/unit/core/state-manager.test.ts and
+// tests/unit/core/state/persona-signals.test.ts. This file's own module
+// graph (via human-matching.ts → corrections.ts → entity-schemas.ts)
+// reaches the real Zod schema module even though this file mocks
+// orchestrators/embedding-service, so the same interop guard is needed
+// here too.
+vi.mock("zod", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    z: (actual.z ?? actual.default ?? actual) as Record<string, unknown>,
+  };
+});
+
 
 // We need to test handlers in isolation, so we import them directly
 // and mock their dependencies
@@ -3380,3 +3401,1168 @@ describe("handlePersonUpdate — persona-link cardinality guard (real StateManag
     expect(sm.messages_get("ei")).toHaveLength(0);
   });
 });
+
+// =============================================================================
+// Bolt: persona-emergence-signals-004 (Observation→Signal reducer pipeline)
+//
+// D1-D9 / R1-R7 / AT1-AT7. Uses a REAL StateManager throughout (not the
+// mocked-orchestrators helper above) — the pipeline's own orchestrator
+// functions (`queuePersonaSignalScan`/`Match`/`Validate`) are exercised for
+// real via `sm.queue_enqueue`, and handlers are invoked directly from the
+// real `handlers` map, mirroring the existing "real StateManager" pattern
+// above (`handlePersonUpdate — persona-link cardinality guard`).
+// =============================================================================
+
+function makeTestPersona(id: string, displayName: string, overrides: Partial<PersonaEntity> = {}): PersonaEntity {
+  return {
+    id,
+    display_name: displayName,
+    entity: "system",
+    aliases: [displayName],
+    short_description: `${displayName} description`,
+    traits: [],
+    topics: [],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeLinkedPerson(id: string, name: string, personaId: string, overrides: Partial<Person> = {}): Person {
+  return {
+    id,
+    name,
+    description: `${name}'s description`,
+    relationship: "AI Persona",
+    sentiment: 0.5,
+    exposure_current: 0.5,
+    exposure_desired: 0.5,
+    last_updated: new Date().toISOString(),
+    validated_date: "",
+    identifiers: [
+      { type: "Ei Persona", value: personaId },
+      { type: "Nickname", value: name, is_primary: true },
+    ],
+    ...overrides,
+  };
+}
+
+function seedChannelMessage(sm: StateManager, channelPersonaId: string, content: string, timestamp = "2026-08-11T00:00:00.000Z"): Message {
+  const message: Message = {
+    id: `msg-${crypto.randomUUID()}`,
+    role: "human",
+    content,
+    timestamp,
+    read: true,
+    context_status: ContextStatus.Default,
+  };
+  sm.messages_append(channelPersonaId, message);
+  return message;
+}
+
+function makeScanRequest(overrides: Partial<Record<string, unknown>> = {}): LLMRequest {
+  return createMockRequest({
+    next_step: LLMNextStep.HandlePersonaSignalScan,
+    priority: LLMPriority.Low,
+    data: {
+      personaId: "channel-persona",
+      ...overrides,
+    },
+  });
+}
+
+describe("D2/§4.3 branch point — handleHumanPersonScan routes a Persona-linked match into the signal pipeline", () => {
+  let sm: StateManager;
+  const CHANNEL_ID = "channel-persona";
+  const SUBJECT_ID = "sisyphus-id";
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    sm.persona_add(makeTestPersona("ei", "Ei"));
+    sm.persona_add(makeTestPersona(CHANNEL_ID, "Prometheus"));
+    sm.persona_add(makeTestPersona(SUBJECT_ID, "Sisyphus"));
+  });
+
+  function makePersonScanRequest(overrides: Partial<Record<string, unknown>> = {}) {
+    return createMockRequest({
+      next_step: LLMNextStep.HandleHumanPersonScan,
+      data: {
+        personaId: CHANNEL_ID,
+        personaDisplayName: "Prometheus",
+        messages_context: [],
+        messages_analyze: [],
+        ...overrides,
+      },
+    });
+  }
+
+  it("R3/AT1: a Persona-linked existing match is routed to HandlePersonaSignalScan, never queuePersonUpdate — Person.description stays byte-identical", async () => {
+    sm.human_person_upsert(makeLinkedPerson("sisyphus-person", "Sisyphus", SUBJECT_ID, { description: "Original description, unchanged." }));
+    const message = seedChannelMessage(sm, CHANNEL_ID, "Sisyphus wrote great tests today, very thorough.");
+
+    const request = makePersonScanRequest();
+    const response = createMockResponse(request, {
+      people: [{ name: "Sisyphus", description: "wrote great tests", relationship: "AI Persona", confidence: 5, reason: "explicit mention" }],
+    });
+
+    await handlers[LLMNextStep.HandleHumanPersonScan](response, sm);
+
+    // No generic full-record Person update happened.
+    const person = sm.getHuman().people.find(p => p.id === "sisyphus-person")!;
+    expect(person.description).toBe("Original description, unchanged.");
+
+    // Instead, exactly one Scan/Extract request was queued for the pipeline.
+    const active = sm.queue_getAllActiveItems();
+    const scanRequests = active.filter(r => r.next_step === LLMNextStep.HandlePersonaSignalScan);
+    expect(scanRequests).toHaveLength(1);
+    expect(scanRequests[0].data.subjectPersonaId).toBe(SUBJECT_ID);
+    expect(scanRequests[0].data.subjectPersonId).toBe("sisyphus-person");
+    expect(active.some(r => r.next_step === LLMNextStep.HandlePersonUpdate)).toBe(false);
+    void message;
+  });
+
+  it("AT-R16 #9 (ordinary-Person regression): a non-Persona-linked match is completely unaffected — still routes through queuePersonUpdate", async () => {
+    sm.human_person_upsert({
+      id: "regular-person",
+      name: "Alice",
+      description: "A friend",
+      relationship: "Friend",
+      sentiment: 0.5,
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      last_updated: new Date().toISOString(),
+      validated_date: "",
+      identifiers: [{ type: "Nickname", value: "Alice", is_primary: true }],
+    });
+    seedChannelMessage(sm, CHANNEL_ID, "Alice is doing great these days.");
+
+    const request = makePersonScanRequest();
+    const response = createMockResponse(request, {
+      people: [{ name: "Alice", description: "doing great", relationship: "Friend", confidence: 5, reason: "explicit mention" }],
+    });
+
+    await handlers[LLMNextStep.HandleHumanPersonScan](response, sm);
+
+    const active = sm.queue_getAllActiveItems();
+    expect(active.some(r => r.next_step === LLMNextStep.HandlePersonUpdate)).toBe(true);
+    expect(active.some(r => r.next_step === LLMNextStep.HandlePersonaSignalScan)).toBe(false);
+  });
+
+  it("R4/AT4: a Persona linked to two Person records soft-alerts and skips — no signal pipeline queued, no update to either record, Ei is warned", async () => {
+    sm.human_person_upsert(makeLinkedPerson("sisyphus-person-a", "Sisyphus", SUBJECT_ID, { description: "First record" }));
+    // Seeded directly (bypassing human_person_upsert's write-time
+    // guardPersonaLinks, which would otherwise refuse this second,
+    // competing link) — simulates pre-existing bad data from before the
+    // guard existed, exactly the ADR-006/ADR-010 case this resolver must
+    // detect at READ time rather than silently repairing or picking one.
+    sm.getHuman().people.push(makeLinkedPerson("sisyphus-person-b", "Sisyphus B", SUBJECT_ID, { description: "Second record" }));
+    seedChannelMessage(sm, CHANNEL_ID, "Sisyphus wrote great tests today.");
+
+    const request = makePersonScanRequest();
+    const response = createMockResponse(request, {
+      people: [{ name: "Sisyphus", description: "wrote great tests", relationship: "AI Persona", confidence: 5, reason: "explicit mention" }],
+    });
+
+    await handlers[LLMNextStep.HandleHumanPersonScan](response, sm);
+
+    const active = sm.queue_getAllActiveItems();
+    expect(active.some(r => r.next_step === LLMNextStep.HandlePersonaSignalScan)).toBe(false);
+    expect(active.some(r => r.next_step === LLMNextStep.HandlePersonUpdate)).toBe(false);
+
+    const first = sm.getHuman().people.find(p => p.id === "sisyphus-person-a")!;
+    const second = sm.getHuman().people.find(p => p.id === "sisyphus-person-b")!;
+    expect(first.description).toBe("First record");
+    expect(second.description).toBe("Second record");
+
+    const eiMessages = sm.messages_get("ei");
+    expect(eiMessages).toHaveLength(1);
+    expect(eiMessages[0].content).toContain("Sisyphus");
+    expect(eiMessages[0].content).toContain("multiple person records");
+  });
+});
+
+describe("resolvePersonaLinkedPeople — read-time enumerate-all (Bolt 004, D8)", () => {
+  it("returns an empty array when no Person record links to the persona", () => {
+    const people: Person[] = [];
+    expect(resolvePersonaLinkedPeople("some-persona", people)).toEqual([]);
+  });
+
+  it("returns exactly one match for a well-formed single link", () => {
+    const linked = makeLinkedPerson("p1", "Sisyphus", "sisyphus-id");
+    const other = makeLinkedPerson("p2", "Beta", "beta-id");
+    expect(resolvePersonaLinkedPeople("sisyphus-id", [linked, other])).toEqual([linked]);
+  });
+
+  it("enumerates ALL matches rather than returning the first — the multiplicity case", () => {
+    const a = makeLinkedPerson("p1", "Sisyphus A", "sisyphus-id");
+    const b = makeLinkedPerson("p2", "Sisyphus B", "sisyphus-id");
+    const unrelated = makeLinkedPerson("p3", "Beta", "beta-id");
+    const result = resolvePersonaLinkedPeople("sisyphus-id", [a, b, unrelated]);
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(expect.arrayContaining([a, b]));
+  });
+
+  it("matches the general Ei Persona type predicate, including the reserved 'ei' value (unlike the write-time guard)", () => {
+    const eiRecord = makeLinkedPerson("ei-person", "Ei", "ei");
+    expect(resolvePersonaLinkedPeople("ei", [eiRecord])).toEqual([eiRecord]);
+  });
+
+  it("is case-insensitive on the identifier type (legacy lowercase 'ei persona')", () => {
+    const legacy = makeLinkedPerson("p1", "Sisyphus", "sisyphus-id", { identifiers: [{ type: "ei persona", value: "sisyphus-id" }] });
+    expect(resolvePersonaLinkedPeople("sisyphus-id", [legacy])).toEqual([legacy]);
+  });
+});
+
+describe("classifyObservationLens — dual-lens classification (Bolt 004, D6/R2/AT2)", () => {
+  const completeProvenance: AgentProvenance = {
+    harness: "omp",
+    agent_id: "sub-agent-1",
+    agent_definition_ref: "sisyphus-execute",
+    definition_revision: "sha256:aaaa",
+    mode: "delegated",
+  };
+
+  it("AT2 positive: a CD2+ fixture with verified, complete provenance produces an Agent-lens classification", () => {
+    const persona = makeTestPersona("sisyphus-id", "Sisyphus");
+    const result = classifyObservationLens(persona, completeProvenance);
+    expect(result.lens).toBe("agent");
+  });
+
+  it("AT2 negative: Ei's own persona produces zero Agent-lens classifications regardless of content/provenance completeness", () => {
+    const ei = makeTestPersona("ei", "Ei");
+    expect(classifyObservationLens(ei, completeProvenance).lens).toBe("persona");
+    expect(classifyObservationLens(ei, undefined).lens).toBe("persona");
+    expect(classifyObservationLens(ei, { harness: "omp" }).lens).toBe("persona");
+  });
+
+  it("a non-Ei persona with no provenance at all (ordinary in-Ei conversation) classifies as Persona lens", () => {
+    const persona = makeTestPersona("sisyphus-id", "Sisyphus");
+    expect(classifyObservationLens(persona, undefined).lens).toBe("persona");
+  });
+
+  it("a non-Ei persona with incomplete provenance is 'needs_agent_provenance' — distinct from the structural no-Agent-lens fact (D6)", () => {
+    const persona = makeTestPersona("sisyphus-id", "Sisyphus");
+    const result = classifyObservationLens(persona, { harness: "omp", agent_id: "sub-agent-1" });
+    expect(result.lens).toBe("needs_agent_provenance");
+  });
+
+  it("AT-R16 #7 (intentional Agent definition revision): two provenance objects for the same agent_id with different definition_revision hashes both classify as Agent lens independently — no drift flag, no cross-revision comparison", () => {
+    const persona = makeTestPersona("sisyphus-id", "Sisyphus");
+    const revisionOne = classifyObservationLens(persona, completeProvenance);
+    const revisionTwo = classifyObservationLens(persona, { ...completeProvenance, definition_revision: "sha256:bbbb" });
+    expect(revisionOne.lens).toBe("agent");
+    expect(revisionTwo.lens).toBe("agent");
+    expect(revisionOne.lens === "agent" && revisionOne.provenance.definition_revision).toBe("sha256:aaaa");
+    expect(revisionTwo.lens === "agent" && revisionTwo.provenance.definition_revision).toBe("sha256:bbbb");
+  });
+});
+
+describe("handlePersonaSignalScan — Scan/Extract (Bolt 004, D1/D6/D7)", () => {
+  let sm: StateManager;
+  const CHANNEL_ID = "prometheus-id";
+  const SUBJECT_ID = "sisyphus-id";
+  const BETA_ID = "beta-id";
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    sm.persona_add(makeTestPersona("ei", "Ei"));
+    sm.persona_add(makeTestPersona(CHANNEL_ID, "Prometheus"));
+    sm.persona_add(makeTestPersona(SUBJECT_ID, "Sisyphus"));
+    sm.persona_add(makeTestPersona(BETA_ID, "Beta"));
+    sm.human_person_upsert(makeLinkedPerson("sisyphus-person", "Sisyphus", SUBJECT_ID));
+  });
+
+  it("D7/R3/AT3 worked fixture: a message in Prometheus's own session relaying Beta's observation about Sisyphus resolves observer_persona_id to Beta, never Prometheus", async () => {
+    const message = seedChannelMessage(sm, CHANNEL_ID, "Beta called out that Sisyphus wrote great tests during the review.");
+    const request = makeScanRequest({
+      personaId: CHANNEL_ID,
+      subjectPersonaId: SUBJECT_ID,
+      subjectPersonId: "sisyphus-person",
+      message_ids_to_mark: [message.id],
+    });
+    const response = createMockResponse(request, {
+      observations: [{
+        quote_text: "Sisyphus wrote great tests during the review",
+        claim: "Sisyphus wrote great tests during the review.",
+        dimension: "behavior",
+        direction: "novel",
+        extraction_confidence: 0.9,
+        observer_kind: "other_persona",
+        observer_persona_id: BETA_ID,
+      }],
+    });
+
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+
+    const observations = sm.observations_get(SUBJECT_ID);
+    expect(observations).toHaveLength(1);
+    expect(observations[0].observer_kind).toBe("other_persona");
+    expect(observations[0].observer_persona_id).toBe(BETA_ID);
+    expect(observations[0].observer_persona_id).not.toBe(CHANNEL_ID);
+    expect(observations[0].subject_person_id).toBe("sisyphus-person");
+    expect(observations[0].subject_persona_id).toBe(SUBJECT_ID);
+    expect(observations[0].message_id).toBe(message.id);
+
+    // AT-R16 #4 (cross-persona-witness evidence): drive the observation
+    // through Match (as "new", since no prior signal exists) and confirm
+    // the resulting SIGNAL — not just the observation — carries
+    // "other_persona" in its own observer_kinds.
+    const matchQueued = sm.queue_getAllActiveItems().find(r => r.next_step === LLMNextStep.HandlePersonaSignalMatch)!;
+    expect(matchQueued).toBeDefined();
+    const matchResponse = createMockResponse(matchQueued, { matched_guid: "new" });
+    await handlers[LLMNextStep.HandlePersonaSignalMatch](matchResponse, sm);
+
+    const signals = sm.signals_get(SUBJECT_ID);
+    expect(signals.persona).toHaveLength(1);
+    expect(signals.persona[0].observer_kinds).toContain("other_persona");
+  });
+
+  it("drops a draft whose quote_text cannot be resolved to any analyzed message, without throwing", async () => {
+    const message = seedChannelMessage(sm, CHANNEL_ID, "Something unrelated happened today.");
+    const request = makeScanRequest({
+      personaId: CHANNEL_ID,
+      subjectPersonaId: SUBJECT_ID,
+      subjectPersonId: "sisyphus-person",
+      message_ids_to_mark: [message.id],
+    });
+    const response = createMockResponse(request, {
+      observations: [{
+        quote_text: "This exact phrase never appeared anywhere",
+        claim: "A hallucinated claim",
+        dimension: "behavior",
+        direction: "novel",
+        extraction_confidence: 0.9,
+        observer_kind: "human",
+      }],
+    });
+
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("D6: a claim with complete Agent provenance against a non-Ei subject queues Match against the agent lens", async () => {
+    const message = seedChannelMessage(sm, CHANNEL_ID, "Verified test-writing discipline observed in a CD2+ transcript.");
+    const request = makeScanRequest({
+      personaId: CHANNEL_ID,
+      subjectPersonaId: SUBJECT_ID,
+      subjectPersonId: "sisyphus-person",
+      message_ids_to_mark: [message.id],
+      agentProvenance: { harness: "omp", agent_id: "sub-1", agent_definition_ref: "sisyphus-execute", definition_revision: "sha256:aaaa", mode: "delegated" },
+    });
+    const response = createMockResponse(request, {
+      observations: [{
+        quote_text: "Verified test-writing discipline observed in a CD2+ transcript",
+        claim: "Verified test-writing discipline observed in a CD2+ transcript.",
+        dimension: "behavior",
+        direction: "novel",
+        extraction_confidence: 0.9,
+        observer_kind: "human",
+      }],
+    });
+
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+
+    const matchRequests = sm.queue_getAllActiveItems().filter(r => r.next_step === LLMNextStep.HandlePersonaSignalMatch);
+    expect(matchRequests).toHaveLength(1);
+    expect(matchRequests[0].data.lens).toBe("agent");
+  });
+
+  it("D6: the same complete provenance against Ei's own persona still produces zero Agent-lens signals — Match queues against the persona lens instead", async () => {
+    sm.human_person_upsert(makeLinkedPerson("ei-person", "Ei", "ei"));
+    const message = seedChannelMessage(sm, CHANNEL_ID, "Verified test-writing discipline observed in a CD2+ transcript.");
+    const request = makeScanRequest({
+      personaId: CHANNEL_ID,
+      subjectPersonaId: "ei",
+      subjectPersonId: "ei-person",
+      message_ids_to_mark: [message.id],
+      agentProvenance: { harness: "omp", agent_id: "sub-1", agent_definition_ref: "ei-core", definition_revision: "sha256:aaaa", mode: "delegated" },
+    });
+    const response = createMockResponse(request, {
+      observations: [{
+        quote_text: "Verified test-writing discipline observed in a CD2+ transcript",
+        claim: "Verified test-writing discipline observed in a CD2+ transcript.",
+        dimension: "behavior",
+        direction: "novel",
+        extraction_confidence: 0.9,
+        observer_kind: "human",
+      }],
+    });
+
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+
+    const matchRequests = sm.queue_getAllActiveItems().filter(r => r.next_step === LLMNextStep.HandlePersonaSignalMatch);
+    expect(matchRequests).toHaveLength(1);
+    expect(matchRequests[0].data.lens).toBe("persona");
+  });
+});
+
+describe("handlePersonaSignalMatch / handlePersonaSignalValidate — Match, Update/Reduce, Validate (Bolt 004, D3/D4/D5)", () => {
+  let sm: StateManager;
+  const SUBJECT_ID = "sisyphus-id";
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    sm.persona_add(makeTestPersona(SUBJECT_ID, "Sisyphus"));
+  });
+
+  function seedObservation(overrides: Partial<Omit<PersonaObservation, "id">> = {}): PersonaObservation {
+    return sm.observation_add(SUBJECT_ID, {
+      subject_person_id: "sisyphus-person",
+      subject_persona_id: SUBJECT_ID,
+      observer_kind: "human",
+      message_id: "msg-1",
+      observed_at: "2026-08-11T00:00:00.000Z",
+      dimension: "behavior",
+      direction: "novel",
+      claim: "Consistently terse conversational tone.",
+      extraction_confidence: 0.8,
+      ...overrides,
+    })!;
+  }
+
+  it("matched_guid resolves to an existing open signal — attaches evidence via signal_reduce, then always queues Validate", async () => {
+    const existing = sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID,
+      claim: "Consistently terse conversational tone.",
+      dimension: "behavior",
+      status: "candidate",
+      evidence_ids: [],
+      first_observed_at: "2026-08-10T00:00:00.000Z",
+      last_observed_at: "2026-08-10T00:00:00.000Z",
+      observer_kinds: ["human"],
+      recurrence_count: 1,
+    })!;
+    const observation = seedObservation();
+
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalMatch,
+      data: { subjectPersonaId: SUBJECT_ID, observationId: observation.id, lens: "persona" },
+    });
+    const response = createMockResponse(request, { matched_guid: existing.id });
+
+    await handlers[LLMNextStep.HandlePersonaSignalMatch](response, sm);
+
+    const signals = sm.signals_get(SUBJECT_ID);
+    expect(signals.persona).toHaveLength(1);
+    expect(signals.persona[0].evidence_ids).toContain(observation.id);
+
+    const validateRequests = sm.queue_getAllActiveItems().filter(r => r.next_step === LLMNextStep.HandlePersonaSignalValidate);
+    expect(validateRequests).toHaveLength(1);
+    expect(validateRequests[0].data.personaId).toBe(SUBJECT_ID);
+    expect(validateRequests[0].data.lens).toBe("persona");
+  });
+
+  it("D11: a matched_guid outside the open list (e.g. a dismissed signal's id) is a no-op — never silently attached AND never coerced into 'new'", async () => {
+    const dismissed = sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID,
+      claim: "An old, dismissed claim.",
+      dimension: "behavior",
+      status: "dismissed",
+      evidence_ids: [],
+      first_observed_at: "2026-08-01T00:00:00.000Z",
+      last_observed_at: "2026-08-01T00:00:00.000Z",
+      observer_kinds: ["human"],
+      recurrence_count: 1,
+    })!;
+    const observation = seedObservation({ claim: "A genuinely unrelated new claim." });
+
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalMatch,
+      data: { subjectPersonaId: SUBJECT_ID, observationId: observation.id, lens: "persona" },
+    });
+    const response = createMockResponse(request, { matched_guid: dismissed.id });
+
+    await handlers[LLMNextStep.HandlePersonaSignalMatch](response, sm);
+
+    const signals = sm.signals_get(SUBJECT_ID);
+    // The dismissed signal itself is untouched...
+    const stillDismissed = signals.persona.find(s => s.id === dismissed.id)!;
+    expect(stillDismissed.status).toBe("dismissed");
+    expect(stillDismissed.evidence_ids).toEqual([]);
+    // ...and, per D11, an unresolved (non-"new") matched_guid is a no-op
+    // rather than being coerced into "new": no candidate was minted for
+    // the observation, and no Validate request was queued.
+    expect(signals.persona).toHaveLength(1);
+    const validateRequests = sm.queue_getAllActiveItems().filter(r => r.next_step === LLMNextStep.HandlePersonaSignalValidate);
+    expect(validateRequests).toHaveLength(0);
+  });
+
+
+  it("D12: a merges array naming a dismissed (non-open) signal voids the WHOLE batch — the sibling well-formed merge is never applied either", async () => {
+    const keep = sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID, claim: "Terse tone.", dimension: "behavior", status: "candidate",
+      evidence_ids: [], first_observed_at: "2026-08-01T00:00:00.000Z", last_observed_at: "2026-08-01T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+    })!;
+    const dup = sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID, claim: "Terse conversational tone.", dimension: "behavior", status: "candidate",
+      evidence_ids: [], first_observed_at: "2026-08-02T00:00:00.000Z", last_observed_at: "2026-08-02T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+    })!;
+    const dismissed = sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID, claim: "Some dismissed claim.", dimension: "behavior", status: "dismissed",
+      evidence_ids: [], first_observed_at: "2026-08-01T00:00:00.000Z", last_observed_at: "2026-08-01T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+    })!;
+
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalValidate,
+      data: { personaId: SUBJECT_ID, lens: "persona" },
+    });
+    // A well-formed keep/dup merge sits alongside an entry naming the
+    // dismissed signal. D12: the dismissed entry isn't "one of two open
+    // same-lens signals", so the ENTIRE batch is voided before either
+    // entry is applied — dup survives exactly like keep and dismissed.
+    const response = createMockResponse(request, {
+      merges: [
+        { keep_id: keep.id, merge_id: dup.id },
+        { keep_id: keep.id, merge_id: dismissed.id },
+      ],
+    });
+
+    await handlers[LLMNextStep.HandlePersonaSignalValidate](response, sm);
+
+    const signals = sm.signals_get(SUBJECT_ID);
+    expect(signals.persona.find(s => s.id === keep.id)).toBeDefined();
+    const survivingDup = signals.persona.find(s => s.id === dup.id)!;
+    expect(survivingDup).toBeDefined();
+    expect(survivingDup.evidence_ids).toEqual([]);
+    const survivingDismissed = signals.persona.find(s => s.id === dismissed.id)!;
+    expect(survivingDismissed.status).toBe("dismissed");
+    expect(survivingDismissed.evidence_ids).toEqual([]);
+  });
+
+
+  it("an empty merges list is a clean no-op", async () => {
+    const only = sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID, claim: "Solo claim.", dimension: "behavior", status: "candidate",
+      evidence_ids: [], first_observed_at: "2026-08-01T00:00:00.000Z", last_observed_at: "2026-08-01T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+    })!;
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalValidate,
+      data: { personaId: SUBJECT_ID, lens: "persona" },
+    });
+    const response = createMockResponse(request, { merges: [] });
+
+    await handlers[LLMNextStep.HandlePersonaSignalValidate](response, sm);
+    expect(sm.signals_get(SUBJECT_ID).persona).toEqual([only]);
+  });
+});
+
+describe("AT6/AT-R17 — the full four-step pipeline, exactly three LLM calls, lens separation held through Match", () => {
+  let sm: StateManager;
+  const CHANNEL_ID = "prometheus-id";
+  const SUBJECT_ID = "sisyphus-id";
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    sm.persona_add(makeTestPersona("ei", "Ei"));
+    sm.persona_add(makeTestPersona(CHANNEL_ID, "Prometheus"));
+    sm.persona_add(makeTestPersona(SUBJECT_ID, "Sisyphus"));
+    sm.human_person_upsert(makeLinkedPerson("sisyphus-person", "Sisyphus", SUBJECT_ID));
+  });
+
+  /** Runs Scan → Match → Validate for one drafted observation, taking each
+   * queued request off the (real) queue before invoking its handler — so
+   * a stray leftover item can never be mistaken for a NEW one queued by a
+   * later step, and every "exactly one request queued" assertion below is
+   * checking a single step's own output in isolation. */
+  async function runOneClaimThroughPipeline(
+    scanObservation: { quote_text: string; claim: string; dimension: string; direction: string },
+    matchDecision: string | "new",
+    validateResult: { merges: Array<{ keep_id: string; merge_id: string }> } = { merges: [] },
+    lens?: "persona" | "agent",
+    agentProvenance?: Record<string, string>
+  ): Promise<{ matchQueued: LLMRequest; validateQueued: LLMRequest }> {
+    const message = seedChannelMessage(sm, CHANNEL_ID, scanObservation.quote_text, new Date().toISOString());
+    const scanRequest = makeScanRequest({
+      personaId: CHANNEL_ID,
+      subjectPersonaId: SUBJECT_ID,
+      subjectPersonId: "sisyphus-person",
+      message_ids_to_mark: [message.id],
+      agentProvenance,
+    });
+    const scanResponse = createMockResponse(scanRequest, {
+      observations: [{
+        quote_text: scanObservation.quote_text,
+        claim: scanObservation.claim,
+        dimension: scanObservation.dimension,
+        direction: scanObservation.direction,
+        extraction_confidence: 0.9,
+        observer_kind: "human",
+      }],
+    });
+
+    const beforeScan = sm.queue_getAllActiveItems().map(r => r.id);
+    await handlers[LLMNextStep.HandlePersonaSignalScan](scanResponse, sm);
+    const afterScan = sm.queue_getAllActiveItems().filter(r => !beforeScan.includes(r.id));
+    const matchQueued = afterScan.find(r => r.next_step === LLMNextStep.HandlePersonaSignalMatch)!;
+    expect(matchQueued).toBeDefined();
+    if (lens) expect(matchQueued.data.lens).toBe(lens);
+    sm.queue_deleteItems([matchQueued.id]);
+
+    const matchResponse = createMockResponse(matchQueued, { matched_guid: matchDecision });
+    const beforeMatch = sm.queue_getAllActiveItems().map(r => r.id);
+    await handlers[LLMNextStep.HandlePersonaSignalMatch](matchResponse, sm);
+    const afterMatch = sm.queue_getAllActiveItems().filter(r => !beforeMatch.includes(r.id));
+    // Update/Reduce is the sole deterministic step: it queued NOTHING of
+    // its own. Exactly one new request appears — Validate.
+    expect(afterMatch).toHaveLength(1);
+    const validateQueued = afterMatch[0];
+    expect(validateQueued.next_step).toBe(LLMNextStep.HandlePersonaSignalValidate);
+    sm.queue_deleteItems([validateQueued.id]);
+
+    const validateResponse = createMockResponse(validateQueued, validateResult);
+    await handlers[LLMNextStep.HandlePersonaSignalValidate](validateResponse, sm);
+
+    return { matchQueued, validateQueued };
+  }
+
+  it("case 1: a Persona-lens claim restating an existing Persona-lens candidate — Match returns its id, Update/Reduce attaches evidence rather than duplicating", async () => {
+    const existing = sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID, claim: "Consistently terse conversational tone.", dimension: "behavior", status: "candidate",
+      evidence_ids: [], first_observed_at: "2026-08-01T00:00:00.000Z", last_observed_at: "2026-08-01T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+    })!;
+
+    await runOneClaimThroughPipeline(
+      { quote_text: "Sisyphus was terse again today", claim: "Consistently terse conversational tone, restated.", dimension: "behavior", direction: "confirms" },
+      existing.id,
+      { merges: [] },
+      "persona"
+    );
+
+    const signals = sm.signals_get(SUBJECT_ID);
+    expect(signals.persona).toHaveLength(1);
+    expect(signals.persona[0].id).toBe(existing.id);
+    expect(signals.persona[0].evidence_ids).toHaveLength(1);
+  });
+
+  it("case 2: a genuinely new, unrelated Persona-lens claim — Match returns 'new', Update/Reduce creates a distinct candidate; the dismissed fixture stays untouched", async () => {
+    const dismissed = sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID, claim: "An old dismissed claim.", dimension: "behavior", status: "dismissed",
+      evidence_ids: [], first_observed_at: "2026-07-01T00:00:00.000Z", last_observed_at: "2026-07-01T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+    })!;
+
+    await runOneClaimThroughPipeline(
+      { quote_text: "Sisyphus picked up a totally new habit of writing changelogs", claim: "Writes detailed changelogs unprompted.", dimension: "behavior", direction: "novel" },
+      "new",
+      { merges: [] },
+      "persona"
+    );
+
+    const signals = sm.signals_get(SUBJECT_ID);
+    const stillDismissed = signals.persona.find(s => s.id === dismissed.id)!;
+    expect(stillDismissed.status).toBe("dismissed");
+    expect(stillDismissed.evidence_ids).toEqual([]);
+    expect(signals.persona.some(s => s.status === "candidate" && s.claim === "Writes detailed changelogs unprompted.")).toBe(true);
+  });
+
+  it("case 3: an Agent-lens claim restating an existing Agent-lens candidate — Match's shown list never includes the Persona-lens signal", async () => {
+    const personaSignal = sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID, claim: "Consistently terse conversational tone.", dimension: "behavior", status: "candidate",
+      evidence_ids: [], first_observed_at: "2026-08-01T00:00:00.000Z", last_observed_at: "2026-08-01T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+    })!;
+    const agentSignal = sm.signal_add(SUBJECT_ID, "agent", {
+      subject_persona_id: SUBJECT_ID, claim: "Verified test-writing discipline observed in a CD2+ transcript.", dimension: "behavior", status: "candidate",
+      evidence_ids: [], first_observed_at: "2026-08-01T00:00:00.000Z", last_observed_at: "2026-08-01T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+    })!;
+
+    const { matchQueued } = await runOneClaimThroughPipeline(
+      { quote_text: "Verified test-writing discipline observed again in a CD2+ transcript", claim: "Verified test-writing discipline, restated.", dimension: "behavior", direction: "confirms" },
+      agentSignal.id,
+      { merges: [] },
+      "agent",
+      { harness: "omp", agent_id: "sub-1", agent_definition_ref: "sisyphus-execute", definition_revision: "sha256:aaaa", mode: "delegated" }
+    );
+
+    // D3: the Match prompt's own closed list was built from ONLY the
+    // agent-lens bucket — the persona-lens signal's claim text never
+    // appears in the system prompt shown to this Match call.
+    expect(matchQueued.system).toContain(agentSignal.claim);
+    expect(matchQueued.system).not.toContain(personaSignal.claim);
+
+    const signals = sm.signals_get(SUBJECT_ID);
+    expect(signals.agent).toHaveLength(1);
+    expect(signals.agent[0].id).toBe(agentSignal.id);
+    expect(signals.persona).toHaveLength(1);
+    expect(signals.persona[0].id).toBe(personaSignal.id);
+    expect(signals.persona[0].evidence_ids).toEqual([]);
+  });
+});
+
+// =============================================================================
+// Bolt 004 — review-driven hardening (ReviewBolt004 findings, post-yield).
+// P0: Scan must validate enum/scalar fields and other_persona attribution
+// before persisting. P1: Match must reject malformed matched_guid rather
+// than defaulting to "new". P1: Validate must never let one malformed
+// merge entry abort the well-formed entries around it.
+// =============================================================================
+
+describe("handlePersonaSignalScan — draft validation (ReviewBolt004 P0)", () => {
+  let sm: StateManager;
+  const CHANNEL_ID = "prometheus-id";
+  const SUBJECT_ID = "sisyphus-id";
+  const BETA_ID = "beta-id";
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    sm.persona_add(makeTestPersona("ei", "Ei"));
+    sm.persona_add(makeTestPersona(CHANNEL_ID, "Prometheus"));
+    sm.persona_add(makeTestPersona(SUBJECT_ID, "Sisyphus"));
+    sm.persona_add(makeTestPersona(BETA_ID, "Beta"));
+    sm.human_person_upsert(makeLinkedPerson("sisyphus-person", "Sisyphus", SUBJECT_ID));
+  });
+
+  function scanWithOneObservation(observation: Record<string, unknown>) {
+    const message = seedChannelMessage(sm, CHANNEL_ID, observation.quote_text as string);
+    const request = makeScanRequest({
+      personaId: CHANNEL_ID,
+      subjectPersonaId: SUBJECT_ID,
+      subjectPersonId: "sisyphus-person",
+      message_ids_to_mark: [message.id],
+    });
+    return createMockResponse(request, { observations: [observation] });
+  }
+
+  it("drops a draft with an invalid dimension rather than persisting a corrupted observation", async () => {
+    const response = scanWithOneObservation({
+      quote_text: "Sisyphus did a thing",
+      claim: "Sisyphus did a thing.",
+      dimension: "not-a-real-dimension",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "human",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops a draft with an invalid direction", async () => {
+    const response = scanWithOneObservation({
+      quote_text: "Sisyphus did a thing",
+      claim: "Sisyphus did a thing.",
+      dimension: "behavior",
+      direction: "sideways",
+      extraction_confidence: 0.9,
+      observer_kind: "human",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops a draft with an invalid observer_kind", async () => {
+    const response = scanWithOneObservation({
+      quote_text: "Sisyphus did a thing",
+      claim: "Sisyphus did a thing.",
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "ghost",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops a draft with a non-numeric or non-finite extraction_confidence", async () => {
+    for (const badConfidence of ["high", null, NaN, Infinity]) {
+      const response = scanWithOneObservation({
+        quote_text: "Sisyphus did a thing",
+        claim: "Sisyphus did a thing.",
+        dimension: "behavior",
+        direction: "novel",
+        extraction_confidence: badConfidence,
+        observer_kind: "human",
+      });
+      await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    }
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops an other_persona draft with a missing observer_persona_id — cannot manufacture an anonymous witness", async () => {
+    const response = scanWithOneObservation({
+      quote_text: "Someone said Sisyphus did a thing",
+      claim: "Sisyphus did a thing.",
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "other_persona",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops an other_persona draft whose observer_persona_id does not resolve to any real persona — a forged witness never becomes independent-context evidence", async () => {
+    const response = scanWithOneObservation({
+      quote_text: "Someone said Sisyphus did a thing",
+      claim: "Sisyphus did a thing.",
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "other_persona",
+      observer_persona_id: "totally-made-up-persona-id",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops an other_persona draft whose observer_persona_id resolves to an ARCHIVED persona", async () => {
+    sm.persona_add(makeTestPersona("archived-id", "Retired", { is_archived: true }));
+    const response = scanWithOneObservation({
+      quote_text: "Someone said Sisyphus did a thing",
+      claim: "Sisyphus did a thing.",
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "other_persona",
+      observer_persona_id: "archived-id",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops an other_persona draft whose observer_persona_id equals the SUBJECT itself — self-testimony can never masquerade as another witness", async () => {
+    const response = scanWithOneObservation({
+      quote_text: "Sisyphus said Sisyphus did a thing",
+      claim: "Sisyphus did a thing.",
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "other_persona",
+      observer_persona_id: SUBJECT_ID,
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("accepts a well-formed other_persona draft whose observer_persona_id resolves to a real, active, non-subject persona", async () => {
+    const response = scanWithOneObservation({
+      quote_text: "Beta said Sisyphus did a thing",
+      claim: "Sisyphus did a thing.",
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "other_persona",
+      observer_persona_id: BETA_ID,
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    const observations = sm.observations_get(SUBJECT_ID);
+    expect(observations).toHaveLength(1);
+    expect(observations[0].observer_persona_id).toBe(BETA_ID);
+  });
+
+  // Second review pass (ReviewBolt004 C1): the array-element itself, and
+  // the claim/quote_text fields, were unvalidated.
+  it("drops a null entry in the observations array without throwing, and still processes a well-formed sibling", async () => {
+    seedChannelMessage(sm, CHANNEL_ID, "Sisyphus did a thing worth noting");
+    const request = makeScanRequest({
+      personaId: CHANNEL_ID, subjectPersonaId: SUBJECT_ID, subjectPersonId: "sisyphus-person",
+      message_ids_to_mark: sm.messages_get(CHANNEL_ID).map(m => m.id),
+    });
+    const response = createMockResponse(request, {
+      observations: [
+        null,
+        { quote_text: "Sisyphus did a thing worth noting", claim: "Sisyphus did a thing worth noting.", dimension: "behavior", direction: "novel", extraction_confidence: 0.9, observer_kind: "human" },
+      ],
+    });
+    await expect(handlers[LLMNextStep.HandlePersonaSignalScan](response, sm)).resolves.not.toThrow();
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(1);
+  });
+
+  it("R8/AT8(a): an invalid draft creates no observation and queues no Match request, while a valid sibling in the same array queues exactly one", async () => {
+    seedChannelMessage(sm, CHANNEL_ID, "Sisyphus did a thing worth noting");
+    const request = makeScanRequest({
+      personaId: CHANNEL_ID, subjectPersonaId: SUBJECT_ID, subjectPersonId: "sisyphus-person",
+      message_ids_to_mark: sm.messages_get(CHANNEL_ID).map(m => m.id),
+    });
+    const response = createMockResponse(request, {
+      observations: [
+        { quote_text: "Sisyphus did a thing worth noting", claim: "Sisyphus did a thing worth noting.", dimension: "not-a-real-dimension", direction: "novel", extraction_confidence: 0.9, observer_kind: "human" },
+        { quote_text: "Sisyphus did a thing worth noting", claim: "Sisyphus did a thing worth noting.", dimension: "behavior", direction: "novel", extraction_confidence: 0.9, observer_kind: "human" },
+      ],
+    });
+
+    const beforeQueue = sm.queue_getAllActiveItems().map(r => r.id);
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    const queuedMatchRequests = sm.queue_getAllActiveItems().filter(r => !beforeQueue.includes(r.id) && r.next_step === LLMNextStep.HandlePersonaSignalMatch);
+
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(1);
+    expect(queuedMatchRequests).toHaveLength(1);
+  });
+
+
+  it("drops entries that are not objects at all (a bare string, a number) in the same array", async () => {
+    const request = makeScanRequest({
+      personaId: CHANNEL_ID, subjectPersonaId: SUBJECT_ID, subjectPersonId: "sisyphus-person",
+      message_ids_to_mark: [],
+    });
+    const response = createMockResponse(request, { observations: ["not-an-object", 42, ["also", "not"]] });
+    await expect(handlers[LLMNextStep.HandlePersonaSignalScan](response, sm)).resolves.not.toThrow();
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops a draft whose claim is not a string (e.g. an object) — never persists a non-string claim that would crash claimsMatch downstream", async () => {
+    const response = scanWithOneObservation({
+      quote_text: "Sisyphus did a specific thing",
+      claim: { nested: "not a string" },
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "human",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops a draft whose claim is an empty string", async () => {
+    const response = scanWithOneObservation({
+      quote_text: "Sisyphus did a specific thing",
+      claim: "",
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "human",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("drops a draft whose quote_text is not a string (e.g. a number) rather than letting it silently fail quote-matching for the wrong reason", async () => {
+    const response = scanWithOneObservation({
+      quote_text: 7,
+      claim: "Sisyphus did a specific thing.",
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: 0.9,
+      observer_kind: "human",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it.each([-0.01, 1.01, -5, 100])("drops a draft whose extraction_confidence (%s) is finite but outside the 0.0-1.0 range", async (badConfidence) => {
+    const response = scanWithOneObservation({
+      quote_text: "Sisyphus did a specific thing",
+      claim: "Sisyphus did a specific thing.",
+      dimension: "behavior",
+      direction: "novel",
+      extraction_confidence: badConfidence,
+      observer_kind: "human",
+    });
+    await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(0);
+  });
+
+  it("accepts extraction_confidence at the exact 0.0 and 1.0 boundaries", async () => {
+    for (const boundary of [0, 1]) {
+      const response = scanWithOneObservation({
+        quote_text: `Sisyphus did thing number ${boundary}`,
+        claim: `Sisyphus did thing number ${boundary}.`,
+        dimension: "behavior",
+        direction: "novel",
+        extraction_confidence: boundary,
+        observer_kind: "human",
+      });
+      await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+    }
+    expect(sm.observations_get(SUBJECT_ID)).toHaveLength(2);
+  });
+});
+
+describe("handlePersonaSignalMatch — D11/R8/AT8(b): malformed or non-resolving matched_guid is a no-op, never coerced to 'new'", () => {
+  let sm: StateManager;
+  const SUBJECT_ID = "sisyphus-id";
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    sm.persona_add(makeTestPersona(SUBJECT_ID, "Sisyphus"));
+  });
+
+  function seedObservation(): PersonaObservation {
+    return sm.observation_add(SUBJECT_ID, {
+      subject_person_id: "sisyphus-person", subject_persona_id: SUBJECT_ID, observer_kind: "human",
+      message_id: "msg-1", observed_at: "2026-08-11T00:00:00.000Z", dimension: "behavior",
+      direction: "novel", claim: "A claim.", extraction_confidence: 0.8,
+    })!;
+  }
+
+  it.each([
+    ["an empty object (missing matched_guid entirely)", {}],
+    ["an explicit null matched_guid — AT8(b)'s named case", { matched_guid: null }],
+    ["a number", { matched_guid: 123 }],
+    ["an empty string", { matched_guid: "" }],
+    ["an array", { matched_guid: ["not-a-string"] }],
+  ])("creates no candidate and queues no Validate request (never throws) when the parsed response is %s", async (_label, parsed) => {
+    const observation = seedObservation();
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalMatch,
+      data: { subjectPersonaId: SUBJECT_ID, observationId: observation.id, lens: "persona" },
+    });
+    const response = createMockResponse(request, parsed);
+
+    expect(() => handlers[LLMNextStep.HandlePersonaSignalMatch](response, sm)).not.toThrow();
+    // No durable side effect from the rejected, malformed response, and
+    // no follow-on Validate request queued (D11).
+    expect(sm.signals_get(SUBJECT_ID).persona).toHaveLength(0);
+    const validateRequests = sm.queue_getAllActiveItems().filter(r => r.next_step === LLMNextStep.HandlePersonaSignalValidate);
+    expect(validateRequests).toHaveLength(0);
+  });
+
+  it("still accepts the literal 'new' string, and queues Validate", async () => {
+    const observation = seedObservation();
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalMatch,
+      data: { subjectPersonaId: SUBJECT_ID, observationId: observation.id, lens: "persona" },
+    });
+    const response = createMockResponse(request, { matched_guid: "new" });
+    expect(() => handlers[LLMNextStep.HandlePersonaSignalMatch](response, sm)).not.toThrow();
+    expect(sm.signals_get(SUBJECT_ID).persona).toHaveLength(1);
+    const validateRequests = sm.queue_getAllActiveItems().filter(r => r.next_step === LLMNextStep.HandlePersonaSignalValidate);
+    expect(validateRequests).toHaveLength(1);
+  });
+});
+
+
+describe("handlePersonaSignalValidate — D12/R8/AT8(c): a single malformed/non-resolving merge entry voids the WHOLE batch", () => {
+  let sm: StateManager;
+  const SUBJECT_ID = "sisyphus-id";
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    sm.persona_add(makeTestPersona(SUBJECT_ID, "Sisyphus"));
+  });
+
+  function addOpenSignal(claim: string, overrides: Partial<Parameters<StateManager["signal_add"]>[2]> = {}) {
+    return sm.signal_add(SUBJECT_ID, "persona", {
+      subject_persona_id: SUBJECT_ID, claim, dimension: "behavior", status: "candidate",
+      evidence_ids: [], first_observed_at: "2026-08-01T00:00:00.000Z", last_observed_at: "2026-08-01T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+      ...overrides,
+    })!;
+  }
+
+  it("AT8(c): a valid-then-malformed merges array leaves BOTH original signals unchanged — no partial apply, no retry over a state-changing attempt", async () => {
+    const keep = addOpenSignal("Terse tone.");
+    const dup = addOpenSignal("Terse conversational tone.");
+
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalValidate,
+      data: { personaId: SUBJECT_ID, lens: "persona" },
+    });
+    // The well-formed keep/dup pair comes FIRST — proving that a
+    // malformed sibling AFTER it still voids the whole batch, rather
+    // than the earlier valid entry having already mutated state before
+    // the scan reaches the bad one.
+    const response = createMockResponse(request, { merges: [{ keep_id: keep.id, merge_id: dup.id }, null] });
+
+    expect(() => handlers[LLMNextStep.HandlePersonaSignalValidate](response, sm)).not.toThrow();
+
+    const signals = sm.signals_get(SUBJECT_ID).persona;
+    expect(signals.find(s => s.id === keep.id)).toBeDefined();
+    const survivingDup = signals.find(s => s.id === dup.id);
+    expect(survivingDup).toBeDefined();
+    expect(survivingDup!.evidence_ids).toEqual([]);
+  });
+
+  it("drops the whole batch when an entry has a missing/empty keep_id or merge_id", async () => {
+    const solo = addOpenSignal("Solo claim.");
+    const other = addOpenSignal("Other claim.");
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalValidate,
+      data: { personaId: SUBJECT_ID, lens: "persona" },
+    });
+    const response = createMockResponse(request, {
+      merges: [
+        { keep_id: solo.id, merge_id: other.id },
+        { keep_id: "", merge_id: solo.id },
+        { keep_id: solo.id },
+        "not-an-object",
+      ],
+    });
+
+    expect(() => handlers[LLMNextStep.HandlePersonaSignalValidate](response, sm)).not.toThrow();
+    expect(sm.signals_get(SUBJECT_ID).persona).toHaveLength(2);
+  });
+
+  it("drops the whole batch when an entry names a signal id that doesn't resolve to any currently-open same-lens signal", async () => {
+    const keep = addOpenSignal("Terse tone.");
+    const dup = addOpenSignal("Terse conversational tone.");
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalValidate,
+      data: { personaId: SUBJECT_ID, lens: "persona" },
+    });
+    const response = createMockResponse(request, {
+      merges: [
+        { keep_id: keep.id, merge_id: dup.id },
+        { keep_id: keep.id, merge_id: "totally-made-up-signal-id" },
+      ],
+    });
+
+    expect(() => handlers[LLMNextStep.HandlePersonaSignalValidate](response, sm)).not.toThrow();
+    const signals = sm.signals_get(SUBJECT_ID).persona;
+    expect(signals.find(s => s.id === dup.id)).toBeDefined();
+  });
+
+  it("drops the whole batch when an entry names a signal from the WRONG lens", async () => {
+    const keep = addOpenSignal("Terse tone.");
+    const dup = addOpenSignal("Terse conversational tone.");
+    const agentSignal = sm.signal_add(SUBJECT_ID, "agent", {
+      subject_persona_id: SUBJECT_ID, claim: "Agent-lens claim.", dimension: "behavior", status: "candidate",
+      evidence_ids: [], first_observed_at: "2026-08-01T00:00:00.000Z", last_observed_at: "2026-08-01T00:00:00.000Z",
+      observer_kinds: ["human"], recurrence_count: 1,
+    })!;
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalValidate,
+      data: { personaId: SUBJECT_ID, lens: "persona" },
+    });
+    const response = createMockResponse(request, {
+      merges: [
+        { keep_id: keep.id, merge_id: dup.id },
+        { keep_id: keep.id, merge_id: agentSignal.id },
+      ],
+    });
+
+    expect(() => handlers[LLMNextStep.HandlePersonaSignalValidate](response, sm)).not.toThrow();
+    expect(sm.signals_get(SUBJECT_ID).persona.find(s => s.id === dup.id)).toBeDefined();
+    expect(sm.signals_get(SUBJECT_ID).agent.find(s => s.id === agentSignal.id)).toBeDefined();
+  });
+
+  it("a fully well-formed batch (no malformed siblings) still applies every merge", async () => {
+    const keepA = addOpenSignal("Terse tone.");
+    const dupA = addOpenSignal("Terse conversational tone.");
+    const keepB = addOpenSignal("Writes detailed changelogs.");
+    const dupB = addOpenSignal("Writes very detailed changelogs unprompted.");
+    const request = createMockRequest({
+      next_step: LLMNextStep.HandlePersonaSignalValidate,
+      data: { personaId: SUBJECT_ID, lens: "persona" },
+    });
+    const response = createMockResponse(request, {
+      merges: [
+        { keep_id: keepA.id, merge_id: dupA.id },
+        { keep_id: keepB.id, merge_id: dupB.id },
+      ],
+    });
+
+    await handlers[LLMNextStep.HandlePersonaSignalValidate](response, sm);
+
+    const signals = sm.signals_get(SUBJECT_ID).persona;
+    expect(signals.find(s => s.id === dupA.id)).toBeUndefined();
+    expect(signals.find(s => s.id === dupB.id)).toBeUndefined();
+    expect(signals.find(s => s.id === keepA.id)).toBeDefined();
+    expect(signals.find(s => s.id === keepB.id)).toBeDefined();
+  });
+});
+

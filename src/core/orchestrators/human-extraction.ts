@@ -1,5 +1,6 @@
-import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type Topic, type Person } from "../types.js";
+import { LLMRequestType, LLMPriority, LLMNextStep, type Message, type Topic, type Person, type PersonaEntity } from "../types.js";
 import type { PersonIdentifier } from "../types/data-items.js";
+import type { PersonaObservation } from "../types/signals.js";
 import type { StateManager } from "../state-manager.js";
 import {
   buildFactFindPrompt,
@@ -9,10 +10,15 @@ import {
   buildTopicUpdatePrompt,
   buildPersonUpdatePrompt,
   buildEventScanPrompt,
+  buildPersonaSignalScanPrompt,
+  buildPersonaSignalMatchPrompt,
+  buildPersonaSignalValidatePrompt,
   type TopicScanCandidate,
   type ItemMatchResult,
   type ParticipantContext,
+  type PersonaSignalRosterEntry,
 } from "../../prompts/human/index.js";
+import type { AgentProvenance } from "../utils/persona-signal-lens.js";
 import { buildValidatePrompt } from "../../prompts/ceremony/dedup.js";
 import { normalizeRoomMessages } from "../handlers/utils.js";
 import { chunkExtractionContext } from "./extraction-chunker.js";
@@ -808,4 +814,146 @@ export async function queueTopicValidate(
   });
 }
 
+/**
+ * Scan/Extract — step 1 of the Observation→Signal reducer (D1, Spec
+ * §4.17). Queued from `handleHumanPersonScan`'s branch point (D2, §4.3)
+ * instead of `queuePersonUpdate` whenever the matched Person record is
+ * Persona-linked. `context.messages_context`/`messages_analyze` are
+ * already the resolved window for this chunk — no re-chunking here, since
+ * this is invoked mid-way through an already-chunked person-scan pass.
+ *
+ * `agentProvenance` accepts a `Partial<AgentProvenance>` (Bolt 009,
+ * Spec §4.13/D3) — a CD2+ transcript missing `session_init`'s `agent` or
+ * `systemPrompt` still needs its (incomplete) provenance forwarded here,
+ * never silently upgraded to `undefined`, since `classifyObservationLens`
+ * treats "incomplete provenance" (`needs_agent_provenance`) as distinct
+ * from "no provenance at all" (`persona` lens) — completeness is judged
+ * downstream, in the handler, never at this queue site.
+ */
+export function queuePersonaSignalScan(
+  context: ExtractionContext,
+  subjectPersona: PersonaEntity,
+  subjectPersonId: string,
+  state: StateManager,
+  extractionModel?: string,
+  agentProvenance?: Partial<AgentProvenance>
+): void {
+  const roster: PersonaSignalRosterEntry[] = state.persona_getAll()
+    .filter((p) => p.id !== subjectPersona.id && !p.is_archived)
+    .map((p) => ({ id: p.id, display_name: p.display_name }));
 
+  const channelPersonaId = context.personaId.split("|")[0];
+
+  const prompt = buildPersonaSignalScanPrompt({
+    subject_persona_name: subjectPersona.display_name,
+    channel_persona_name: context.channelDisplayName,
+    persona_roster: roster,
+    messages_context: context.messages_context,
+    messages_analyze: context.messages_analyze,
+    participant_context: buildParticipantContext(channelPersonaId, state),
+  });
+
+  state.queue_enqueue({
+    type: LLMRequestType.JSON,
+    priority: LLMPriority.Low,
+    model: extractionModel,
+    system: prompt.system,
+    user: prompt.user,
+    next_step: LLMNextStep.HandlePersonaSignalScan,
+    data: {
+      personaId: context.personaId,
+      roomId: context.roomId,
+      subjectPersonaId: subjectPersona.id,
+      subjectPersonId,
+      agentProvenance,
+      analyze_from_timestamp: getAnalyzeFromTimestamp(context),
+      message_ids_to_mark: context.messages_analyze.map((m) => m.id),
+      extraction_model: extractionModel,
+    },
+  });
+}
+
+/**
+ * Match — step 2 of the Observation→Signal reducer (D3, Spec §4.17).
+ * Shown only the subject Persona's OPEN (`candidate`/`recurring`) signals
+ * in the SAME lens as `observation`'s own classification — the two lenses
+ * never share a Match candidate list, enforced here by construction
+ * (`signals_get(...)[lens]`, never both buckets).
+ */
+export function queuePersonaSignalMatch(
+  observation: PersonaObservation,
+  lens: "persona" | "agent",
+  // Bolt 008 (D1, Spec §4.12): Add-Observation's own self-drain path
+  // (src/core/corrections.ts's applyObservationAddToState) has no live
+  // StateManager to hand in -- it works directly against a StorageState
+  // loaded fresh from disk, via scratch PersonaState/QueueState
+  // instances. Narrowing the parameter to just the two methods this
+  // function actually calls lets that path pass a lightweight adapter
+  // over those scratch instances instead of constructing (and having to
+  // account for the side effects of) a full StateManager -- a real
+  // StateManager still satisfies this type structurally, so
+  // handlePersonaSignalScan's existing call site is unaffected.
+  state: Pick<StateManager, "signals_get" | "queue_enqueue">,
+  extractionModel?: string
+): void {
+  const openSignals = state.signals_get(observation.subject_persona_id)[lens]
+    .filter((s) => s.status === "candidate" || s.status === "recurring");
+
+  const prompt = buildPersonaSignalMatchPrompt({
+    candidate_claim: observation.claim,
+    candidate_dimension: observation.dimension,
+    existing_signals: openSignals.map((s) => ({ id: s.id, claim: s.claim, dimension: s.dimension })),
+  });
+
+  state.queue_enqueue({
+    type: LLMRequestType.JSON,
+    priority: LLMPriority.Normal,
+    model: extractionModel,
+    system: prompt.system,
+    user: prompt.user,
+    next_step: LLMNextStep.HandlePersonaSignalMatch,
+    data: {
+      subjectPersonaId: observation.subject_persona_id,
+      observationId: observation.id,
+      lens,
+      extraction_model: extractionModel,
+    },
+  });
+}
+
+/**
+ * Validate — step 4 of the Observation→Signal reducer (D5, Spec §4.17).
+ * Always queued after Update/Reduce, over whatever `candidate`/`recurring`
+ * signals currently exist in this lens — AT-R17/AT6 require exactly three
+ * LLM calls (Scan/Extract, Match, Validate) per processed claim, so this
+ * is never skipped for a short or empty list.
+ */
+export function queuePersonaSignalValidate(
+  personaId: string,
+  lens: "persona" | "agent",
+  state: StateManager,
+  extractionModel?: string
+): void {
+  const openSignals = state.signals_get(personaId)[lens]
+    .filter((s) => s.status === "candidate" || s.status === "recurring");
+
+  const prompt = buildPersonaSignalValidatePrompt({
+    signals: openSignals.map((s) => ({
+      id: s.id,
+      claim: s.claim,
+      dimension: s.dimension,
+      status: s.status,
+      recurrence_count: s.recurrence_count,
+    })),
+  });
+
+  state.queue_enqueue({
+    type: LLMRequestType.JSON,
+    priority: LLMPriority.Normal,
+    model: extractionModel,
+    system: prompt.system,
+    user: prompt.user,
+    next_step: LLMNextStep.HandlePersonaSignalValidate,
+    data: { personaId, lens, extraction_model: extractionModel },
+  });
+}
