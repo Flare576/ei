@@ -52,7 +52,6 @@ interface EditablePersonaData {
   heartbeat_delay_ms?: string | null;
   context_window_ms?: string | null;
   is_paused?: boolean;
-  external_reflection_only?: boolean;
   pause_until?: string;
   is_static?: boolean;
   include_message_timestamps?: boolean;
@@ -198,7 +197,6 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
     heartbeat_delay_ms: persona.heartbeat_delay_ms ? formatDuration(persona.heartbeat_delay_ms) : null,
     context_window_ms: persona.context_window_ms ? formatDuration(persona.context_window_ms) : null,
     is_paused: persona.is_paused || undefined,
-    external_reflection_only: persona.external_reflection_only ?? false,
     pause_until: persona.pause_until,
     is_static: persona.is_static || undefined,
     include_message_timestamps: persona.include_message_timestamps ?? false,
@@ -266,7 +264,6 @@ export function personaEditableFingerprint(persona: PersonaEntity): string {
     heartbeat_delay_ms: persona.heartbeat_delay_ms ?? null,
     context_window_ms: persona.context_window_ms ?? null,
     is_paused: persona.is_paused ?? false,
-    external_reflection_only: persona.external_reflection_only ?? false,
     pause_until: persona.pause_until ?? null,
     is_static: persona.is_static ?? false,
     include_message_timestamps: persona.include_message_timestamps ?? false,
@@ -373,7 +370,6 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
       ? undefined
       : parseDuration(data.context_window_ms) ?? undefined,
     is_paused: validateBooleanField(data.is_paused, "is_paused") ?? false,
-    external_reflection_only: validateBooleanField(data.external_reflection_only, "external_reflection_only") ?? false,
     pause_until: data.pause_until,
     is_static: validateBooleanField(data.is_static, "is_static") ?? false,
     include_message_timestamps: validateBooleanField(data.include_message_timestamps, "include_message_timestamps") ?? false,

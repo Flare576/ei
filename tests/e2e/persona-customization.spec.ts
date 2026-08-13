@@ -29,7 +29,6 @@ interface PersonaEntity {
   is_archived: boolean;
   last_updated: string;
   include_message_timestamps?: boolean;
-  external_reflection_only?: boolean;
 }
 
 interface Checkpoint {
@@ -73,7 +72,6 @@ function createCheckpoint(
     avatar_emoji?: string;
     preferred_theme?: string;
     include_message_timestamps?: boolean;
-    external_reflection_only?: boolean;
   }>
 ): Checkpoint {
   const timestamp = new Date().toISOString();
@@ -101,9 +99,6 @@ function createCheckpoint(
         ...(config.preferred_theme !== undefined ? { preferred_theme: config.preferred_theme } : {}),
         ...(config.include_message_timestamps !== undefined
           ? { include_message_timestamps: config.include_message_timestamps }
-          : {}),
-        ...(config.external_reflection_only !== undefined
-          ? { external_reflection_only: config.external_reflection_only }
           : {}),
       } as PersonaEntity,
       messages: [],
@@ -437,51 +432,5 @@ test.describe("Persona Customization UI", () => {
     const timestampsCheckboxReopened = page.getByLabel("Show Timestamps");
     await expect(timestampsCheckboxReopened).toBeVisible({ timeout: 5000 });
     await expect(timestampsCheckboxReopened).toBeChecked();
-  });
-
-  /**
-   * Test 6: External Reflection Only checkbox persists after close and reopen.
-   * Located via data-testid, not label text — see PersonaSettingsTab.tsx.
-   */
-  test("external reflection only checkbox persists after close and reopen", async ({
-    page,
-    mockServerUrl,
-  }) => {
-    test.slow(); // Extra time for state to settle on reopen
-
-    const checkpoint = createCheckpoint(mockServerUrl, [
-      {
-        id: "test-06",
-        display_name: "ReflectBot",
-        short_description: "Reflection test persona",
-        external_reflection_only: false,
-      },
-    ]);
-
-    await loadCheckpoint(page, mockServerUrl, checkpoint);
-    await page.goto("/");
-
-    // Open editor — it opens on Settings tab by default
-    await openEditorForPersona(page, "ReflectBot");
-
-    const externalReflectionCheckbox = page.getByTestId("external-reflection-only-checkbox");
-    await expect(externalReflectionCheckbox).toBeVisible({ timeout: 5000 });
-    await expect(externalReflectionCheckbox).not.toBeChecked();
-
-    // Enable external-reflection-only
-    await externalReflectionCheckbox.check();
-    await expect(externalReflectionCheckbox).toBeChecked();
-
-    // Close editor (accept any dialog)
-    await closeEditor(page);
-    await expect(page.locator("text=Edit Persona: ReflectBot")).not.toBeVisible({ timeout: 5000 });
-
-    // Re-open editor
-    await openEditorForPersona(page, "ReflectBot");
-
-    // Assert the setting persisted
-    const externalReflectionCheckboxReopened = page.getByTestId("external-reflection-only-checkbox");
-    await expect(externalReflectionCheckboxReopened).toBeVisible({ timeout: 5000 });
-    await expect(externalReflectionCheckboxReopened).toBeChecked();
   });
 });
