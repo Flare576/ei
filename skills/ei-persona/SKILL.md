@@ -96,7 +96,6 @@ people/quotes). It has:
 | **identity fields** | `display_name`, `short_description`, `long_description` | rewrite the field |
 | **traits** (`traits[]`) | named character traits, each with a sentiment and optional strength | add / adjust / remove an entry |
 | **topics** (`topics[]`) | subjects the persona has a stance on — perspective, approach, personal stake | add / adjust / remove an entry |
-| **reflection opt-out** (`external_reflection_only`) | whether Ei's automatic Reflection critic skips this persona | flip via a normal update |
 
 **Lifecycle flags and tool grants are TUI-only now, not this skill's to touch.**
 `is_paused`, `is_archived`, and `tools` are all real fields on the record — `ei --id`

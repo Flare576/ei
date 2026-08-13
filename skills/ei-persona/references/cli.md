@@ -41,8 +41,6 @@ aliases: [ "…" ],                      # for fuzzy matching (e.g. "/persona Bo
 short_description, long_description,
 traits: [ PersonaTrait, … ],
 topics: [ PersonaTopic, … ],
-external_reflection_only,              # true = Ei's automatic Reflection critic skips this
-                                        # persona; defaults to false at create
 avatar_emoji, avatar_image,
 preferred_theme,
 notes: [ "…" ],                        # capped at 20 entries server-side — a write that

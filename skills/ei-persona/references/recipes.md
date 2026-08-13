@@ -154,7 +154,7 @@ in X."
    set. There is **no minimum count** and **no auto-generation fallback** on this path —
    whatever character the persona has is whatever you and the user put in the payload.
 2. Draft the full creation payload: `display_name` plus whichever of
-   `short_description`, `long_description`, `traits`, `topics`, `external_reflection_only`
+   `short_description`, `long_description`, `traits`, `topics`
    the user wants set at creation. Omit `id` on every trait/topic — auto-assigned. `model`,
    `group_primary`, `groups_visible`, and `tools` are no longer part of this payload at all
    (ADR-031) — the persona starts with system defaults for all of them, and none of them
