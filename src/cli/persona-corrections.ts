@@ -31,8 +31,8 @@
  * feature).
  *
  * `create` keeps the pre-ADR-029 full-body contract: display_name is
- * required, traits/topics/external_reflection_only default exactly as
- * before. `update` is RFC 7396 JSON Merge Patch (ADR-029): omitting a
+ * required, traits/topics default exactly as before. `update` is RFC
+ * 7396 JSON Merge Patch (ADR-029): omitting a
  * field leaves it unchanged, `traits: []` genuinely empties the array,
  * and `pending_update: null` is the only legal way to clear a pending
  * Critic proposal (non-null content is rejected at parse time — Clearable,
@@ -49,11 +49,13 @@ import { loadLatestState } from "./retrieval.js";
 import { writeCorrection } from "./corrections-writer.js";
 import { computePersonaDescriptionEmbedding } from "../core/embedding-service.js";
 import { CorrectionValidationError } from "./corrections-endpoints.js";
-import { resolvePersonaPatchCandidate } from "../core/corrections.js";
+import { resolvePersonaPatchCandidate, resolveOwnPersona, isParseableIso8601 } from "../core/corrections.js";
 import { isReservedPersonaName, isReservedPersonaId, RESERVED_PERSONA_NAMES } from "../core/types/entities.js";
-import type { PersonaEntity } from "../core/types/entities.js";
+import type { PersonaEntity, PersonaIdentityDelta } from "../core/types/entities.js";
 import type { PersonaTrait, PersonaTopic } from "../core/types/data-items.js";
-import type { CorrectionRecord, MergePatch } from "../core/corrections.js";
+import type { PersonaObservation, EmergentSignal } from "../core/types/signals.js";
+import type { CorrectionRecord, MergePatch, CorrectionObservationAdd, CorrectionSignalConfirm, CorrectionSignalDismiss } from "../core/corrections.js";
+import { sanitizeMessageIdForLog } from "../core/utils/message-refusal.js";
 // `personaBaseShape`/`personaTraitSchema`/`personaTopicSchema` and the
 // derived create/patch/candidate schemas now live in
 // `src/core/entity-schemas.ts` (relocated 2026-08-07, Beta's review
@@ -220,7 +222,6 @@ export async function createPersonaEntity(body: unknown): Promise<{ id: string; 
     avatar_image: parsed.avatar_image,
     preferred_theme: parsed.preferred_theme,
     notes: parsed.notes,
-    external_reflection_only: parsed.external_reflection_only,
   };
 
   if (record.long_description) {
@@ -260,9 +261,9 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Ex
   if (!state) {
     throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
   }
-  const existing = state.personas[id];
+  const existing = resolveOwnPersona(state.personas, id);
   if (!existing) {
-    throw new Error(`No persona found with id: ${id}`);
+    throw new Error(`No persona found with id: ${sanitizeMessageIdForLog(id)}`);
   }
 
   const now = new Date().toISOString();
@@ -307,8 +308,8 @@ export async function removePersonaEntity(id: string): Promise<void> {
   if (!state) {
     throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
   }
-  if (!state.personas[id]) {
-    throw new Error(`No persona found with id: ${id}`);
+  if (!resolveOwnPersona(state.personas, id)) {
+    throw new Error(`No persona found with id: ${sanitizeMessageIdForLog(id)}`);
   }
 
   // CRITICAL: this check MUST run here, synchronously, before
@@ -326,4 +327,259 @@ export async function removePersonaEntity(id: string): Promise<void> {
 
   const correction: CorrectionRecord = { op: "remove", entity_type: "persona", id, timestamp: new Date().toISOString() };
   await writeCorrection(correction);
+}
+
+
+// ── Add Observation / Apply Signal (Bolt 008, Spec §4.12) ───────────────────
+//
+// `ei add observation <personaId>` / MCP `ei_observation_add`, and
+// `ei confirm|dismiss signal <personaId> <signalId>` / MCP
+// `ei_signal_confirm`/`ei_signal_dismiss` (CLI, src/cli.ts; MCP, src/cli/
+// mcp.ts). Same family as create/update/remove above — a validated parse
+// here, a CorrectionRecord queued via writeCorrection, and (per D1) never a
+// direct call into a live Processor/StateManager method — but neither op
+// mints its own id up front the way create does: an observation's id and a
+// confirmed signal's `pending_update` are both minted at DRAIN time (D1's
+// "collection owns id generation" convention, and D2's proposal-write),
+// which only self-drain resolves synchronously. When a live Ei instance is
+// running (`writeCorrection`'s "queued" drainMode), this call's own return
+// value can only honestly report that the write is pending, not its
+// eventual shape — the same asymmetry `ei_quote_create`'s own "queued"
+// branch already has to report.
+//
+// D10 (Sisyphus's ruling on the caller-attribution needs-ruling issue,
+// `.sisyphus/issues/persona-signal-caller-attribution-needs-ruling.md`):
+// `observer_kind`/`observer_persona_id` below (Add Observation) and
+// `actor` (Apply Signal, both confirm/dismiss) are SELF-ATTESTED CALLER
+// CLAIMS, not verified identities — neither the CLI nor MCP surface has
+// (or gains) an authenticated-caller concept anywhere in this codebase.
+// Ei records who the caller SAYS witnessed/is-reviewing, exactly as it
+// already trusts every other caller-supplied content field on the
+// pre-existing `patch` op (shape/type validation only, no separate
+// identity check on what a caller may assert). D11: because
+// `observer_persona_id` specifically feeds automatic promotion arithmetic
+// (`observationContextKey`/`independentContextCount`,
+// `src/core/state/personas.ts`) where `actor` feeds only audit metadata,
+// a self-attested `other_persona` Add-Observation claim is excluded from
+// that automatic tally entirely — see `PersonaState.independentContextCount`'s
+// own doc comment for the mechanics. `actor` is unaffected by D11: pure
+// audit metadata on a human review action, feeds no corroboration
+// arithmetic, self-attested per this same D10.
+
+const SIGNAL_DIMENSIONS = ["behavior", "voice", "values", "relationship", "identity"] as const;
+const SIGNAL_DIRECTIONS = ["novel", "confirms", "challenges"] as const;
+const OBSERVER_KINDS = ["human", "subject_self", "other_persona"] as const;
+
+const observationAddBodySchema = z.strictObject({
+  subject_person_id: z.string().min(1),
+  // D10: self-attested — the caller vouches for who witnessed this; Ei
+  // does not independently verify it (see this section's own header
+  // comment above).
+  observer_kind: z.enum(OBSERVER_KINDS),
+  observer_persona_id: z.string().min(1).optional(),
+  message_id: z.string().min(1).optional(),
+  quote_id: z.string().min(1).optional(),
+  observed_at: z.string().min(1).optional(),
+  dimension: z.enum(SIGNAL_DIMENSIONS),
+  direction: z.enum(SIGNAL_DIRECTIONS),
+  claim: z.string().min(1),
+  extraction_confidence: z.number().min(0).max(1).optional(),
+  lens: z.enum(["persona", "agent"]),
+}).refine(
+  (body) => body.observer_kind !== "other_persona" || Boolean(body.observer_persona_id),
+  { message: 'observer_kind "other_persona" requires observer_persona_id' }
+).refine(
+  // D6 (Beta's Bolt-008-review finding I1): a fabricated non-ISO
+  // observed_at (e.g. "fake-day-1") must never reach a queued
+  // correction -- it manufactures an independent-context day-bucket for
+  // promotion arithmetic downstream. Rejected here, before Add
+  // Observation ever calls writeCorrection.
+  (body) => body.observed_at === undefined || isParseableIso8601(body.observed_at),
+  { message: "observed_at must be a parseable ISO 8601 timestamp" }
+);
+
+type ObservationAddBodyInput = z.infer<typeof observationAddBodySchema>;
+
+function parseObservationAddBody(body: unknown): ObservationAddBodyInput {
+  const result = observationAddBodySchema.safeParse(body);
+  if (!result.success) {
+    throw new CorrectionValidationError(`Invalid observation: ${formatValidationIssues(result.error.issues)}`);
+  }
+  return result.data;
+}
+
+const personaIdentityDeltaSchema = z.strictObject({
+  short_description: z.string(),
+  long_description: z.string(),
+  traits: z.array(personaTraitSchema),
+  topics: z.array(personaTopicSchema),
+});
+
+const applySignalBodySchema = z.strictObject({
+  // D10: self-attested — the caller vouches for who is reviewing this;
+  // Ei does not independently verify it (see this section's own header
+  // comment above). Pure audit metadata (D11): unaffected by the
+  // independence-tally exclusion that applies to Add-Observation's
+  // observer_persona_id.
+  actor: z.string().min(1),
+  delta: personaIdentityDeltaSchema.optional(),
+});
+
+type ApplySignalBodyInput = z.infer<typeof applySignalBodySchema>;
+
+function parseApplySignalBody(body: unknown): ApplySignalBodyInput {
+  const result = applySignalBodySchema.safeParse(body);
+  if (!result.success) {
+    throw new CorrectionValidationError(`Invalid signal disposition: ${formatValidationIssues(result.error.issues)}`);
+  }
+  return result.data;
+}
+
+/**
+ * Add Observation (D1, R1/AT1). Asserts a `PersonaObservation` directly,
+ * attributed to the caller via `observer_kind`/`observer_persona_id` —
+ * §4.6's own resolution rules apply only to conversation EXTRACTION (Bolt
+ * 004's Scan/Extract), which this operation skips entirely, so the caller
+ * supplies attribution directly rather than having it inferred from a
+ * transcript. `message_id`/`observed_at`/`extraction_confidence` default
+ * (a synthesized `correction:<uuid>` pointer, drain time, and `1` — a
+ * direct assertion rather than an extracted-with-uncertainty claim,
+ * respectively) when the caller has no real conversation message to point
+ * at; `lens` is required, since Scan/Extract's own classification
+ * (`classifyObservationLens`) is what this operation skips.
+ *
+ * Returns `{status: "queued"}` when a live Ei instance picks this up
+ * asynchronously (the observation's minted id isn't knowable yet); after a
+ * synchronous self-drain, reloads state and returns the persisted
+ * observation (the just-appended entry — self-drain applies exactly one
+ * caller-visible mutation to this persona's `observations[]` per call).
+ */
+export async function addPersonaObservation(
+  personaId: string,
+  body: unknown
+): Promise<{ status: "queued" } | { status: "recorded"; observation: PersonaObservation }> {
+  const parsed = parseObservationAddBody(body);
+
+  const state = await loadLatestState();
+  if (!state) {
+    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
+  }
+  if (!resolveOwnPersona(state.personas, personaId)) {
+    throw new Error(`No persona found with id: ${sanitizeMessageIdForLog(personaId)}`);
+  }
+  if (parsed.observer_kind === "other_persona") {
+    if (parsed.observer_persona_id === personaId) {
+      throw new CorrectionValidationError(`observer_persona_id cannot equal the subject persona — self-testimony is observer_kind "subject_self"`);
+    }
+    const observer = resolveOwnPersona(state.personas, parsed.observer_persona_id!);
+    if (!observer || observer.entity.is_archived) {
+      throw new CorrectionValidationError(`observer_persona_id "${sanitizeMessageIdForLog(parsed.observer_persona_id!)}" does not resolve to an active persona`);
+    }
+  }
+
+  const now = new Date().toISOString();
+  const correction: CorrectionObservationAdd = {
+    op: "observation.add",
+    entity_type: "persona",
+    id: personaId,
+    lens: parsed.lens,
+    observation: {
+      subject_person_id: parsed.subject_person_id,
+      observer_kind: parsed.observer_kind,
+      observer_persona_id: parsed.observer_kind === "other_persona" ? parsed.observer_persona_id : undefined,
+      message_id: parsed.message_id ?? `correction:${crypto.randomUUID()}`,
+      quote_id: parsed.quote_id,
+      observed_at: parsed.observed_at ?? now,
+      dimension: parsed.dimension,
+      direction: parsed.direction,
+      claim: parsed.claim,
+      extraction_confidence: parsed.extraction_confidence ?? 1,
+    },
+    timestamp: now,
+  };
+
+  const { drainMode } = await writeCorrection(correction);
+  if (drainMode === "queued") {
+    return { status: "queued" };
+  }
+
+  const drained = await loadLatestState();
+  const observations = drained?.personas[personaId]?.observations ?? [];
+  const observation = observations[observations.length - 1];
+  if (!observation) {
+    throw new Error(`Observation for persona ${sanitizeMessageIdForLog(personaId)} did not persist after self-drain`);
+  }
+  return { status: "recorded", observation };
+}
+
+/**
+ * Apply Signal (D2-D5, R2-R7/AT2-AT7). `disposition: "confirm"` accepts an
+ * optional Persona-lens identity `delta` (D2/D3) — a delta on
+ * `disposition: "dismiss"` is rejected outright (D4: dismiss has no
+ * proposal side effect for either lens, so there is nothing for a delta to
+ * mean there). Every other refusal (terminal status, Agent-lens delta,
+ * `pending_update` collision) is decided at DRAIN time, against whichever
+ * state is actually stored then (ADR-029's own timing guarantee) — this
+ * function's own synchronous checks are limited to existence, matching the
+ * `update`/`remove` endpoints' own division of labor between a fast
+ * synchronous usage error and the authoritative drain-time decision.
+ *
+ * Returns `{status: "queued"}` when a live Ei instance picks this up
+ * asynchronously; after a synchronous self-drain, reloads state and
+ * returns the (now-transitioned) persisted signal, or re-throws whatever
+ * refusal `PersonaState.signal_confirm`/`signal_dismiss` raised.
+ */
+export async function applyPersonaSignal(
+  personaId: string,
+  signalId: string,
+  disposition: "confirm" | "dismiss",
+  body: unknown
+): Promise<{ status: "queued" } | { status: "recorded"; signal: EmergentSignal }> {
+  const parsed = parseApplySignalBody(body);
+  if (disposition === "dismiss" && parsed.delta !== undefined) {
+    throw new CorrectionValidationError(`signal.dismiss does not accept a delta`);
+  }
+
+  const state = await loadLatestState();
+  if (!state) {
+    throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
+  }
+  if (!resolveOwnPersona(state.personas, personaId)) {
+    throw new Error(`No persona found with id: ${sanitizeMessageIdForLog(personaId)}`);
+  }
+
+  const now = new Date().toISOString();
+  // C1 (Stint-level holistic review, Bucket 1): a delta's traits/topics
+  // must pass through the same materializeTraits/materializeTopics
+  // helpers create/update already use, BEFORE the correction is built —
+  // parsed.delta.traits/topics carry an optional `id`/`last_updated`
+  // (personaTraitSchema/personaTopicSchema, exactly like create/update's
+  // own input), and pending_update is later applied for real by
+  // Processor.finalizeReflection, which needs every child fully
+  // materialized, not the wire-optional shape a raw cast to
+  // PersonaIdentityDelta would have let through unmaterialized.
+  const delta: PersonaIdentityDelta | undefined = parsed.delta
+    ? {
+        short_description: parsed.delta.short_description,
+        long_description: parsed.delta.long_description,
+        traits: materializeTraits(parsed.delta.traits, now),
+        topics: materializeTopics(parsed.delta.topics, now),
+      }
+    : undefined;
+  const correction: CorrectionSignalConfirm | CorrectionSignalDismiss = disposition === "confirm"
+    ? { op: "signal.confirm", entity_type: "persona", id: personaId, signal_id: signalId, actor: parsed.actor, delta, timestamp: now }
+    : { op: "signal.dismiss", entity_type: "persona", id: personaId, signal_id: signalId, actor: parsed.actor, timestamp: now };
+
+  const { drainMode } = await writeCorrection(correction);
+  if (drainMode === "queued") {
+    return { status: "queued" };
+  }
+
+  const drained = await loadLatestState();
+  const signals = drained?.personas[personaId]?.signals;
+  const signal = signals ? [...signals.persona, ...signals.agent].find((s) => s.id === signalId) : undefined;
+  if (!signal) {
+    throw new Error(`Signal ${sanitizeMessageIdForLog(signalId)} not found on persona ${sanitizeMessageIdForLog(personaId)} after drain`);
+  }
+  return { status: "recorded", signal };
 }
