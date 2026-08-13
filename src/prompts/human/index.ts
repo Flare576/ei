@@ -6,6 +6,12 @@ export { buildTopicUpdatePrompt } from "./topic-update.js";
 export { buildPersonUpdatePrompt } from "./person-update.js";
 export { buildEventScanPrompt } from "./event-scan.js";
 export type { EventScanPromptData } from "./event-scan.js";
+export { buildPersonaSignalScanPrompt } from "./persona-signal-scan.js";
+export type { PersonaSignalScanPromptData, PersonaSignalRosterEntry } from "./persona-signal-scan.js";
+export { buildPersonaSignalMatchPrompt } from "./persona-signal-match.js";
+export type { PersonaSignalMatchPromptData } from "./persona-signal-match.js";
+export { buildPersonaSignalValidatePrompt } from "./persona-signal-validate.js";
+export type { PersonaSignalValidatePromptData, PersonaSignalValidateCandidate } from "./persona-signal-validate.js";
 
 export type { TopicMatchPromptData } from "./topic-match.js";
 export type { TopicUpdatePromptData } from "./topic-update.js";
@@ -33,4 +39,9 @@ export type {
   FactUpdateResult,
   PersonUpdateResult,
   ItemUpdateResult,
+  PersonaObservationDraft,
+  PersonaSignalScanResult,
+  PersonaSignalCandidate,
+  PersonaSignalMerge,
+  PersonaSignalValidateResult,
 } from "./types.js";

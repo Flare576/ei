@@ -1,4 +1,5 @@
 import type { Message } from "../../core/types.js";
+import type { SignalDimension, SignalDirection, ObserverKind } from "../../core/types/signals.js";
 
 export interface PromptOutput {
   system: string;
@@ -151,4 +152,46 @@ export interface EventScanCandidate {
 
 export interface EventScanResult {
   events: EventScanCandidate[];
+}
+
+// =============================================================================
+// Persona Observation→Signal reducer pipeline (Bolt 004, Spec §4.17)
+// =============================================================================
+
+/** Scan/Extract's own output shape (D1 step 1) — no matching, no lens, no
+ * signal/observation ids: those are resolved by the handler afterward. */
+export interface PersonaObservationDraft {
+  /** The exact supporting phrase from the analyzed messages — resolved
+   * back to its source message via the same word-boundary matching quote
+   * extraction already uses (`matchQuoteInMessage`), never trusted as a
+   * message id the model invented. */
+  quote_text: string;
+  claim: string;
+  dimension: SignalDimension;
+  direction: SignalDirection;
+  extraction_confidence: number;
+  observer_kind: ObserverKind;
+  /** Required when `observer_kind` is "other_persona" (D7/§4.6) — the id
+   * of the persona whose claim is actually being reported, resolved from
+   * the roster the prompt was given. */
+  observer_persona_id?: string;
+}
+
+export interface PersonaSignalScanResult {
+  observations: PersonaObservationDraft[];
+}
+
+export interface PersonaSignalCandidate {
+  id: string;
+  claim: string;
+  dimension: SignalDimension;
+}
+
+export interface PersonaSignalMerge {
+  keep_id: string;
+  merge_id: string;
+}
+
+export interface PersonaSignalValidateResult {
+  merges?: PersonaSignalMerge[];
 }
