@@ -15,11 +15,12 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
 });
 
 import { execute, buildEiRelationshipBlock } from "../../../src/cli/commands/personas.js";
-import { resolvePersonLogLength } from "../../../src/cli/retrieval.js";
-import { PERSON_LOG_REFLECTION_THRESHOLD } from "../../../src/core/orchestrators/ceremony.js";
+import { resolvePersonaHasActiveSignals } from "../../../src/cli/retrieval.js";
 import type { PersonaResult } from "../../../src/cli/retrieval.js";
-import type { PersonaTrait, PersonaTopic, Person } from "../../../src/core/types/data-items.js";
+import type { PersonaTrait, PersonaTopic } from "../../../src/core/types/data-items.js";
+import type { PersonaEntity } from "../../../src/core/types/entities.js";
 import type { StorageState } from "../../../src/core/types/integrations.js";
+import type { EmergentSignal, PersonaSignalCollections } from "../../../src/core/types/signals.js";
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
@@ -358,123 +359,169 @@ describe("execute() — reverse containment matching (BUG-2 fix)", () => {
 });
 
 
-// ── Ei Person Log readiness notice ───────────────────────────────────────────
-// The relationship block reports the linked PersonLog's size (never its
-// content) so an agent whose persona is `external_reflection_only` — and
-// therefore no longer gets Ei's automatic critic — still learns the log is
-// worth reflecting on. See resolvePersonLogLength (src/cli/retrieval.ts)
-// for the linked-record resolution and buildEiRelationshipBlock for the
-// text it produces from that resolved number.
+// ── Ei Signals invitation ─────────────────────────────────────────────────────
+// The relationship block invites the agent to ask about a Persona's active
+// (`candidate`/`recurring`) emergent signals instead of citing a PersonLog
+// character count (Bolt 007, D1). See resolvePersonaHasActiveSignals
+// (src/cli/retrieval.ts) for the presence check and buildEiRelationshipBlock
+// for the text it produces from that boolean. Neither ever exposes a
+// signal's `claim`.
 
-function makeStateWithPeople(people: Person[]): StorageState {
+function makePersonaEntity(id: string): PersonaEntity {
+  return {
+    id,
+    display_name: id,
+    entity: "system",
+    traits: [],
+    topics: [],
+    is_paused: false,
+    is_archived: false,
+    is_static: false,
+    last_updated: NOW,
+  };
+}
+
+function makeSignal(overrides: Partial<EmergentSignal> = {}): EmergentSignal {
+  return {
+    id: "signal_0",
+    subject_persona_id: "persona_0",
+    claim: "SEEDED_CLAIM_DO_NOT_LEAK",
+    dimension: "behavior",
+    status: "candidate",
+    evidence_ids: ["obs_0"],
+    first_observed_at: NOW,
+    last_observed_at: NOW,
+    observer_kinds: ["human"],
+    recurrence_count: 1,
+    ...overrides,
+  };
+}
+
+function makeStateWithSignals(personaId: string, signals?: Partial<PersonaSignalCollections>): StorageState {
   return {
     version: 1,
     timestamp: NOW,
-    human: {
-      entity: "human",
-      facts: [],
-      topics: [],
-      people,
-      quotes: [],
-      last_updated: NOW,
+    human: { entity: "human", facts: [], topics: [], people: [], quotes: [], last_updated: NOW },
+    personas: {
+      [personaId]: {
+        entity: makePersonaEntity(personaId),
+        messages: [],
+        signals: signals as PersonaSignalCollections | undefined,
+      },
     },
-    personas: {},
     queue: [],
     providers: [],
     tools: [],
   };
 }
 
-function makeLinkedPerson(id: string, description: string, personaId: string): Person {
-  return {
-    id,
-    name: id,
-    description,
-    sentiment: 0.5,
-    relationship: "friend",
-    exposure_current: 0.5,
-    exposure_desired: 0.5,
-    last_updated: NOW,
-    identifiers: [{ type: "Ei Persona", value: personaId, is_primary: true }],
-  };
-}
-
-describe("resolvePersonLogLength — linked-record resolution", () => {
-  it("returns undefined when the persona has no linked Person record", () => {
-    const state = makeStateWithPeople([]);
-    expect(resolvePersonLogLength("persona_0", state)).toBeUndefined();
+describe("resolvePersonaHasActiveSignals — presence resolution", () => {
+  it("returns false when the persona has no signals key at all", () => {
+    const state = makeStateWithSignals("persona_0", undefined);
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(false);
   });
 
-  it("returns undefined when Person records exist but none link to this persona", () => {
-    const state = makeStateWithPeople([makeLinkedPerson("p1", "x".repeat(500), "some_other_persona")]);
-    expect(resolvePersonLogLength("persona_0", state)).toBeUndefined();
+  it("returns false when the persona id isn't present in state.personas at all", () => {
+    const state = makeStateWithSignals("persona_0", { persona: [], agent: [] });
+    expect(resolvePersonaHasActiveSignals("some_other_persona", state)).toBe(false);
   });
 
-  it("returns the linked record's description length when under threshold", () => {
-    const state = makeStateWithPeople([makeLinkedPerson("p1", "x".repeat(500), "persona_0")]);
-    expect(resolvePersonLogLength("persona_0", state)).toBe(500);
+  it("returns false when both lens buckets are empty", () => {
+    const state = makeStateWithSignals("persona_0", { persona: [], agent: [] });
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(false);
   });
 
-  it("returns the linked record's description length when over threshold", () => {
-    const length = PERSON_LOG_REFLECTION_THRESHOLD + 200;
-    const state = makeStateWithPeople([makeLinkedPerson("p1", "x".repeat(length), "persona_0")]);
-    expect(resolvePersonLogLength("persona_0", state)).toBe(length);
+  it("returns true when the persona lens has a candidate signal", () => {
+    const state = makeStateWithSignals("persona_0", { persona: [makeSignal({ status: "candidate" })], agent: [] });
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(true);
   });
 
-  it("reports the second linked record's length when only it is over threshold — a first-match implementation reads the wrong (under-threshold) record and stays silent", () => {
-    const underLength = 400;
-    const overLength = PERSON_LOG_REFLECTION_THRESHOLD + 300;
-    const state = makeStateWithPeople([
-      makeLinkedPerson("p1", "y".repeat(underLength), "persona_0"),
-      makeLinkedPerson("p2", "z".repeat(overLength), "persona_0"),
-    ]);
-    expect(resolvePersonLogLength("persona_0", state)).toBe(overLength);
+  it("returns true when the agent lens has a recurring signal", () => {
+    const state = makeStateWithSignals("persona_0", { persona: [], agent: [makeSignal({ status: "recurring" })] });
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(true);
+  });
+
+  it("returns false when every signal is dismissed", () => {
+    const state = makeStateWithSignals("persona_0", { persona: [makeSignal({ status: "dismissed" })], agent: [] });
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(false);
+  });
+
+  it("returns false when every signal is reviewed", () => {
+    const state = makeStateWithSignals("persona_0", { persona: [makeSignal({ status: "reviewed" })], agent: [] });
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(false);
+  });
+
+  it("returns false when every signal is superseded", () => {
+    const state = makeStateWithSignals("persona_0", { persona: [makeSignal({ status: "superseded" })], agent: [] });
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(false);
+  });
+
+  // R4/AT4 (Bolt 007, D4): the raw-state CLI path bypasses PersonaState.load(),
+  // so a persisted signals collection with one lens bucket individually absent
+  // (schema drift, partial write) must degrade exactly like the whole key being
+  // absent -- normalize the missing bucket to [] rather than throwing on the
+  // unconditional spread.
+  it("never throws and returns true when only the persona bucket is present with a candidate signal (agent bucket absent)", () => {
+    const state = makeStateWithSignals("persona_0", { persona: [makeSignal({ status: "candidate" })] });
+    expect(() => resolvePersonaHasActiveSignals("persona_0", state)).not.toThrow();
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(true);
+  });
+
+  it("never throws and returns true when only the agent bucket is present with a recurring signal (persona bucket absent)", () => {
+    const state = makeStateWithSignals("persona_0", { agent: [makeSignal({ status: "recurring" })] });
+    expect(() => resolvePersonaHasActiveSignals("persona_0", state)).not.toThrow();
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(true);
+  });
+
+  it("never throws and returns false when only the persona bucket is present and every signal in it is dismissed (agent bucket absent)", () => {
+    const state = makeStateWithSignals("persona_0", { persona: [makeSignal({ status: "dismissed" })] });
+    expect(() => resolvePersonaHasActiveSignals("persona_0", state)).not.toThrow();
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(false);
+  });
+
+  it("a dismissed signal in one bucket never masks an active candidate signal in the other bucket", () => {
+    const state = makeStateWithSignals("persona_0", {
+      persona: [makeSignal({ status: "dismissed" })],
+      agent: [makeSignal({ status: "candidate" })],
+    });
+    expect(resolvePersonaHasActiveSignals("persona_0", state)).toBe(true);
   });
 });
 
-describe("buildEiRelationshipBlock — Ei Person Log section", () => {
-  it("emits no log section, and does not crash, when the persona has no linked Person record", () => {
-    expect(() => buildEiRelationshipBlock(makePersonaResult(), undefined)).not.toThrow();
-    const result = buildEiRelationshipBlock(makePersonaResult(), undefined);
-    expect(result).not.toContain("Ei Person Log");
+describe("buildEiRelationshipBlock — Ei Signals invitation", () => {
+  it("emits no signal section when hasActiveSignals is omitted", () => {
+    const result = buildEiRelationshipBlock(makePersonaResult());
+    expect(result).not.toContain("Ei Signals");
   });
 
-  it("reports the count without the reflection prompt when under threshold", () => {
-    const result = buildEiRelationshipBlock(makePersonaResult(), 500);
-    expect(result).toContain("# Ei Person Log");
-    expect(result).toContain("currently 500 characters");
-    expect(result).not.toMatch(/reflection/i);
+  it("emits no signal section when hasActiveSignals is false", () => {
+    const result = buildEiRelationshipBlock(makePersonaResult(), false);
+    expect(result).not.toContain("Ei Signals");
   });
 
-  it("reports the count and the reflection prompt when over threshold", () => {
-    const overLength = PERSON_LOG_REFLECTION_THRESHOLD + 1;
-    const result = buildEiRelationshipBlock(makePersonaResult(), overLength);
-    expect(result).toContain(`currently ${overLength} characters`);
-    expect(result).toMatch(/prompt the user to perform a reflection soon/i);
+  // AT1: assert buildEiRelationshipBlock's output for a persona with active
+  // signals contains the invitation text and not the reflection-cue text.
+  it("AT1: contains the invitation text, and not the reflection-cue text, when the persona has active signals", () => {
+    const result = buildEiRelationshipBlock(makePersonaResult(), true);
+    expect(result).toContain("# Ei Signals");
+    expect(result).toMatch(/ask if you'd like to know more/i);
+    expect(result).not.toMatch(/prompt the user to perform a reflection soon/i);
+    expect(result).not.toMatch(/currently \d+ characters/i);
   });
 
-  it("does not add the reflection prompt exactly at the threshold (over means strictly greater, matching ceremony.ts)", () => {
-    const result = buildEiRelationshipBlock(makePersonaResult(), PERSON_LOG_REFLECTION_THRESHOLD);
-    expect(result).toContain(`currently ${PERSON_LOG_REFLECTION_THRESHOLD} characters`);
-    expect(result).not.toMatch(/reflection/i);
-  });
+  it("never leaks a signal's claim: only presence crosses the boundary, never content", () => {
+    const marker = "SEEDED_CLAIM_DO_NOT_LEAK_7f3c9a";
+    const state = makeStateWithSignals("persona_0", { persona: [makeSignal({ claim: marker })], agent: [] });
+    const hasActiveSignals = resolvePersonaHasActiveSignals("persona_0", state);
 
-  it("keeps </ei-relationship> as the final line with the Person Log section present", () => {
-    const result = buildEiRelationshipBlock(makePersonaResult(), PERSON_LOG_REFLECTION_THRESHOLD + 1);
-    const lines = result.split("\n");
-    expect(lines[lines.length - 1]).toBe("</ei-relationship>");
-  });
-
-  it("never leaks PersonLog content: a seeded marker in the linked record's description reaches only a length, never the block", () => {
-    const marker = "SEEDED_MARKER_DO_NOT_LEAK_7f3c9a";
-    const description = marker + "y".repeat(PERSON_LOG_REFLECTION_THRESHOLD + 50);
-    const state = makeStateWithPeople([makeLinkedPerson("p1", description, "persona_0")]);
-
-    const length = resolvePersonLogLength("persona_0", state);
-    const result = buildEiRelationshipBlock(makePersonaResult({ id: "persona_0" }), length);
+    const result = buildEiRelationshipBlock(makePersonaResult({ id: "persona_0" }), hasActiveSignals);
 
     expect(result).not.toContain(marker);
-    expect(result).not.toContain(description);
-    expect(result).toContain(`currently ${description.length} characters`);
+  });
+
+  it("keeps </ei-relationship> as the final line with the signal section present", () => {
+    const result = buildEiRelationshipBlock(makePersonaResult(), true);
+    const lines = result.split("\n");
+    expect(lines[lines.length - 1]).toBe("</ei-relationship>");
   });
 });

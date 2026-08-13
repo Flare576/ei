@@ -1,3 +1,14 @@
+// Bare-specifier mock (matches persona-corrections.test.ts's own shim) --
+// without it, evaluating retrieval.ts's import of entity-schemas.ts's
+// module-level zod schema literals (topicBaseShape/personBaseShape/
+// personaBaseShape) throws "z.string is not a function" while this file's
+// other imports are being collected. A pre-existing, broad zod-resolution
+// interaction (Beta's review, .sisyphus/reviews/bolt-002-adr007-sunset.md's
+// Validation Evidence: "tests/unit/cli/personas.test.ts failed during
+// collection on a pre-existing/broad bare-zod mock interaction... has no
+// causal chain to the retired field"), not something this Bolt introduced
+// or is responsible for fixing at the source -- this shim only unblocks
+// collection of this file's own (pre-existing and this Bolt's new) tests.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "fs";
 import { join } from "path";
@@ -7,6 +18,14 @@ import type { CorrectionRecord, QuoteCreateRecord, QuoteFixRecord, QuoteRelinkRe
 import type { Person, Fact, Quote } from "../../../src/core/types/data-items.js";
 import type { PersonaEntity } from "../../../src/core/types/entities.js";
 import type { ToolProvider, ToolDefinition } from "../../../src/core/types/integrations.js";
+
+vi.mock("zod", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    z: (actual.z ?? actual.default ?? actual) as Record<string, unknown>,
+  };
+});
 
 
 vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
@@ -710,6 +729,31 @@ describe("lookupById — persona records", () => {
     writeTestState(createTestState({ facts: 1 }));
     const result = await lookupById("persona_0");
     expect(result).toBeNull();
+  });
+});
+
+describe("lookupById — legacy `external_reflection_only` never crosses the raw-state boundary (Bolt 002 D3, R6/AT6)", () => {
+  it("strips a legacy value written directly into state.json before it ever reaches a caller — the same boundary MCP's ei_lookup delegates through", async () => {
+    const state = createTestState({ personas: 1, personaNamePrefix: "Legacy" });
+    (state.personas["persona_0"].entity as Record<string, unknown>).external_reflection_only = true;
+    writeTestState(state);
+
+    const result = await lookupById("persona_0");
+
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("persona");
+    expect(result).not.toHaveProperty("external_reflection_only");
+  });
+
+  it("strips a stored `false` the same as a stored `true` — absence, not a falsy round-trip", async () => {
+    const state = createTestState({ personas: 1, personaNamePrefix: "Legacy" });
+    (state.personas["persona_0"].entity as Record<string, unknown>).external_reflection_only = false;
+    writeTestState(state);
+
+    const result = await lookupById("persona_0");
+
+    expect(result).not.toBeNull();
+    expect(result).not.toHaveProperty("external_reflection_only");
   });
 });
 

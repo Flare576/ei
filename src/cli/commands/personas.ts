@@ -1,6 +1,5 @@
 import { loadLatestState, retrievePersonas, retrievePersonasSemantic, mapPersona } from "../retrieval";
 import { getEmbeddingService } from "../../core/embedding-service";
-import { PERSON_LOG_REFLECTION_THRESHOLD } from "../../core/orchestrators/ceremony.js";
 import type { PersonaResult } from "../retrieval";
 
 export async function execute(query: string, limit: number, options: { recent?: boolean } = {}): Promise<PersonaResult[]> {
@@ -40,16 +39,19 @@ export async function execute(query: string, limit: number, options: { recent?: 
  * the inline builder previously in the OpenCode plugin — consolidated here
  * so all integrations can call `ei personas <name> --format prompt`.
  *
- * `personLogLength`, when provided, is the character count of the
- * Persona's linked PersonLog (see `resolvePersonLogLength` in
- * retrieval.ts) — never the log content itself. `PersonaResult` carries
- * no reference to `StorageState`, so this builder cannot resolve the
- * length on its own; the caller (the `--format prompt` route in
- * `cli.ts`, which loads `StorageState` independently) computes and
- * passes it in. `undefined` means the Persona has no linked Person
- * record, and the section is omitted entirely.
+ * `hasActiveSignals`, when true, means this Persona has at least one
+ * `candidate`/`recurring` emergent signal in either lens (see
+ * `resolvePersonaHasActiveSignals` in retrieval.ts) — the section then
+ * invites the agent to ask about them, never naming or describing a
+ * single one. `PersonaResult` carries no reference to `StorageState`, so
+ * this builder cannot resolve signal presence on its own; the caller (the
+ * `--format prompt` route in `cli.ts`, which loads `StorageState`
+ * independently) computes and passes it in. `false` or `undefined` omits
+ * the section entirely — there is nothing to invite the agent to ask
+ * about (Bolt 007, D1; replaces the character-count PersonLog readiness
+ * cue this builder previously emitted here).
  */
-export function buildEiRelationshipBlock(persona: PersonaResult, personLogLength?: number): string {
+export function buildEiRelationshipBlock(persona: PersonaResult, hasActiveSignals?: boolean): string {
   const strongTraits = (persona.traits ?? [])
     .filter((t) => (t.strength ?? 0.5) >= 0.7)
     .sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5))
@@ -59,14 +61,14 @@ export function buildEiRelationshipBlock(persona: PersonaResult, personLogLength
     .sort((a, b) => b.exposure_current - a.exposure_current)
     .map((t) => `**${t.name}**: ${t.perspective} — ${t.approach}`)
     .join("\n");
-  const personLogSection: string[] = [];
-  if (personLogLength !== undefined) {
-    const overThreshold = personLogLength > PERSON_LOG_REFLECTION_THRESHOLD;
-    const notice = `Ei tracks behavior evidence in an internal record. Its description is currently ${personLogLength} characters.`
-      + (overThreshold
-        ? " You should prompt the user to perform a reflection soon, when the opportunity arises to bring it up."
-        : "");
-    personLogSection.push("", "# Ei Person Log", "", notice);
+  const signalSection: string[] = [];
+  if (hasActiveSignals) {
+    signalSection.push(
+      "",
+      "# Ei Signals",
+      "",
+      "Ei has noticed potential behavior signals for this Persona. Ask if you'd like to know more — Ei won't volunteer their content unprompted."
+    );
   }
   return [
     "<!-- ei-relationship-injected -->",
@@ -80,7 +82,7 @@ export function buildEiRelationshipBlock(persona: PersonaResult, personLogLength
     "",
     "### Shared Context",
     sortedTopics || "(no topics)",
-    ...personLogSection,
+    ...signalSection,
     "</ei-relationship>",
   ].join("\n");
 }

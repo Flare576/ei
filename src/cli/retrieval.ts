@@ -1,4 +1,4 @@
-import type { StorageState, Quote, Fact, Person, Topic, Message, RoomMessage } from "../core/types";
+import type { StorageState, Quote, Fact, Person, Topic, Message, RoomMessage, EmergentSignal } from "../core/types";
 import type { PersonaEntity } from "../core/types/entities.js";
 import type { PersonaTrait, PersonaTopic, PersonIdentifier } from "../core/types/data-items.js";
 import { decodeAllEmbeddings } from "../storage/embeddings";
@@ -65,6 +65,20 @@ export async function loadLatestState(): Promise<StorageState | null> {
   if (!state) {
     lastCorrectionSkips = [];
     return null;
+  }
+
+  // Bolt 002 D3 (Beta's review, I1): this is CLI/MCP's own raw-state
+  // parse -- it bypasses PersonaState.load()'s legacy-key strip (D2)
+  // entirely, so a persisted `external_reflection_only` value would
+  // otherwise reach lookupById() (and, via persona-corrections.ts's own
+  // call to this same function for its pre-merge read of a persona)
+  // unstripped. Mirrors PersonaState.load() exactly: silently dropped,
+  // no migration, no warning.
+  for (const data of Object.values(state.personas)) {
+    const entity = data.entity as PersonaEntity & { external_reflection_only?: unknown };
+    if ("external_reflection_only" in entity) {
+      delete entity.external_reflection_only;
+    }
   }
   const corrections = await readCorrections(getCorrectionsPath());
   lastCorrectionSkips = await applyCorrectionsToState(state, corrections);
@@ -261,29 +275,37 @@ export function mapPersona(persona: PersonaEntity): PersonaResult {
 }
 
 /**
- * Resolve the size of a Persona's linked PersonLog (the Person record(s)
- * whose `description` accumulates behavioral observations — see
- * `queueReflectionPhase` in ceremony.ts, which this mirrors).
+ * Whether a Persona currently has at least one active (`candidate` or
+ * `recurring`) emergent signal in either lens — `signals.persona` or
+ * `signals.agent` (Bolt 003's `PersonaSignalCollections`, hung directly
+ * off this Persona's own entry in `state.personas`, never off a linked
+ * `Person` record). Replaces `resolvePersonLogLength`'s PersonLog
+ * character-count readiness check (Bolt 007, D1): the notice this feeds
+ * no longer depends on a Persona having a linked `Person` record at all.
  *
- * A Persona may be linked to more than one Person record. Readiness is
- * "any linked record over threshold," so this returns the length of the
- * LARGEST linked record rather than the first match: since any
- * over-threshold record is by definition larger than every under-threshold
- * one, the max is always the over-threshold record when exactly one
- * exists, and it is the most urgent one to surface when several do.
+ * `dismissed` and `superseded` signals never count: ADR-038 keeps
+ * `dismissed` as a retained, never-auto-resurrected stratum, and
+ * `superseded` only ever names a dismissed signal a newer candidate has
+ * already replaced — counting either would resurface something already
+ * closed. `reviewed` signals — already confirmed through the CLI/MCP
+ * write surface (ADR-038 item 7) — don't count either; they're a settled
+ * outcome, not something left to ask about.
  *
- * Returns `undefined` when the Persona has no linked Person record at all
- * — callers use this to omit the notice entirely. Never returns or
- * exposes any PersonLog content, only its length.
+ * Returns `false` when the Persona has no `signals` entry at all (never
+ * hydrated, or the persona id isn't in `state.personas`). Never resolves
+ * or exposes any signal's `claim`, only presence — same content boundary
+ * `resolvePersonLogLength` held for PersonLog text.
  */
-export function resolvePersonLogLength(personaId: string, state: StorageState): number | undefined {
-  const linkedRecords = state.human.people.filter((p) =>
-    p.identifiers?.some((i) => i.type.toLowerCase() === "ei persona" && i.value === personaId)
-  );
-  if (linkedRecords.length === 0) {
-    return undefined;
+export function resolvePersonaHasActiveSignals(personaId: string, state: StorageState): boolean {
+  const signals = state.personas[personaId]?.signals;
+  if (!signals) {
+    return false;
   }
-  return Math.max(...linkedRecords.map((p) => p.description?.length ?? 0));
+  const personaSignals = signals.persona ?? [];
+  const agentSignals = signals.agent ?? [];
+  return [...personaSignals, ...agentSignals].some(
+    (s: EmergentSignal) => s.status === "candidate" || s.status === "recurring"
+  );
 }
 
 export function retrievePersonas(
