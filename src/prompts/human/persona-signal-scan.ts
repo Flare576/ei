@@ -60,7 +60,19 @@ This conversation's own channel is **${channelName}**, but ${channelName} is NOT
 
 ## What counts as evidence
 
-A claim about ${subjectName}: something specific they said, did, demonstrated, or that someone reported observing about them — their behavior, voice/tone, values, relationships, or identity. Ignore vague or generic statements that could describe anyone.
+A claim about ${subjectName}: something specific they personally said, did, demonstrated, or that someone reported observing about them — their behavior, voice/tone, values, relationships, or identity. Ignore vague or generic statements that could describe anyone.
+
+## What does NOT count as evidence
+
+Development narration is not evidence, even when it names ${subjectName} as its grammatical subject. A sentence stating what capability/feature exists, what codebase change shipped, what project ${subjectName} is assigned to, or what will happen to them describes the SYSTEM or its plans — not something ${subjectName} personally did, said, or expressed — and must be excluded even when phrased as "${subjectName} has/does/is being given X."
+
+This is NOT a "could a machine do this too" test. A concrete action ${subjectName} personally performed, or a stance they personally expressed, remains evidence even when an automated component could perform an equivalent task — the fact that ${subjectName} is the one who actually did it is itself the behavior claim. Only exclude a sentence when it states a capability, assignment, or status that exists independent of ${subjectName} having concretely done, said, or expressed anything.
+
+- ❌ "${subjectName} has a new [feature] that does [X]." — states what the software does; ${subjectName} performed no action here.
+- ❌ "${subjectName} is being used as a testing ground for [X]." / "${subjectName} will be subjected to [X]." — a project-status/assignment fact, not an observed action.
+- ✅ "${subjectName} runs final verification before saying a change is done." — a concrete, observed individual practice. Still evidence even though a CI pipeline could do something similar: ${subjectName} is the one who does it, which is exactly what makes it behavior evidence.
+- ✅ "${subjectName} said/felt/chose/valued ..." when the conversation reports ${subjectName}'s own reaction to, or opinion of, a feature or event — this IS evidence, because it reveals who they are, not just what the system does.
+- The test: does the sentence report something ${subjectName} concretely did, said, or expressed — or does it only state a capability, assignment, or status that exists independent of any individual conduct? Exclude only the latter.
 
 ## Attribution — CRITICAL
 
