@@ -774,6 +774,91 @@ describe("CLI --format prompt process behavior — Ei Signals section", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("# Ei Signals");
   });
+
+  describe("CLI 'ei list signals <personaId>' process behavior", () => {
+    it("returns both a persona-lens and an agent-lens signal, each shaped with type/personaId/lens/id/claim/status", () => {
+      writeStateWithPersonaSignals({
+        persona: [makeSignal({ id: "signal-persona-lens" })],
+        agent: [makeSignal({ id: "signal-agent-lens" })],
+      });
+
+      const result = runCli(["list", "signals", personaId]);
+
+      expect(result.status).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toHaveLength(2);
+      const personaLensSignal = parsed.find((s: { lens: string }) => s.lens === "persona");
+      const agentLensSignal = parsed.find((s: { lens: string }) => s.lens === "agent");
+      expect(personaLensSignal).toMatchObject({
+        type: "signal",
+        personaId,
+        lens: "persona",
+        id: "signal-persona-lens",
+        claim: expect.any(String),
+        status: expect.any(String),
+      });
+      expect(agentLensSignal).toMatchObject({
+        type: "signal",
+        personaId,
+        lens: "agent",
+        id: "signal-agent-lens",
+        claim: expect.any(String),
+        status: expect.any(String),
+      });
+    });
+
+    it("includes a dismissed-status signal in the result, unlike the --format prompt Ei Signals section", () => {
+      writeStateWithPersonaSignals({ persona: [makeSignal({ status: "dismissed" })], agent: [] });
+
+      const result = runCli(["list", "signals", personaId]);
+
+      expect(result.status).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].status).toBe("dismissed");
+    });
+
+    it("returns [] without crashing for a persona with no signals key at all", () => {
+      writeStateWithPersonaSignals(undefined);
+
+      const result = runCli(["list", "signals", personaId]);
+
+      expect(result.status).toBe(0);
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed).toEqual([]);
+    });
+
+    it("exits non-zero with a Usage message on stderr when <personaId> is omitted", () => {
+      const result = runCli(["list", "signals"]);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("Usage:");
+    });
+
+    it("S5 closure oracle: an id emitted by 'ei list signals' resolves via 'ei --id' to the identical record (.sisyphus/reviews/session-fixes-review/beta-code-review.md)", () => {
+      writeStateWithPersonaSignals({
+        persona: [makeSignal({ id: "signal-closure-oracle", claim: "Terse in the mornings, verbose after coffee." })],
+        agent: [],
+      });
+
+      const listResult = runCli(["list", "signals", personaId]);
+      expect(listResult.status).toBe(0);
+      const listed = JSON.parse(listResult.stdout);
+      expect(listed).toHaveLength(1);
+      const discoveredId: string = listed[0].id;
+      expect(discoveredId).toBe("signal-closure-oracle");
+
+      // A second, entirely separate CLI process -- the actual closure
+      // oracle, not two calls sharing in-memory state: the id discovered
+      // through `list signals` must independently resolve through
+      // `--id`/lookupById to the identical record.
+      const lookupResult = runCli(["--id", discoveredId]);
+      expect(lookupResult.status).toBe(0);
+      const looked_up = JSON.parse(lookupResult.stdout);
+      expect(looked_up).toEqual(listed[0]);
+    });
+  });
 });
 
 // ── T1: successful CLI create/fix quote through a real spawned process ──────

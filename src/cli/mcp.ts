@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { retrieveBalanced, lookupById, resolveExternalMessage, loadLatestState, type BalancedResult } from "./retrieval.js";
+import { retrieveBalanced, lookupById, resolveExternalMessage, loadLatestState, listPersonaSignals, type BalancedResult } from "./retrieval.js";
 import type { StorageState } from "../core/types.js";
 import type { Message } from "../core/types.js";
 import type { RoomMessage } from "../core/types/rooms.js";
@@ -570,6 +570,25 @@ export function createMcpServer(): McpServer {
         const message = e instanceof CorrectionValidationError ? e.message : (e as Error).message;
         return { content: [{ type: "text" as const, text: `Error: ${message}` }], isError: true };
       }
+    }
+  );
+
+  server.registerTool(
+    "ei_signal_list",
+    {
+      description:
+        "List every EmergentSignal recorded for a persona, across both lenses (persona identity and agent operating-contract) -- the discovery surface for ei_signal_confirm/ei_signal_dismiss, which require a signal's own id that is otherwise unobtainable. Returns every signal regardless of status (candidate, recurring, reviewed, dismissed, superseded) -- never filtered to active-only.",
+      inputSchema: {
+        persona_id: z.string().describe("The persona's id (the same id ei_signal_confirm/ei_signal_dismiss take, not a display name)."),
+      },
+    },
+    async ({ persona_id }) => {
+      const state = await loadLatestState();
+      if (!state) {
+        return { content: [{ type: "text" as const, text: "No saved state found. Is EI_DATA_PATH set correctly?" }] };
+      }
+      const result = listPersonaSignals(persona_id, state);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
     }
   );
 

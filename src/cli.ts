@@ -13,7 +13,7 @@
 
 import { parseArgs } from "util";
 import { readFile } from "fs/promises";
-import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState, resolvePersonaHasActiveSignals } from "./cli/retrieval";
+import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState, resolvePersonaHasActiveSignals, listPersonaSignals } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
 import { installMcpClients } from "./cli/install.js";
@@ -177,6 +177,8 @@ Usage:
                                  delta, PROPOSED via pending_update, never applied directly
   ei dismiss signal <personaId> <signalId> --json '<json>' | --json-file <path>  Mark a candidate/recurring
                                  EmergentSignal dismissed — no identity write, either lens
+  ei list signals <personaId>  List every EmergentSignal recorded for a persona, across both lenses (persona +
+                                agent) -- discovery surface for the signal ids confirm/dismiss require.
 
 Types:
   quote / quotes      Quotes from conversation history
@@ -263,6 +265,7 @@ Examples:
   ei add observation persona-id --json '{"subject_person_id":"person-id","observer_kind":"human","dimension":"behavior","direction":"novel","claim":"Consistently terse.","lens":"persona"}'  # Assert a claim, routed through Match/Update-Reduce
   ei confirm signal persona-id signal-id --json '{"actor":"flare576"}'  # Mark a candidate/recurring signal reviewed
   ei dismiss signal persona-id signal-id --json '{"actor":"flare576"}'  # Mark a candidate/recurring signal dismissed
+  ei list signals persona-id  # Discover signal ids before confirm/dismiss -- returns every signal, all statuses, both lenses
 `);
 }
 
@@ -597,6 +600,22 @@ async function main(): Promise<void> {
       console.error(e instanceof CorrectionValidationError ? e.message : (e as Error).message);
       process.exit(1);
     }
+  }
+
+  if (args[0] === "list" && args[1] === "signals") {
+    if (!args[2]) {
+      console.error(`Usage: ei list signals <personaId>`);
+      process.exit(1);
+    }
+    const personaId = args[2];
+    const state = await loadLatestState();
+    if (!state) {
+      console.error(`No saved state found. Is EI_DATA_PATH set correctly?`);
+      process.exit(1);
+    }
+    const result = listPersonaSignals(personaId, state);
+    console.log(JSON.stringify(result, null, 2));
+    process.exit(0);
   }
 
   if (args[0] === "--sync") {

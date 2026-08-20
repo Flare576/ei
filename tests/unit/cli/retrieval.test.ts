@@ -39,7 +39,9 @@ vi.mock("../../../src/core/embedding-service.js", async (importOriginal) => {
   };
 });
 
-import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, lookupByIdentifier, retrievePersonas, retrievePersonasSemantic, mapPersona, loadLatestState, getLastCorrectionSkips } from "../../../src/cli/retrieval.js";
+import { retrieve, retrieveBalanced, resolveLinkedItems, lookupById, lookupByIdentifier, listPersonaSignals, retrievePersonas, retrievePersonasSemantic, mapPersona, loadLatestState, getLastCorrectionSkips } from "../../../src/cli/retrieval.js";
+import type { StorageState } from "../../../src/core/types/integrations.js";
+import type { EmergentSignal } from "../../../src/core/types/signals.js";
 
 const EMBEDDING = new Array(384).fill(1);
 const NOW = "2026-01-01T00:00:00Z";
@@ -173,7 +175,7 @@ function createTestState(counts: {
   peopleIdentifiers?: { type: string; value: string }[][];
 }) {
   const personaEntities = makePersonaEntities(counts.personas ?? 0, counts.personaNamePrefix, counts.personaWithEmbeddings);
-  const personasRecord: Record<string, unknown> = {};
+  const personasRecord: Record<string, { entity: unknown; messages: unknown[]; signals?: { persona: EmergentSignal[]; agent: EmergentSignal[] } }> = {};
   for (const entity of personaEntities) {
     personasRecord[entity.id] = { entity, messages: [] };
   }
@@ -729,6 +731,145 @@ describe("lookupById — persona records", () => {
     writeTestState(createTestState({ facts: 1 }));
     const result = await lookupById("persona_0");
     expect(result).toBeNull();
+  });
+});
+
+describe("lookupById / listPersonaSignals — reducer-created signal discovery (2026-08-19 fix, .sisyphus/issues/reducer-created-signals-have-no-discovery-surface.md)", () => {
+  function makeSignal(overrides: Partial<EmergentSignal> = {}): EmergentSignal {
+    return {
+      id: crypto.randomUUID(),
+      subject_persona_id: "persona_0",
+      claim: "Consistently terse in the mornings.",
+      dimension: "behavior",
+      status: "candidate",
+      evidence_ids: [],
+      first_observed_at: NOW,
+      last_observed_at: NOW,
+      observer_kinds: ["human"],
+      recurrence_count: 1,
+      ...overrides,
+    };
+  }
+
+  // Minimal, correctly-typed StorageState fixture for listPersonaSignals's
+  // typed StorageState parameter — deliberately separate from
+  // createTestState above, whose return value is only ever passed to
+  // writeTestState(state: unknown) and never needs to satisfy StorageState.
+  function makeSignalTestState(personaId: string, signals?: { persona: EmergentSignal[]; agent: EmergentSignal[] }): StorageState {
+    const persona: PersonaEntity = {
+      id: personaId,
+      display_name: "TestAgent 0",
+      entity: "system",
+      short_description: "A test persona",
+      long_description: "Base prompt for TestAgent 0",
+      model: "Local LLM:test-model",
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: NOW,
+    };
+    return {
+      version: 1,
+      timestamp: NOW,
+      human: { entity: "human", facts: [], topics: [], people: [], quotes: [], last_updated: NOW },
+      personas: { [personaId]: { entity: persona, messages: [], ...(signals ? { signals } : {}) } },
+      queue: [],
+      providers: [],
+      tools: [],
+    };
+  }
+
+  it("closure oracle: lookupById resolves a persona-lens signal's own id to {type: 'signal', personaId, lens, ...}", async () => {
+    const state = createTestState({ personas: 1, personaNamePrefix: "TestAgent" });
+    const signal = makeSignal();
+    state.personas["persona_0"].signals = { persona: [signal], agent: [] };
+    writeTestState(state);
+
+    const result = await lookupById(signal.id);
+
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("signal");
+    expect(result!.personaId).toBe("persona_0");
+    expect(result!.lens).toBe("persona");
+    expect(result!.id).toBe(signal.id);
+    expect(result!.claim).toBe(signal.claim);
+  });
+
+  it("closure oracle: lookupById resolves an agent-lens signal's own id to {type: 'signal', personaId, lens, ...}", async () => {
+    const state = createTestState({ personas: 1, personaNamePrefix: "TestAgent" });
+    const signal = makeSignal({ claim: "Runs the real build before declaring green." });
+    state.personas["persona_0"].signals = { persona: [], agent: [signal] };
+    writeTestState(state);
+
+    const result = await lookupById(signal.id);
+
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("signal");
+    expect(result!.personaId).toBe("persona_0");
+    expect(result!.lens).toBe("agent");
+    expect(result!.id).toBe(signal.id);
+  });
+
+  it("returns null for an unknown signal id, same as any other unresolvable id", async () => {
+    const state = createTestState({ personas: 1, personaNamePrefix: "TestAgent" });
+    state.personas["persona_0"].signals = { persona: [makeSignal()], agent: [] };
+    writeTestState(state);
+
+    const result = await lookupById(crypto.randomUUID());
+    expect(result).toBeNull();
+  });
+
+  it("listPersonaSignals returns both lenses for a persona, each shaped {type: 'signal', personaId, lens, ...}", () => {
+    const personaSignal = makeSignal();
+    const agentSignal = makeSignal({ claim: "Never suppresses a failing test." });
+    const state = makeSignalTestState("persona_0", { persona: [personaSignal], agent: [agentSignal] });
+
+    const result = listPersonaSignals("persona_0", state);
+
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "signal", personaId: "persona_0", lens: "persona", id: personaSignal.id }),
+      expect.objectContaining({ type: "signal", personaId: "persona_0", lens: "agent", id: agentSignal.id }),
+    ]));
+  });
+
+  it("listPersonaSignals includes dismissed/reviewed signals too — this is discovery, not the active-only surface resolvePersonaHasActiveSignals provides", () => {
+    const dismissed = makeSignal({ status: "dismissed" });
+    const state = makeSignalTestState("persona_0", { persona: [dismissed], agent: [] });
+
+    const result = listPersonaSignals("persona_0", state);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(dismissed.id);
+    expect(result[0].status).toBe("dismissed");
+  });
+
+  it("listPersonaSignals returns [] for a persona with no signals entry hydrated", () => {
+    const state = makeSignalTestState("persona_0");
+    expect(listPersonaSignals("persona_0", state)).toEqual([]);
+  });
+
+  it("listPersonaSignals returns [] for an unknown persona id", () => {
+    const state = makeSignalTestState("persona_0", { persona: [makeSignal()], agent: [] });
+    expect(listPersonaSignals("nonexistent-persona", state)).toEqual([]);
+  });
+
+  it("listPersonaSignals does not crash when only the persona-lens bucket is hydrated (S4, .sisyphus/reviews/session-fixes-review/beta-code-review.md) -- returns that bucket's signals, empty agent lens", () => {
+    const state = makeSignalTestState("persona_0");
+    const personaSignal = makeSignal();
+    (state.personas["persona_0"] as { signals?: unknown }).signals = { persona: [personaSignal] };
+    const result = listPersonaSignals("persona_0", state);
+    expect(result).toEqual([expect.objectContaining({ type: "signal", personaId: "persona_0", lens: "persona", id: personaSignal.id })]);
+  });
+
+  it("listPersonaSignals does not crash when only the agent-lens bucket is hydrated -- returns that bucket's signals, empty persona lens", () => {
+    const state = makeSignalTestState("persona_0");
+    const agentSignal = makeSignal({ claim: "Runs the real build before declaring green." });
+    (state.personas["persona_0"] as { signals?: unknown }).signals = { agent: [agentSignal] };
+    const result = listPersonaSignals("persona_0", state);
+    expect(result).toEqual([expect.objectContaining({ type: "signal", personaId: "persona_0", lens: "agent", id: agentSignal.id })]);
   });
 });
 

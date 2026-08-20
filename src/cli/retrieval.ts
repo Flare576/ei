@@ -944,6 +944,33 @@ export async function resolveExternalMessage(
   }
 }
 
+/**
+ * List every EmergentSignal recorded for a persona, across both lenses --
+ * the discovery surface `lookupById` alone can't provide, since a caller
+ * has no way to learn a signal's `id` without already knowing it (Bolt
+ * 003/008 lifecycle gap,
+ * .sisyphus/issues/reducer-created-signals-have-no-discovery-surface.md,
+ * finding I7). Returns the identical `{ type: "signal", personaId, lens,
+ * ...signal }` shape crossFind already produces for a single signal via
+ * lookupById below, so a caller sees one consistent shape whether
+ * resolving a known id or discovering the full set. Unfiltered by
+ * status -- a dismissed/reviewed signal is legitimate discovery too
+ * (an audit trail), unlike resolvePersonaHasActiveSignals's
+ * active-only boolean above. Returns `[]` for an unknown persona id or
+ * one never hydrated with a `signals` entry -- never throws.
+ */
+export function listPersonaSignals(
+  personaId: string,
+  state: StorageState
+): ({ type: "signal"; personaId: string; lens: "persona" | "agent" } & EmergentSignal)[] {
+  const signals = state.personas[personaId]?.signals;
+  if (!signals) return [];
+  return [
+    ...(signals.persona ?? []).map((s) => ({ type: "signal" as const, personaId, lens: "persona" as const, ...s })),
+    ...(signals.agent ?? []).map((s) => ({ type: "signal" as const, personaId, lens: "agent" as const, ...s })),
+  ];
+}
+
 export async function lookupById(id: string): Promise<({ type: string } & Record<string, unknown>) | null> {
   const state = await loadLatestState();
   if (!state) {
@@ -951,7 +978,13 @@ export async function lookupById(id: string): Promise<({ type: string } & Record
   }
 
   const personaEntities = Object.values(state.personas).map((p) => p.entity);
-  const found = crossFind(id, state.human, personaEntities);
+  // 2026-08-19 fix (.sisyphus/issues/reducer-created-signals-have-no-discovery-surface.md,
+  // finding I7): crossFind has always supported resolving an EmergentSignal
+  // by id (D2/D4's two lens buckets), but this call never supplied the
+  // getSignals callback that resolution path requires -- so a signal's own
+  // `id` (the one `signal.confirm`/`signal.dismiss` require) was never
+  // resolvable through `ei --id`/`ei_lookup` at all.
+  const found = crossFind(id, state.human, personaEntities, (pid) => state.personas[pid]?.signals);
   if (!found) return null;
 
   // ADR-031 (Beta's review, plan-1-adr029-merge-patch.md [I1]): System

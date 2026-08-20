@@ -1,14 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 
-vi.mock("../../../src/cli/retrieval.js", () => ({
-  retrieveBalanced: vi.fn().mockResolvedValue([
-    { type: "fact", id: "fact_1", name: "Test Fact", description: "A test fact", sentiment: 0.5 },
-  ]),
-  lookupById: vi.fn().mockResolvedValue(null),
-}));
-
 const {
   MockCorrectionValidationError,
+  mockRetrieveBalanced,
+  mockLookupById,
+  mockLoadLatestState,
+  mockListPersonaSignals,
   mockCreateEntity,
   mockUpdateEntity,
   mockRemoveEntity,
@@ -22,6 +19,12 @@ const {
   class MockCorrectionValidationError extends Error {}
   return {
     MockCorrectionValidationError,
+    mockRetrieveBalanced: vi.fn().mockResolvedValue([
+      { type: "fact", id: "fact_1", name: "Test Fact", description: "A test fact", sentiment: 0.5 },
+    ]),
+    mockLookupById: vi.fn().mockResolvedValue(null),
+    mockLoadLatestState: vi.fn(),
+    mockListPersonaSignals: vi.fn(),
     mockCreateEntity: vi.fn(),
     mockUpdateEntity: vi.fn(),
     mockRemoveEntity: vi.fn(),
@@ -33,6 +36,13 @@ const {
     mockRemovePersonaEntity: vi.fn(),
   };
 });
+
+vi.mock("../../../src/cli/retrieval.js", () => ({
+  retrieveBalanced: mockRetrieveBalanced,
+  lookupById: mockLookupById,
+  loadLatestState: mockLoadLatestState,
+  listPersonaSignals: mockListPersonaSignals,
+}));
 
 vi.mock("../../../src/cli/corrections-endpoints.js", () => ({
   createEntity: mockCreateEntity,
@@ -574,5 +584,89 @@ describe("MCP server", () => {
     const content = result.content as Array<{ type: string; text: string }>;
     expect(content[0].text).toContain("Error: Invalid quote (relink)");
     expect(result.isError).toBe(true);
+  });
+  describe("ei_signal_list", () => {
+    it("registers the ei_signal_list tool", async () => {
+      ({ client } = await setupClient());
+      const result = await client.listTools();
+      const names = result.tools.map((t) => t.name);
+      expect(names).toContain("ei_signal_list");
+    });
+
+    it("forwards listPersonaSignals' result verbatim for both lenses, called with the exact persona_id and loaded state (S5, .sisyphus/reviews/session-fixes-review/beta-code-review.md)", async () => {
+      const loadedState = { personas: {} };
+      mockLoadLatestState.mockResolvedValueOnce(loadedState);
+      const signals = [
+        {
+          type: "signal",
+          personaId: "persona-1",
+          lens: "persona",
+          id: "signal-1",
+          subject_persona_id: "persona-1",
+          claim: "Speaks in short sentences.",
+          dimension: "voice",
+          status: "candidate",
+          evidence_ids: ["msg-1"],
+          first_observed_at: "2026-01-01T00:00:00.000Z",
+          last_observed_at: "2026-01-01T00:00:00.000Z",
+          observer_kinds: ["human"],
+          recurrence_count: 1,
+        },
+        {
+          type: "signal",
+          personaId: "persona-1",
+          lens: "agent",
+          id: "signal-2",
+          subject_persona_id: "persona-1",
+          claim: "Always runs the full test suite before yielding.",
+          dimension: "behavior",
+          status: "dismissed",
+          evidence_ids: ["msg-2"],
+          first_observed_at: "2026-01-02T00:00:00.000Z",
+          last_observed_at: "2026-01-02T00:00:00.000Z",
+          observer_kinds: ["subject_self"],
+          recurrence_count: 2,
+        },
+      ];
+      mockListPersonaSignals.mockReturnValueOnce(signals);
+      ({ client } = await setupClient());
+      const result = await client.callTool({ name: "ei_signal_list", arguments: { persona_id: "persona-1" } });
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(JSON.parse(content[0].text)).toEqual(signals);
+      // S5: the forwarding test previously only checked the OUTPUT
+      // matched whatever the mock was told to return -- it would have
+      // passed even if the handler called listPersonaSignals with the
+      // wrong persona_id or a stale/different state object. Assert the
+      // actual call arguments too.
+      expect(mockListPersonaSignals).toHaveBeenCalledWith("persona-1", loadedState);
+    });
+
+    it("returns an empty array (not an error) when the persona has no signals", async () => {
+      mockLoadLatestState.mockResolvedValueOnce({ personas: {} });
+      mockListPersonaSignals.mockReturnValueOnce([]);
+      ({ client } = await setupClient());
+      const result = await client.callTool({ name: "ei_signal_list", arguments: { persona_id: "persona-no-signals" } });
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(JSON.parse(content[0].text)).toEqual([]);
+      expect(result.isError).toBeFalsy();
+    });
+
+    it("returns the exact no-saved-state message when loadLatestState resolves null", async () => {
+      mockLoadLatestState.mockResolvedValueOnce(null);
+      ({ client } = await setupClient());
+      const result = await client.callTool({ name: "ei_signal_list", arguments: { persona_id: "persona-1" } });
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(content[0].text).toBe("No saved state found. Is EI_DATA_PATH set correctly?");
+    });
+
+    it("declares persona_id as a required string in its inputSchema", async () => {
+      ({ client } = await setupClient());
+      const tools = await client.listTools();
+      const tool = tools.tools.find((t) => t.name === "ei_signal_list")!;
+      const schema = tool.inputSchema as Record<string, unknown>;
+      const properties = schema.properties as Record<string, { type?: string }>;
+      expect(properties.persona_id.type).toBe("string");
+      expect(schema.required as string[]).toContain("persona_id");
+    });
   });
 });
