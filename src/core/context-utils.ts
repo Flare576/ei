@@ -34,6 +34,11 @@ export function filterMessagesForContext(
 // Embeddings are internal implementation details for similarity search.
 // =============================================================================
 
+/**
+ * Canonical embedding-stripper for any DataItemBase-shaped item headed into a
+ * prompt payload or external response. Consolidated 2026-08-19 from three
+ * duplicate copies in src/prompts/ceremony/{dedup,topic-rewrite,user-dedup}.ts.
+ */
 export function stripDataItemEmbedding<T extends DataItemBase>(item: T): T {
   const { embedding, ...rest } = item;
   return rest as T;

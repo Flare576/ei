@@ -1,3 +1,4 @@
+import { stripDataItemEmbedding } from "../../core/context-utils.js";
 import type { DedupPromptData } from "./types.js";
 
 // =============================================================================
@@ -45,7 +46,7 @@ Return raw JSON only. No markdown, no commentary.
 ${buildRecordFormatHint(data.itemType)}`;
 
   const payload = JSON.stringify({
-    cluster: data.cluster.map(stripEmbedding),
+    cluster: data.cluster.map(stripDataItemEmbedding),
     cluster_type: data.itemType,
     user_confirmed: true,
   }, null, 2);
@@ -85,11 +86,6 @@ ${schemaReminder}`;
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function stripEmbedding<T extends { embedding?: unknown }>(item: T): Omit<T, "embedding"> {
-  const { embedding: _, ...rest } = item;
-  return rest as Omit<T, "embedding">;
-}
 
 function buildRecordFormatHint(itemType: string): string {
   switch (itemType) {

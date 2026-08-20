@@ -1,3 +1,4 @@
+import { stripDataItemEmbedding } from "../../core/context-utils.js";
 import type { DedupPromptData, ValidatePromptData } from "./types.js";
 
 // =============================================================================
@@ -97,7 +98,7 @@ ${buildRecordFormatExamples(data.itemType)}
 - Use \`find_memory\` strategically (6 calls max) to check for related records or gather context before making irreversible merge decisions.`;
 
   const payload = JSON.stringify({
-    cluster: data.cluster.map(stripEmbedding),
+    cluster: data.cluster.map(stripDataItemEmbedding),
     cluster_type: data.itemType,
     similarity_range: data.similarityRange,
   }, null, 2);
@@ -193,8 +194,8 @@ Rules:
 Return raw JSON only. No markdown fencing, no commentary.`;
 
   const payload = JSON.stringify({
-    established: stripEmbedding(data.established),
-    newcomer: stripEmbedding(data.newcomer),
+    established: stripDataItemEmbedding(data.established),
+    newcomer: stripDataItemEmbedding(data.newcomer),
     item_type: data.itemType,
     similarity_score: data.similarity,
   }, null, 2);
@@ -234,12 +235,6 @@ ${schemaReminder}`;
 // =============================================================================
 // Helpers
 // =============================================================================
-
-/** Strip embedding arrays from items before putting them in prompts—they're huge and useless to the LLM. */
-function stripEmbedding<T extends { embedding?: unknown }>(item: T): Omit<T, "embedding"> {
-  const { embedding: _, ...rest } = item;
-  return rest as Omit<T, "embedding">;
-}
 
 function buildRecordFormatExamples(itemType: string): string {
   // Each entity type has different required fields and semantic meanings.

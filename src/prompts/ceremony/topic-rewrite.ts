@@ -1,13 +1,9 @@
+import { stripDataItemEmbedding } from "../../core/context-utils.js";
 import type { RewriteScanPromptData, RewritePromptData } from "./types.js";
 
 // =============================================================================
 // PHASE 1: SCAN — Identify subjects that don't belong in a Topic record
 // =============================================================================
-
-function stripEmbedding<T extends { embedding?: unknown }>(item: T): Omit<T, "embedding"> {
-  const { embedding: _, ...rest } = item;
-  return rest as Omit<T, "embedding">;
-}
 
 export function buildTopicRewriteScanPrompt(data: RewriteScanPromptData): { system: string; user: string } {
   const isTechnical = (data.item as { category?: string }).category === "Technical";
@@ -40,7 +36,7 @@ Return a raw JSON array of strings. No markdown fencing, no commentary. Thinking
 Example — a Topic named "Software Engineering" whose description also discusses vim keybindings, git conventions, and AI tooling:
 ["vim keybindings and editor configuration", "git and GitHub workflow conventions", "AI coding assistant preferences"]`;
 
-  const payload = JSON.stringify(stripEmbedding(data.item), null, 2);
+  const payload = JSON.stringify(stripDataItemEmbedding(data.item), null, 2);
 
   const schemaReminder = `**Return JSON:**
 \`\`\`json
@@ -158,11 +154,11 @@ Rules:
 
   const subjects = data.subjects.map(s => ({
     search_term: s.searchTerm,
-    matches: s.matches.map(m => stripEmbedding(m)),
+    matches: s.matches.map(m => stripDataItemEmbedding(m)),
   }));
 
   const userPayload = {
-    original: stripEmbedding(data.item),
+    original: stripDataItemEmbedding(data.item),
     original_type: data.itemType,
     subjects,
   };

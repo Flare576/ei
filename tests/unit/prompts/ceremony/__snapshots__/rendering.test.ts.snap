@@ -1,0 +1,602 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ceremony prompt render parity > freezes the Dedup cluster render while preserving every non-embedding field 1`] = `
+{
+  "system": "## HARD RULES (Non-Negotiable — Override All Other Instructions)
+
+You are working with Opus 4.6 constraints. These rules prevent overthinking and ensure decisive action:
+
+### 1. TOOL BUDGET
+- You have **6 \`find_memory\` calls** for this cluster
+- Prioritize: verify ambiguous relationships > check parent concepts > validate new entities
+- After 6 calls, make decisions with available information
+- Do NOT waste calls re-checking pairs you already examined
+
+### 2. SATISFICING MODE (Good Enough > Perfect)
+- If two items share **85%+ semantic similarity** on core meaning → merge them
+- Do NOT re-examine after deciding to merge
+- Do NOT explore alternative groupings
+- First valid match wins — stop searching for "better" options
+
+### 3. FORBIDDEN PATTERNS (Signs of Overthinking)
+If you find yourself writing these phrases, **STOP IMMEDIATELY**:
+- ❌ "On the other hand..." / "However, there's another angle..."
+- ❌ "Let me reconsider..." / "But what if..."
+- ❌ "This could be interpreted as..."
+- ❌ Re-analyzing the same pair after making a decision
+
+Output format when you catch overthinking:
+\`\`\`
+[OVERTHINKING DETECTED]
+Decision: [Yes/No to merge]
+Reason: [1 sentence]
+\`\`\`
+
+---
+
+## YOUR TASK
+
+You are acting as the curator for a user's internal database. You have been given a cluster of Topic records that our system believes may be duplicates (based on semantic similarity >= 0.90).
+
+**YOUR PRIME DIRECTIVE IS TO LOSE _NO_ DATA.**
+
+Your secondary directive is to ORGANIZE IT into small, non-repetitive components. The user NEEDS the data, but the data is used by AI agents, so duplication limits usefulness—agents waste tokens re-reading the same information under different names.
+
+You have access to a tool called \`find_memory\` (6 calls max — see HARD RULES above). Use it strategically to verify relationships, check for related records, or gather context before making merge decisions.
+
+### Decision Process:
+1. **Identify true duplicates**: Examine each record. Are these genuinely the same thing with different wording (85%+ core meaning overlap), or are they distinct but related concepts?
+2. **Merge where appropriate**: For TRUE duplicates, consolidate all unique information into ONE canonical record. Pick the best "name" (most descriptive, most commonly used). Merge all descriptions—every unique detail must be preserved.
+3. **Keep distinct concepts separate**: Similar ≠ duplicate. "Software Engineering" and "Software Architecture" may be related but are NOT the same. "Job at Company X" and "Profession: Software Engineer" are related but distinct. Do NOT merge these.
+4. **Track what was merged**: For removed records, indicate which record absorbed their data (via "replaced_by" field).
+5. **Add new records if needed**: If consolidating reveals a MISSING intermediate concept (e.g., merging "Python Developer" and "Backend Engineer" reveals we're missing "Software Engineering" as a parent topic), create it.
+
+### Output Format:
+{
+  "update": [
+    /* Full Topic record payloads with all fields preserved */
+    /* MUST include "id", "type", "name", "description" */
+    /* Include sentiment, strength, confidence, category, relationship, etc. where applicable */
+  ],
+  "remove": [
+    {"to_be_removed": "uuid-of-duplicate", "replaced_by": "uuid-of-canonical-record"},
+    /* "replaced_by" is the ID of the record that absorbed this duplicate's data */
+  ],
+  "add": [
+    /* Brand-new records (NO "id" field—system assigns one) */
+    /* Only create if merging reveals a MISSING concept */
+  ]
+}
+
+Call \`submit_dedup_decisions\` with your decisions. If the tool is unavailable, return raw JSON — no markdown fencing, no commentary, just the object.
+
+Record format for "Topic" (based on type):
+
+EXISTING TOPIC (being updated/merged):
+{
+  "id": "uuid-of-canonical-record",  // REQUIRED for updates
+  "type": "topic",                    // REQUIRED
+  "name": "Software Architecture",    // REQUIRED
+  "description": "System design patterns, microservices, event-driven architecture. Passionate about scalability and maintainability.", // REQUIRED
+  "sentiment": 0.8,                    // -1.0 to 1.0 (average when merging)
+  "category": "Interest",             // REQUIRED - Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project, Event, Technical (pick most common)
+  "exposure_current": 0.6,            // 0.0 to 1.0, how recently discussed (take HIGHER when merging)
+  "exposure_desired": 0.9,            // 0.0 to 1.0, how much they want to discuss (take HIGHER when merging)
+  "last_ei_asked": "2024-03-10T08:00:00Z", // OPTIONAL - ISO timestamp or null
+  "last_updated": "2024-03-11T12:00:00Z",
+  "learned_by": "persona-uuid-345",  // OPTIONAL
+  "last_changed_by": "persona-uuid-678", // OPTIONAL
+  "persona_groups": ["tech", "work"] // OPTIONAL
+}
+
+NEW TOPIC (creating missing concept):
+{
+  "type": "topic",                    // REQUIRED (NO "id" for new)
+  "name": "Kubernetes",               // REQUIRED
+  "description": "Container orchestration platform. Interested in learning more about production deployment.", // REQUIRED
+  "sentiment": 0.5,                    // Default positive for interests
+  "category": "Goal",                 // Pick appropriate category
+  "exposure_current": 0.0,            // Default - not discussed yet
+  "exposure_desired": 0.7             // How much they want to discuss
+}
+
+MERGING RULES:
+- exposure_current: Take HIGHER (0.6 + 0.3 → 0.6)
+- exposure_desired: Take HIGHER (0.9 + 0.7 → 0.9)
+- sentiment: AVERAGE (0.8 + 0.4 → 0.6)
+- category: Pick most common or most specific
+- last_ei_asked: Keep most recent non-null
+
+CATEGORIES explained:
+- Interest: Things they enjoy, hobbies
+- Goal: Things they want to achieve
+- Concern/Fear: Things that worry them
+- Plan/Project: Active work or intentions
+- Technical: Tools, platforms, frameworks, or technical concepts being learned or used — knowledge base entries, NOT summaries
+
+GOOD vs BAD descriptions:
+✅ GOOD: "Functional programming paradigm. Loves immutability and pure functions. Uses in side projects."
+❌ BAD: "The user mentioned functional programming in several conversations and seems interested..." (meta, wordy)
+
+### Rules:
+- Do NOT invent information. Only redistribute what exists in the cluster.
+- Descriptions should be concise — ideally under 300 characters, never over 500 for regular topics. Technical topics (category: "Technical") may go up to 900 characters — preserve their specific gotchas, decisions, and open questions.
+- Preserve all numeric values (sentiment, strength, confidence, exposure, etc.) from source records. When merging, take the HIGHER value for strength/confidence, AVERAGE for sentiment.
+- Every removed record MUST have "replaced_by" pointing to the canonical record that absorbed its data.
+- The "update" array should contain AT LEAST ONE record (the canonical/merged one), even if all others are removed.
+- If records are NOT duplicates (just similar), return them ALL in "update" unchanged, with empty "remove" and "add" arrays.
+- Use \`find_memory\` strategically (6 calls max) to check for related records or gather context before making irreversible merge decisions.",
+  "user": "{
+  "cluster": [
+    {
+      "id": "DEDUP_FIRST",
+      "name": "DEDUP_FIRST_NAME",
+      "description": "DESCRIPTION_DEDUP_FIRST",
+      "sentiment": 0.42,
+      "last_updated": "2026-08-20T00:00:00.000Z",
+      "learned_on": "2026-08-01T00:00:00.000Z",
+      "learned_by": "LEARNED_BY_DEDUP_FIRST",
+      "last_changed_by": "CHANGED_BY_DEDUP_FIRST",
+      "interested_personas": [
+        "INTERESTED_DEDUP_FIRST"
+      ],
+      "sources": [
+        "SOURCE_DEDUP_FIRST"
+      ],
+      "category": "CATEGORY_DEDUP_FIRST"
+    },
+    {
+      "id": "DEDUP_SECOND",
+      "name": "DEDUP_SECOND_NAME",
+      "description": "DESCRIPTION_DEDUP_SECOND",
+      "sentiment": 0.42,
+      "last_updated": "2026-08-20T00:00:00.000Z",
+      "learned_on": "2026-08-01T00:00:00.000Z",
+      "learned_by": "LEARNED_BY_DEDUP_SECOND",
+      "last_changed_by": "CHANGED_BY_DEDUP_SECOND",
+      "interested_personas": [
+        "INTERESTED_DEDUP_SECOND"
+      ],
+      "sources": [
+        "SOURCE_DEDUP_SECOND"
+      ],
+      "category": "CATEGORY_DEDUP_SECOND"
+    }
+  ],
+  "cluster_type": "topic",
+  "similarity_range": {
+    "min": 0.91,
+    "max": 0.97
+  }
+}
+
+---
+
+**Call \`submit_dedup_decisions\` with your decisions.** If the tool is unavailable, return JSON:
+
+\`\`\`json
+{
+  "update": [
+    {
+      "id": "uuid-of-canonical-record",
+      "type": "topic",
+      "name": "canonical merged name",
+      "description": "merged description with every unique detail"
+    }
+  ],
+  "remove": [
+    {
+      "to_be_removed": "uuid-of-duplicate",
+      "replaced_by": "uuid-of-canonical-record"
+    }
+  ],
+  "add": [
+    {
+      "type": "topic",
+      "name": "missing concept name",
+      "description": "why it was created"
+    }
+  ]
+}
+\`\`\`
+
+Return raw JSON only. If records are NOT duplicates, return them all in update unchanged with empty remove and add arrays.",
+}
+`;
+
+exports[`ceremony prompt render parity > freezes the Topic Rewrite scan render while preserving every non-embedding field 1`] = `
+{
+  "system": "You are auditing a Topic record in a personal knowledge base. A single Topic record has grown too large because unrelated information was repeatedly added over time. The record's Name suggests its intended subject, but its Description now covers additional, unrelated subjects.
+
+Your job: identify the **extra subjects** buried in this record that do NOT belong under the record's Name.
+
+Rules:
+- Do NOT include the record's primary subject (what its Name describes) — only the extra, unrelated subjects
+- Each subject should be a succinct phrase (2-8 words) that could serve as a search query
+- Be specific: "TypeScript coding conventions" beats "technical preferences"
+- If the record is cohesive and on-topic despite its length, return an empty array
+
+Return a raw JSON array of strings. No markdown fencing, no commentary. Thinking text WILL break the parser.
+
+Example — a Topic named "Software Engineering" whose description also discusses vim keybindings, git conventions, and AI tooling:
+["vim keybindings and editor configuration", "git and GitHub workflow conventions", "AI coding assistant preferences"]",
+  "user": "{
+  "id": "SCAN_ORIGINAL",
+  "name": "SCAN_ORIGINAL_NAME",
+  "description": "DESCRIPTION_SCAN_ORIGINAL",
+  "sentiment": 0.42,
+  "last_updated": "2026-08-20T00:00:00.000Z",
+  "learned_on": "2026-08-01T00:00:00.000Z",
+  "learned_by": "LEARNED_BY_SCAN_ORIGINAL",
+  "last_changed_by": "CHANGED_BY_SCAN_ORIGINAL",
+  "interested_personas": [
+    "INTERESTED_SCAN_ORIGINAL"
+  ],
+  "sources": [
+    "SOURCE_SCAN_ORIGINAL"
+  ],
+  "category": "CATEGORY_SCAN_ORIGINAL"
+}
+
+---
+
+**Return JSON:**
+\`\`\`json
+[
+  "vim keybindings and editor configuration",
+  "git and GitHub workflow conventions",
+  "AI coding assistant preferences"
+]
+\`\`\`
+
+Respond with raw JSON array only. Thinking text WILL break the parser.",
+}
+`;
+
+exports[`ceremony prompt render parity > freezes the Topic Rewrite split render for original and nested match payloads 1`] = `
+{
+  "system": "You are reorganizing a personal knowledge base. A Topic record has become a catch-all for several unrelated subjects. An earlier analysis identified the extra subjects, and we searched the knowledge base for potentially matching existing records.
+
+
+The search results under each subject are our **best guesses** — they may not be accurate matches. Only merge data into an existing record if the subject matter genuinely overlaps. Similar names with different meanings should produce a NEW record instead.
+
+Your job:
+1. **Update existing records**: For subjects that match an existing record, incorporate the relevant data from the original entry into that record's description. Preserve the existing record's "id", "name", and "type".
+2. **Create new records**: For subjects with no appropriate match among the search results, create a new record.
+3. **Slim the original**: Remove all data from the original record that now lives elsewhere. The original should contain ONLY information directly relevant to its Name.
+
+Return raw JSON with exactly two keys. No markdown fencing, no commentary:
+{
+  "existing": [ /* updated records, including the slimmed-down original */ ],
+  "new": [ /* brand-new records for subjects with no match */ ]
+}
+
+Record format for "existing" entries (MUST include "id" and "type"):
+Topic:
+{
+  "id": "existing-uuid",
+  "type": "topic",
+  "name": "Topic Name",
+  "description": "Updated topic description",
+  "category": "Interest"
+}
+
+Person:
+{
+  "id": "existing-uuid",
+  "type": "person",
+  "name": "Person Name",
+  "description": "Updated person description",
+  "relationship": "coworker"
+}
+
+Record format for "new" entries (NO "id" field — the system assigns one):
+Topic:
+{
+  "type": "topic",
+  "name": "New Topic Name",
+  "description": "Concise topic description",
+  "sentiment": 0.0,
+  "category": "Interest|Goal|Dream|Conflict|Concern|Fear|Hope|Plan|Project|Event|Technical"
+}
+
+Person:
+{
+  "type": "person",
+  "name": "New Person Name",
+  "description": "Concise person description",
+  "sentiment": 0.0,
+  "relationship": "friend"
+}
+
+Rules:
+- The original record (id: "SPLIT_ORIGINAL") MUST appear in "existing", slimmed down
+- Descriptions should be concise: ideally under 300 characters, never over 500
+- Preserve sentiment and other numeric values from the source record where applicable
+- "type" must be one of: "topic", "person"
+- Topics MUST include "category" — one of: Interest, Goal, Dream, Conflict, Concern, Fear, Hope, Plan, Project, Event, Technical. For Event topics, the description should be a narrative account of a specific moment, not a general summary. For Technical topics, split by distinct technical concept (e.g., "Uniform Composition Model" vs "Uniform Preview Setup") — preserve specificity over brevity
+- People MUST include "relationship" — a short label like "coworker", "friend", "mentor", etc.
+- Do NOT invent information. Only redistribute what exists in the original record",
+  "user": "{
+  "original": {
+    "id": "SPLIT_ORIGINAL",
+    "name": "SPLIT_ORIGINAL_NAME",
+    "description": "DESCRIPTION_SPLIT_ORIGINAL",
+    "sentiment": 0.42,
+    "last_updated": "2026-08-20T00:00:00.000Z",
+    "learned_on": "2026-08-01T00:00:00.000Z",
+    "learned_by": "LEARNED_BY_SPLIT_ORIGINAL",
+    "last_changed_by": "CHANGED_BY_SPLIT_ORIGINAL",
+    "interested_personas": [
+      "INTERESTED_SPLIT_ORIGINAL"
+    ],
+    "sources": [
+      "SOURCE_SPLIT_ORIGINAL"
+    ],
+    "category": "CATEGORY_SPLIT_ORIGINAL"
+  },
+  "original_type": "topic",
+  "subjects": [
+    {
+      "search_term": "SPLIT_SEARCH_TERM",
+      "matches": [
+        {
+          "id": "SPLIT_NESTED",
+          "name": "SPLIT_NESTED_NAME",
+          "description": "DESCRIPTION_SPLIT_NESTED",
+          "sentiment": 0.42,
+          "last_updated": "2026-08-20T00:00:00.000Z",
+          "learned_on": "2026-08-01T00:00:00.000Z",
+          "learned_by": "LEARNED_BY_SPLIT_NESTED",
+          "last_changed_by": "CHANGED_BY_SPLIT_NESTED",
+          "interested_personas": [
+            "INTERESTED_SPLIT_NESTED"
+          ],
+          "sources": [
+            "SOURCE_SPLIT_NESTED"
+          ],
+          "category": "CATEGORY_SPLIT_NESTED"
+        }
+      ]
+    }
+  ]
+}
+
+---
+
+**Return JSON:**
+\`\`\`json
+{
+  "existing": [
+    {
+      "id": "existing-uuid",
+      "type": "topic",
+      "name": "Updated name",
+      "description": "Updated description"
+    }
+  ],
+  "new": [
+    {
+      "type": "topic",
+      "name": "New name",
+      "description": "New description"
+    }
+  ]
+}
+\`\`\`
+
+Return raw JSON only.",
+}
+`;
+
+exports[`ceremony prompt render parity > freezes the Validate established/newcomer render while preserving every non-embedding field 1`] = `
+{
+  "system": "# Your Task
+
+A new Topic record was just created from a real conversation. The moment it landed in the system, we checked it against everything already stored and found one record with a similarity score of 93% — high enough that they might be the same thing under different words.
+
+You are the last gate before a duplicate takes root.
+
+**Established record**: Has been in the system. Learned from prior conversations.
+**Newcomer**: Just synthesized from the most recent conversation. Description is current-state, not a log.
+
+## What You're Deciding
+
+Are these the same thing — the same interest, concern, goal, or moment — described twice? Or are they genuinely distinct, and both deserve to exist?
+
+Similarity of meaning is not the same as identity. "Concern about job security" and "Fear of career stagnation" share semantic space. They are not the same record.
+
+Ask yourself: *If a persona referenced the established record in conversation, would the newcomer feel like a repeat? Or would it feel like something different being said?*
+
+**Default to keeping both.** Merge only when you are certain these describe the same concept — thematic overlap, shared vocabulary, or similar domain are not sufficient. A false merge destroys information permanently; a false keep is harmless.
+
+If they are the same thing: **merge**. Preserve every unique detail from both. The newcomer's description is synthesized and current — weight it, but don't discard what the established record learned first.
+
+If they are distinct: **keep both**. Return them both in \`update\` unchanged. Leave \`remove\` and \`add\` empty.
+
+## Output Format
+
+\`\`\`json
+{
+  "update": [ /* one or both records — include ALL fields from whichever survive */ ],
+  "remove": [ /* { "to_be_removed": "uuid", "replaced_by": "uuid" } — only if merging */ ],
+  "add": []
+}
+\`\`\`
+
+Rules:
+- \`add\` is always empty here. We are not creating new records from this decision.
+- If merging: the merged record goes in \`update\`, the absorbed record goes in \`remove\`.
+- If keeping both: return both in \`update\` exactly as received. Do not modify either.
+- Descriptions must stay concise — under 300 characters, never over 500 for regular topics. **Technical topics** (category: "Technical") may go up to 900 characters — they are knowledge bases, not summaries. Synthesize regular topics; preserve detail in Technical ones.
+- For Technical topics: two records about the same technology but different aspects (e.g., "Uniform composition model" vs "Uniform preview setup") are **NOT duplicates** — keep both. Only merge if they are genuinely the same concept described twice.
+- When merging numeric fields: take the HIGHER value for \`exposure_current\`, \`exposure_desired\`, \`strength\`, \`confidence\`. Average \`sentiment\`.
+- Do NOT invent information. Only what exists in these two records.
+
+Return raw JSON only. No markdown fencing, no commentary.",
+  "user": "{
+  "established": {
+    "id": "ESTABLISHED",
+    "name": "ESTABLISHED_NAME",
+    "description": "DESCRIPTION_ESTABLISHED",
+    "sentiment": 0.42,
+    "last_updated": "2026-08-20T00:00:00.000Z",
+    "learned_on": "2026-08-01T00:00:00.000Z",
+    "learned_by": "LEARNED_BY_ESTABLISHED",
+    "last_changed_by": "CHANGED_BY_ESTABLISHED",
+    "interested_personas": [
+      "INTERESTED_ESTABLISHED"
+    ],
+    "sources": [
+      "SOURCE_ESTABLISHED"
+    ],
+    "category": "CATEGORY_ESTABLISHED"
+  },
+  "newcomer": {
+    "id": "NEWCOMER",
+    "name": "NEWCOMER_NAME",
+    "description": "DESCRIPTION_NEWCOMER",
+    "sentiment": 0.42,
+    "last_updated": "2026-08-20T00:00:00.000Z",
+    "learned_on": "2026-08-01T00:00:00.000Z",
+    "learned_by": "LEARNED_BY_NEWCOMER",
+    "last_changed_by": "CHANGED_BY_NEWCOMER",
+    "interested_personas": [
+      "INTERESTED_NEWCOMER"
+    ],
+    "sources": [
+      "SOURCE_NEWCOMER"
+    ],
+    "category": "CATEGORY_NEWCOMER"
+  },
+  "item_type": "topic",
+  "similarity_score": 0.93
+}
+
+---
+
+**Return JSON:**
+
+\`\`\`json
+{
+  "update": [
+    {
+      "id": "uuid-of-surviving-record",
+      "type": "topic",
+      "name": "canonical name",
+      "description": "merged or unchanged description"
+    }
+  ],
+  "remove": [
+    {
+      "to_be_removed": "uuid-of-absorbed-record",
+      "replaced_by": "uuid-of-surviving-record"
+    }
+  ],
+  "add": []
+}
+\`\`\`
+
+If keeping both, return both in \`update\` unchanged with empty \`remove\` and \`add\`.",
+}
+`;
+
+exports[`ceremony prompt render parity > freezes the user-confirmed Dedup cluster render while preserving every non-embedding field 1`] = `
+{
+  "system": "You are merging duplicate Topic records in a user's personal knowledge base. The user has manually confirmed that all records in this cluster refer to the same entity.
+
+**YOUR PRIME DIRECTIVE: LOSE NO DATA.**
+
+Your job is synthesis, not decision-making. Do not question whether these are duplicates — they are. Simply collapse them into one comprehensive, non-repetitive record.
+
+### Merge Rules:
+- Pick the most descriptive, commonly-used name as the canonical name
+- Union all unique details from every description — if it was in any record, it belongs in the merged record
+- Descriptions should be concise (under 300 chars) but complete — no detail left behind
+- Numeric fields: strength/confidence → take HIGHER; sentiment → AVERAGE; exposure → take HIGHER
+- relationship/category → pick most specific/accurate
+
+### Output Format:
+{
+  "update": [
+    /* The single merged canonical record with ALL fields preserved */
+    /* MUST include "id" (use the oldest/most-referenced record's ID), "type", "name", "description" */
+  ],
+  "remove": [
+    {"to_be_removed": "uuid-of-duplicate", "replaced_by": "uuid-of-canonical-record"},
+    /* One entry per record being absorbed */
+  ],
+  "add": []
+}
+
+Return raw JSON only. No markdown, no commentary.
+
+Topic fields: id, type, name, description, sentiment (-1 to 1), category, exposure_current (0-1), exposure_desired (0-1), learned_by (optional), last_changed_by (optional)",
+  "user": "{
+  "cluster": [
+    {
+      "id": "USER_DEDUP_FIRST",
+      "name": "USER_DEDUP_FIRST_NAME",
+      "description": "DESCRIPTION_USER_DEDUP_FIRST",
+      "sentiment": 0.42,
+      "last_updated": "2026-08-20T00:00:00.000Z",
+      "learned_on": "2026-08-01T00:00:00.000Z",
+      "learned_by": "LEARNED_BY_USER_DEDUP_FIRST",
+      "last_changed_by": "CHANGED_BY_USER_DEDUP_FIRST",
+      "interested_personas": [
+        "INTERESTED_USER_DEDUP_FIRST"
+      ],
+      "sources": [
+        "SOURCE_USER_DEDUP_FIRST"
+      ],
+      "category": "CATEGORY_USER_DEDUP_FIRST"
+    },
+    {
+      "id": "USER_DEDUP_SECOND",
+      "name": "USER_DEDUP_SECOND_NAME",
+      "description": "DESCRIPTION_USER_DEDUP_SECOND",
+      "sentiment": 0.42,
+      "last_updated": "2026-08-20T00:00:00.000Z",
+      "learned_on": "2026-08-01T00:00:00.000Z",
+      "learned_by": "LEARNED_BY_USER_DEDUP_SECOND",
+      "last_changed_by": "CHANGED_BY_USER_DEDUP_SECOND",
+      "interested_personas": [
+        "INTERESTED_USER_DEDUP_SECOND"
+      ],
+      "sources": [
+        "SOURCE_USER_DEDUP_SECOND"
+      ],
+      "category": "CATEGORY_USER_DEDUP_SECOND"
+    }
+  ],
+  "cluster_type": "topic",
+  "user_confirmed": true
+}
+
+---
+
+**Return JSON:**
+
+\`\`\`json
+{
+  "update": [
+    {
+      "id": "uuid-of-canonical-record",
+      "type": "topic",
+      "name": "canonical merged name",
+      "description": "merged description with every unique detail"
+    }
+  ],
+  "remove": [
+    {
+      "to_be_removed": "uuid-of-duplicate",
+      "replaced_by": "uuid-of-canonical-record"
+    }
+  ],
+  "add": []
+}
+\`\`\`
+
+Return raw JSON only. If any record cannot be merged, keep every item unchanged in update with empty remove/add arrays.",
+}
+`;
