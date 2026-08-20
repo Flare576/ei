@@ -1,4 +1,3 @@
-import type { PersonaEntity } from "../types/entities.js";
 
 /**
  * Verified execution provenance for a claim sourced from a Cognitive
@@ -30,15 +29,25 @@ export type ObservationLensClassification =
   | { lens: "needs_agent_provenance" };
 
 /**
- * D6 (Spec §4.5/§4.16): a Persona with no harness operating contract
- * structurally never produces an Agent-lens signal, regardless of content.
- * Ei's own persona (the reserved id "ei") is the only current instance —
- * named explicitly by the Spec, not inferred from `is_static`/aliases/any
- * other heuristic that could accidentally match a user-created persona.
+ * D6 revised (2026-08-19, Flare's ruling): lens classification is driven
+ * ENTIRELY by whether verified execution provenance is complete — never by
+ * which persona the claim is about. The original version of this file
+ * hardcoded `persona.id !== "ei"` as a structural veto, on the assumption
+ * that Ei's own persona could never be dispatched as a coding-harness
+ * agent. That assumption isn't a permanent architectural fact — it's a
+ * fact about the world that a human can change at any time (e.g. by
+ * defining an OMP agent using Ei's identity), and the veto would then
+ * silently discard genuine, complete provenance instead of recording it.
+ * The ruling: this module never tells a caller its claim is "the wrong
+ * kind of behavior" for a given persona — worst case on a bad-faith or
+ * mistaken caller is a misclassified claim, still recorded, never a
+ * refusal. Whether a persona plausibly has a harness operating contract is
+ * exactly and only what `isCompleteProvenance` below already checks: no
+ * real CD2+ transcript will ever produce complete provenance for a persona
+ * that was never dispatched as a coding agent, so that case already
+ * resolves to "persona" lens on its own, with no separate identity check
+ * needed.
  */
-export function personaHasHarnessOperatingContract(persona: PersonaEntity): boolean {
-  return persona.id !== "ei";
-}
 
 const REQUIRED_PROVENANCE_FIELDS: Array<keyof AgentProvenance> = [
   "harness",
@@ -56,20 +65,17 @@ function isCompleteProvenance(provenance: Partial<AgentProvenance>): provenance 
 }
 
 /**
- * D6/§4.5's classifier: lens is decided by verified execution provenance,
- * never by `dimension` (dimension is orthogonal — it says what aspect of
- * whichever lens a claim addresses, decided elsewhere). Provenance is
- * `undefined`/`null` for ordinary in-Ei conversation, where no CD2+
- * transcript backs the claim at all — those always land on the Persona
- * lens, the same as a Persona with no harness contract.
+ * D6/§4.5's classifier (revised 2026-08-19): lens is decided SOLELY by
+ * verified execution provenance completeness — never by `dimension`
+ * (dimension is orthogonal — it says what aspect of whichever lens a claim
+ * addresses, decided elsewhere) and never by which persona the claim
+ * names (see this file's header comment). Provenance is `undefined`/`null`
+ * for ordinary in-Ei conversation, where no CD2+ transcript backs the
+ * claim at all — that always lands on the Persona lens.
  */
 export function classifyObservationLens(
-  persona: PersonaEntity,
   provenance?: Partial<AgentProvenance> | null
 ): ObservationLensClassification {
-  if (!personaHasHarnessOperatingContract(persona)) {
-    return { lens: "persona" };
-  }
   if (!provenance) {
     return { lens: "persona" };
   }

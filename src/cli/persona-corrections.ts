@@ -384,6 +384,18 @@ const observationAddBodySchema = z.strictObject({
   direction: z.enum(SIGNAL_DIRECTIONS),
   claim: z.string().min(1),
   extraction_confidence: z.number().min(0).max(1).optional(),
+  // 2026-08-19 ruling: self-attested, same as observer_kind/actor above.
+  // Add Observation deliberately skips Scan/Extract's own
+  // `classifyObservationLens` gate (this operation supplies attribution
+  // directly rather than deriving it from a transcript), so there is no
+  // verified-provenance object to check here even in principle — the
+  // caller's asserted `lens` is recorded as given, for any persona,
+  // including Ei's own. There is no persona-specific carve-out: Ei is not
+  // structurally exempt from `lens: "agent"` here or anywhere else in the
+  // reducer (`classifyObservationLens` itself no longer gates on persona
+  // identity either — see `src/core/utils/persona-signal-lens.ts`'s own
+  // header comment). Worst case on a mistaken or bad-faith caller is a
+  // misclassified signal, still recorded — never a refusal.
   lens: z.enum(["persona", "agent"]),
 }).refine(
   (body) => body.observer_kind !== "other_persona" || Boolean(body.observer_persona_id),

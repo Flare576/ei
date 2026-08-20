@@ -3479,6 +3479,7 @@ describe("D2/§4.3 branch point — handleHumanPersonScan routes a Persona-linke
   const SUBJECT_ID = "sisyphus-id";
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     sm = new StateManager();
     await sm.initialize(createMockStorage());
     sm.persona_add(makeTestPersona("ei", "Ei"));
@@ -3546,8 +3547,22 @@ describe("D2/§4.3 branch point — handleHumanPersonScan routes a Persona-linke
 
     await handlers[LLMNextStep.HandleHumanPersonScan](response, sm);
 
+    // queuePersonUpdate is mocked at module scope in this file (see the
+    // vi.mock(".../orchestrators/index.js") block above) -- it never
+    // touches sm's real queue, so the routing assertion has to be against
+    // the mock's own call record, exactly like every other queuePersonUpdate
+    // assertion in this file (e.g. the confidence-gated matching describe
+    // block below). Checking sm.queue_getAllActiveItems() for
+    // HandlePersonUpdate here can never pass -- that was this test's actual
+    // defect, not a routing regression in handleHumanPersonScan itself.
+    expect(queuePersonUpdate).toHaveBeenCalledTimes(1);
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: "regular-person" },
+      expect.objectContaining({ candidateName: "Alice" }),
+      sm
+    );
+
     const active = sm.queue_getAllActiveItems();
-    expect(active.some(r => r.next_step === LLMNextStep.HandlePersonUpdate)).toBe(true);
     expect(active.some(r => r.next_step === LLMNextStep.HandlePersonaSignalScan)).toBe(false);
   });
 
@@ -3616,7 +3631,7 @@ describe("resolvePersonaLinkedPeople — read-time enumerate-all (Bolt 004, D8)"
   });
 });
 
-describe("classifyObservationLens — dual-lens classification (Bolt 004, D6/R2/AT2)", () => {
+describe("classifyObservationLens — dual-lens classification (Bolt 004, D6/R2/AT2, revised 2026-08-19)", () => {
   const completeProvenance: AgentProvenance = {
     harness: "omp",
     agent_id: "sub-agent-1",
@@ -3625,34 +3640,55 @@ describe("classifyObservationLens — dual-lens classification (Bolt 004, D6/R2/
     mode: "delegated",
   };
 
-  it("AT2 positive: a CD2+ fixture with verified, complete provenance produces an Agent-lens classification", () => {
-    const persona = makeTestPersona("sisyphus-id", "Sisyphus");
-    const result = classifyObservationLens(persona, completeProvenance);
+  it("AT2 positive: complete, verified provenance produces an Agent-lens classification", () => {
+    const result = classifyObservationLens(completeProvenance);
     expect(result.lens).toBe("agent");
   });
 
-  it("AT2 negative: Ei's own persona produces zero Agent-lens classifications regardless of content/provenance completeness", () => {
-    const ei = makeTestPersona("ei", "Ei");
-    expect(classifyObservationLens(ei, completeProvenance).lens).toBe("persona");
-    expect(classifyObservationLens(ei, undefined).lens).toBe("persona");
-    expect(classifyObservationLens(ei, { harness: "omp" }).lens).toBe("persona");
+  // 2026-08-19 ruling: the prior version of this suite had a dedicated
+  // "Ei's own persona produces zero Agent-lens classifications" test.
+  // That's gone by construction now, not merely untested — the function
+  // no longer accepts a persona argument at all, so there is no longer any
+  // way to even attempt a persona-specific gate here. AT2 positive above
+  // already proves complete provenance alone is sufficient for Agent lens.
+
+  it("no provenance at all (ordinary in-Ei conversation) classifies as Persona lens", () => {
+    expect(classifyObservationLens(undefined).lens).toBe("persona");
   });
 
-  it("a non-Ei persona with no provenance at all (ordinary in-Ei conversation) classifies as Persona lens", () => {
-    const persona = makeTestPersona("sisyphus-id", "Sisyphus");
-    expect(classifyObservationLens(persona, undefined).lens).toBe("persona");
+  it.each([
+    ["deleted", "harness", undefined],
+    ["empty", "harness", ""],
+    ["non-string", "harness", 7],
+    ["deleted", "agent_id", undefined],
+    ["empty", "agent_id", ""],
+    ["non-string", "agent_id", 7],
+    ["deleted", "agent_definition_ref", undefined],
+    ["empty", "agent_definition_ref", ""],
+    ["non-string", "agent_definition_ref", 7],
+    ["deleted", "definition_revision", undefined],
+    ["empty", "definition_revision", ""],
+    ["non-string", "definition_revision", 7],
+    ["deleted", "mode", undefined],
+    ["empty", "mode", ""],
+    ["non-string", "mode", 7],
+  ] as const)("classifies %s required provenance %s as needs_agent_provenance", (condition, field, value) => {
+    const provenance: Record<string, unknown> = { ...completeProvenance };
+    if (condition === "deleted") {
+      delete provenance[field];
+    } else {
+      provenance[field] = value;
+    }
+    expect(classifyObservationLens(provenance)).toEqual({ lens: "needs_agent_provenance" });
   });
 
-  it("a non-Ei persona with incomplete provenance is 'needs_agent_provenance' — distinct from the structural no-Agent-lens fact (D6)", () => {
-    const persona = makeTestPersona("sisyphus-id", "Sisyphus");
-    const result = classifyObservationLens(persona, { harness: "omp", agent_id: "sub-agent-1" });
-    expect(result.lens).toBe("needs_agent_provenance");
+  it("classifies null provenance as Persona lens", () => {
+    expect(classifyObservationLens(null)).toEqual({ lens: "persona" });
   });
 
   it("AT-R16 #7 (intentional Agent definition revision): two provenance objects for the same agent_id with different definition_revision hashes both classify as Agent lens independently — no drift flag, no cross-revision comparison", () => {
-    const persona = makeTestPersona("sisyphus-id", "Sisyphus");
-    const revisionOne = classifyObservationLens(persona, completeProvenance);
-    const revisionTwo = classifyObservationLens(persona, { ...completeProvenance, definition_revision: "sha256:bbbb" });
+    const revisionOne = classifyObservationLens(completeProvenance);
+    const revisionTwo = classifyObservationLens({ ...completeProvenance, definition_revision: "sha256:bbbb" });
     expect(revisionOne.lens).toBe("agent");
     expect(revisionTwo.lens).toBe("agent");
     expect(revisionOne.lens === "agent" && revisionOne.provenance.definition_revision).toBe("sha256:aaaa");
@@ -3771,7 +3807,7 @@ describe("handlePersonaSignalScan — Scan/Extract (Bolt 004, D1/D6/D7)", () => 
     expect(matchRequests[0].data.lens).toBe("agent");
   });
 
-  it("D6: the same complete provenance against Ei's own persona still produces zero Agent-lens signals — Match queues against the persona lens instead", async () => {
+  it("2026-08-19 ruling: complete provenance against Ei's own persona now produces an Agent-lens signal — classification never gates on which persona a claim names, only on provenance completeness", async () => {
     sm.human_person_upsert(makeLinkedPerson("ei-person", "Ei", "ei"));
     const message = seedChannelMessage(sm, CHANNEL_ID, "Verified test-writing discipline observed in a CD2+ transcript.");
     const request = makeScanRequest({
@@ -3796,7 +3832,74 @@ describe("handlePersonaSignalScan — Scan/Extract (Bolt 004, D1/D6/D7)", () => 
 
     const matchRequests = sm.queue_getAllActiveItems().filter(r => r.next_step === LLMNextStep.HandlePersonaSignalMatch);
     expect(matchRequests).toHaveLength(1);
-    expect(matchRequests[0].data.lens).toBe("persona");
+    expect(matchRequests[0].data.lens).toBe("agent");
+  });
+
+  it("2026-08-20: strips control bytes from an unresolvable claim before console.debug logging (reducer-diagnostics-log-raw-model-controlled-data)", async () => {
+    const message = seedChannelMessage(sm, CHANNEL_ID, "Something unrelated happened today.");
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    try {
+      const request = makeScanRequest({
+        personaId: CHANNEL_ID,
+        subjectPersonaId: SUBJECT_ID,
+        subjectPersonId: "sisyphus-person",
+        message_ids_to_mark: [message.id],
+      });
+      const maliciousClaim = "Escape\x1b[31mANSI\x1b[0m and BEL\x07 bytes in a claim";
+      const response = createMockResponse(request, {
+        observations: [{
+          quote_text: "This exact phrase never appeared anywhere",
+          claim: maliciousClaim,
+          dimension: "behavior",
+          direction: "novel",
+          extraction_confidence: 0.9,
+          observer_kind: "human",
+        }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+
+      expect(debugSpy).toHaveBeenCalled();
+      for (const call of debugSpy.mock.calls) {
+        expect(call.join(" ")).not.toMatch(/[\u0000-\u001F\u007F-\u009F]/);
+      }
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
+  it("2026-08-20: strips control bytes from a claim logged on the incomplete-provenance branch (reducer-diagnostics-log-raw-model-controlled-data)", async () => {
+    const message = seedChannelMessage(sm, CHANNEL_ID, "Verified test-writing discipline observed in a transcript.");
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    try {
+      const request = makeScanRequest({
+        personaId: CHANNEL_ID,
+        subjectPersonaId: SUBJECT_ID,
+        subjectPersonId: "sisyphus-person",
+        message_ids_to_mark: [message.id],
+        agentProvenance: { harness: "omp" },
+      });
+      const maliciousClaim = "Escape\x1b[31mANSI\x1b[0m claim";
+      const response = createMockResponse(request, {
+        observations: [{
+          quote_text: "Verified test-writing discipline observed in a transcript",
+          claim: maliciousClaim,
+          dimension: "behavior",
+          direction: "novel",
+          extraction_confidence: 0.9,
+          observer_kind: "human",
+        }],
+      });
+
+      await handlers[LLMNextStep.HandlePersonaSignalScan](response, sm);
+
+      expect(debugSpy).toHaveBeenCalled();
+      for (const call of debugSpy.mock.calls) {
+        expect(call.join(" ")).not.toMatch(/[\u0000-\u001F\u007F-\u009F]/);
+      }
+    } finally {
+      debugSpy.mockRestore();
+    }
   });
 });
 
@@ -4432,6 +4535,28 @@ describe("handlePersonaSignalMatch — D11/R8/AT8(b): malformed or non-resolving
     const validateRequests = sm.queue_getAllActiveItems().filter(r => r.next_step === LLMNextStep.HandlePersonaSignalValidate);
     expect(validateRequests).toHaveLength(1);
   });
+
+  it("2026-08-20: strips control bytes from a matched_guid absent from the open list before console.warn logging (reducer-diagnostics-log-raw-model-controlled-data)", () => {
+    const observation = seedObservation();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandlePersonaSignalMatch,
+        data: { subjectPersonaId: SUBJECT_ID, observationId: observation.id, lens: "persona" },
+      });
+      const maliciousGuid = "\x1b[31mFAKE-GUID\x1b[0m\x07";
+      const response = createMockResponse(request, { matched_guid: maliciousGuid });
+
+      handlers[LLMNextStep.HandlePersonaSignalMatch](response, sm);
+
+      expect(warnSpy).toHaveBeenCalled();
+      for (const call of warnSpy.mock.calls) {
+        expect(call.join(" ")).not.toMatch(/[\u0000-\u001F\u007F-\u009F]/);
+      }
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
 
 
@@ -4565,4 +4690,109 @@ describe("handlePersonaSignalValidate — D12/R8/AT8(c): a single malformed/non-
     expect(signals.find(s => s.id === keepB.id)).toBeDefined();
   });
 });
+
+describe("handleTopicMatch — control-char sanitization in log lines (reducer-diagnostics-log-raw-model-controlled-data)", () => {
+  it("strips control bytes from an unresolved matched_guid before console.warn logging", () => {
+    const state = createMockStateManager();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicMatch,
+        data: {
+          personaId: "ei",
+          personaDisplayName: "Ei",
+          candidateName: "Patterns",
+          candidateDescription: "Design patterns",
+          candidateCategory: "Technical",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+      const maliciousGuid = "\x1b[31mFAKE\x1b[0m\x07";
+      const response = createMockResponse(request, { matched_guid: maliciousGuid });
+
+      handlers[LLMNextStep.HandleTopicMatch](response, state as unknown as StateManager);
+
+      expect(warnSpy).toHaveBeenCalled();
+      for (const call of [...warnSpy.mock.calls, ...logSpy.mock.calls]) {
+        expect(call.join(" ")).not.toMatch(/[\u0000-\u001F\u007F-\u009F]/);
+      }
+    } finally {
+      warnSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  it("strips control bytes from a resolved matched_guid before the final console.log summary", () => {
+    const state = createMockStateManager();
+    const maliciousGuid = "\x1b[31mTOPIC-ID\x1b[0m\x07";
+    state._human.topics.push({
+      id: maliciousGuid,
+      name: "Patterns",
+      description: "Design patterns",
+      sentiment: 0.5,
+      last_updated: new Date().toISOString(),
+      exposure_current: 0.5,
+      exposure_desired: 0.5,
+      category: "Technical",
+    } as Topic);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicMatch,
+        data: {
+          personaId: "ei",
+          personaDisplayName: "Ei",
+          candidateName: "Patterns",
+          candidateDescription: "Design patterns",
+          candidateCategory: "Technical",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+      const response = createMockResponse(request, { matched_guid: maliciousGuid });
+
+      handlers[LLMNextStep.HandleTopicMatch](response, state as unknown as StateManager);
+
+      expect(logSpy).toHaveBeenCalled();
+      for (const call of logSpy.mock.calls) {
+        expect(call.join(" ")).not.toMatch(/[\u0000-\u001F\u007F-\u009F]/);
+      }
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("strips control bytes from a poisoned candidateName (originating from the earlier Scan/Extract LLM output) before the final console.log summary", () => {
+    const state = createMockStateManager();
+    const maliciousCandidateName = "Patterns\x1b[31mRED\x1b[0m\x07";
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const request = createMockRequest({
+        next_step: LLMNextStep.HandleTopicMatch,
+        data: {
+          personaId: "ei",
+          personaDisplayName: "Ei",
+          candidateName: maliciousCandidateName,
+          candidateDescription: "Design patterns",
+          candidateCategory: "Technical",
+          messages_context: [],
+          messages_analyze: [],
+        },
+      });
+      const response = createMockResponse(request, { matched_guid: "new" });
+
+      handlers[LLMNextStep.HandleTopicMatch](response, state as unknown as StateManager);
+
+      expect(logSpy).toHaveBeenCalled();
+      for (const call of logSpy.mock.calls) {
+        expect(call.join(" ")).not.toMatch(/[\u0000-\u001F\u007F-\u009F]/);
+      }
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+});
+
 

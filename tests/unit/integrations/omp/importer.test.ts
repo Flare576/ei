@@ -113,8 +113,7 @@ describe("importOmpSessions", () => {
       expect(data.subjectPersonaId).toBe("backend-engineer-persona");
       expect(data.subjectPersonId).toBe("backend-engineer-person");
 
-      const subjectPersona = sm.persona_getById("backend-engineer-persona")!;
-      const classification = classifyObservationLens(subjectPersona, data.agentProvenance as Parameters<typeof classifyObservationLens>[1]);
+      const classification = classifyObservationLens(data.agentProvenance as Parameters<typeof classifyObservationLens>[0]);
       expect(classification.lens).toBe("agent");
       if (classification.lens === "agent") {
         expect(classification.provenance.harness).toBe("omp");
@@ -147,8 +146,7 @@ describe("importOmpSessions", () => {
       expect(requests).toHaveLength(1);
       const data = requests[0].data as Record<string, unknown>;
 
-      const subjectPersona = sm.persona_getById("backend-engineer-persona")!;
-      const classification = classifyObservationLens(subjectPersona, data.agentProvenance as Parameters<typeof classifyObservationLens>[1]);
+      const classification = classifyObservationLens(data.agentProvenance as Parameters<typeof classifyObservationLens>[0]);
       expect(classification.lens).toBe("needs_agent_provenance");
     });
 
@@ -299,6 +297,66 @@ describe("importOmpSessions", () => {
       const matchRequests = sm.queue_getAllActiveItems().filter((r) => r.next_step === LLMNextStep.HandlePersonaSignalMatch);
       expect(matchRequests).toHaveLength(1);
       expect(matchRequests[0].data.lens).toBe("agent");
+    });
+  });
+
+  describe("S6 — complete and incomplete OMP provenance at the linked Ei ingress", () => {
+    function makeScanResponse(request: LLMResponse["request"], quote: string): LLMResponse {
+      return {
+        request,
+        success: true,
+        content: JSON.stringify({ observations: [{ quote_text: quote }] }),
+        parsed: {
+          observations: [{
+            quote_text: quote,
+            claim: "Ei's operating contract is grounded in observed work.",
+            dimension: "behavior",
+            direction: "novel",
+            extraction_confidence: 0.9,
+            observer_kind: "human",
+          }],
+        },
+      };
+    }
+
+    it("a linked Ei subject with complete OMP provenance persists one fully-provenanced observation and queues one Agent Match", async () => {
+      sm.persona_add(makeTestPersona("ei", "Ei"));
+      sm.human_person_upsert(makeLinkedPerson("ei-person", "Ei", "ei"));
+      const quote = "Ei's operating contract is grounded in observed work";
+      const session = makeSession("ei", "You are Ei.", quote);
+
+      await importOmpSessions({ stateManager: sm, reader: makeFakeReader(RECORD, session) });
+      const [scanRequest] = scanRequestsFor(sm);
+      expect(scanRequest).toBeDefined();
+      await handlers[LLMNextStep.HandlePersonaSignalScan](makeScanResponse(scanRequest, quote), sm);
+
+      const observations = sm.observations_get("ei");
+      expect(observations).toHaveLength(1);
+      expect(observations[0]).toMatchObject({
+        harness: "omp",
+        agent_id: "ei",
+        agent_definition_ref: "omp:ei",
+        definition_revision: "sha256:aaaabbbbccccddddeeeeffff00001111222233334444555566667777888899990000",
+        mode: "delegated",
+      });
+      const matchRequests = sm.queue_getAllActiveItems().filter((r) => r.next_step === LLMNextStep.HandlePersonaSignalMatch);
+      expect(matchRequests).toHaveLength(1);
+      expect(matchRequests[0].data.lens).toBe("agent");
+    });
+
+    it("a linked Ei subject with a missing system prompt persists neither observation nor Agent Match after a valid draft", async () => {
+      sm.persona_add(makeTestPersona("ei", "Ei"));
+      sm.human_person_upsert(makeLinkedPerson("ei-person", "Ei", "ei"));
+      const quote = "Ei's operating contract is grounded in observed work";
+      const session = makeSession("ei", undefined, quote);
+
+      await importOmpSessions({ stateManager: sm, reader: makeFakeReader(RECORD, session) });
+      const [scanRequest] = scanRequestsFor(sm);
+      expect(scanRequest).toBeDefined();
+      await handlers[LLMNextStep.HandlePersonaSignalScan](makeScanResponse(scanRequest, quote), sm);
+
+      expect(sm.observations_get("ei")).toEqual([]);
+      expect(sm.queue_getAllActiveItems().filter((r) => r.next_step === LLMNextStep.HandlePersonaSignalMatch)).toEqual([]);
     });
   });
 

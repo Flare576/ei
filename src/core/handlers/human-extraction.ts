@@ -17,6 +17,7 @@ import { BUILT_IN_FACT_NAMES } from "../constants/built-in-facts.js";
 import { getEmbeddingService, getItemEmbeddingText, cosineSimilarity, getPersonEmbeddingText } from "../embedding-service.js";
 import { levenshtein, normalizeForMatch } from "../utils/levenshtein.js";
 import { isEiPersonaIdentifierType, resolvePersonaLinkedPeople } from "../utils/identifier-utils.js";
+import { stripControlChars } from "../utils/message-refusal.js";
 import { classifyObservationLens } from "../utils/persona-signal-lens.js";
 
 export type PersonMatchStrength = 'strong' | 'weak';
@@ -585,7 +586,7 @@ export async function handlePersonaSignalScan(response: LLMResponse, state: Stat
 
   const subjectPersonaId = response.request.data.subjectPersonaId as string;
   const subjectPersonId = response.request.data.subjectPersonId as string;
-  const agentProvenance = response.request.data.agentProvenance as Parameters<typeof classifyObservationLens>[1];
+  const agentProvenance = response.request.data.agentProvenance as Parameters<typeof classifyObservationLens>[0];
   const extractionModel = response.request.data.extraction_model as string | undefined;
 
   const subjectPersona = state.persona_getById(subjectPersonaId);
@@ -607,13 +608,13 @@ export async function handlePersonaSignalScan(response: LLMResponse, state: Stat
 
     const sourceMessage = messages_analyze.find(m => matchQuoteInMessage(draft.quote_text, getMessageText(m)) !== null);
     if (!sourceMessage) {
-      console.debug(`[handlePersonaSignalScan] Could not resolve source message for claim "${draft.claim}" — dropping`);
+      console.debug(`[handlePersonaSignalScan] Could not resolve source message for claim "${stripControlChars(draft.claim)}" — dropping`);
       continue;
     }
 
-    const classification = classifyObservationLens(subjectPersona, agentProvenance);
+    const classification = classifyObservationLens(agentProvenance);
     if (classification.lens === "needs_agent_provenance") {
-      console.debug(`[handlePersonaSignalScan] Provenance incomplete for ${subjectPersona.display_name} — dropping Agent-lens claim "${draft.claim}"`);
+      console.debug(`[handlePersonaSignalScan] Provenance incomplete for ${subjectPersona.display_name} — dropping Agent-lens claim "${stripControlChars(draft.claim)}"`);
       continue;
     }
 
