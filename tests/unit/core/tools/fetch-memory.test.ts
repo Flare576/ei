@@ -13,6 +13,7 @@ function makeFact(overrides: Partial<Fact> = {}): Fact {
     validated_date: "2026-01-01T00:00:00Z",
     embedding: [0.1, 0.2],
     persona_groups: ["group-a"],
+    rewrite_length_floor: 50,
     ...overrides,
   };
 }
@@ -122,12 +123,13 @@ describe("createFetchMemoryExecutor", () => {
       expect(result.validated_date).toBe("2026-01-01T00:00:00Z");
     });
 
-    it("strips embedding and persona_groups from fact", async () => {
+    it("strips embedding, persona_groups, and rewrite_length_floor from fact (ADR-031 subset boundary, .sisyphus/issues/fetch-memory-adr031-field-drift.md)", async () => {
       const executor = createFetchMemoryExecutor(getHuman);
       const result = JSON.parse(await executor.execute({ id: "fact-1" }));
 
       expect(result.embedding).toBeUndefined();
       expect(result.persona_groups).toBeUndefined();
+      expect(result.rewrite_length_floor).toBeUndefined();
     });
   });
 
@@ -139,11 +141,9 @@ describe("createFetchMemoryExecutor", () => {
       expect(result.type).toBe("topic");
       expect(result.id).toBe("topic-1");
       expect(result.name).toBe("Hiking");
-      expect(result.exposure_current).toBe(0.5);
-      expect(result.exposure_desired).toBe(0.7);
     });
 
-    it("strips embedding, persona_groups, rewrite_length_floor, last_ei_asked from topic", async () => {
+    it("strips embedding, persona_groups, rewrite_length_floor, last_ei_asked, exposure_current, exposure_desired from topic (ADR-031 subset boundary, .sisyphus/issues/fetch-memory-adr031-field-drift.md)", async () => {
       const executor = createFetchMemoryExecutor(getHuman);
       const result = JSON.parse(await executor.execute({ id: "topic-1" }));
 
@@ -151,6 +151,8 @@ describe("createFetchMemoryExecutor", () => {
       expect(result.persona_groups).toBeUndefined();
       expect(result.rewrite_length_floor).toBeUndefined();
       expect(result.last_ei_asked).toBeUndefined();
+      expect(result.exposure_current).toBeUndefined();
+      expect(result.exposure_desired).toBeUndefined();
     });
   });
 
@@ -165,7 +167,7 @@ describe("createFetchMemoryExecutor", () => {
       expect(result.relationship).toBe("friend");
     });
 
-    it("strips embedding, persona_groups, rewrite_length_floor, last_ei_asked from person", async () => {
+    it("strips embedding, persona_groups, rewrite_length_floor, last_ei_asked, exposure_current, exposure_desired from person (ADR-031 subset boundary, .sisyphus/issues/fetch-memory-adr031-field-drift.md)", async () => {
       const executor = createFetchMemoryExecutor(getHuman);
       const result = JSON.parse(await executor.execute({ id: "person-1" }));
 
@@ -173,6 +175,8 @@ describe("createFetchMemoryExecutor", () => {
       expect(result.persona_groups).toBeUndefined();
       expect(result.rewrite_length_floor).toBeUndefined();
       expect(result.last_ei_asked).toBeUndefined();
+      expect(result.exposure_current).toBeUndefined();
+      expect(result.exposure_desired).toBeUndefined();
     });
   });
 

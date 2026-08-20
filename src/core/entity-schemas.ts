@@ -328,11 +328,23 @@ export const personaPatchSchema = z.strictObject({ ...personaPatchSchemaBase.sha
 // family, each a hand-maintained mirror of that table — the same
 // hand-maintained-list convention `PERSONA_ROUND_TRIP_FIELDS`
 // (src/cli/persona-corrections.ts) already used for its own narrower
-// purpose, extended here to the full Hidden category. Every caller
-// (`ei --id` / `ei_lookup` via src/cli/retrieval.ts's lookupById, and every
+// purpose, extended here to the full Hidden category. Every caller (`ei --id` / `ei_lookup` via
+// src/cli/retrieval.ts's lookupById, and every
 // create/update response in src/cli/corrections-endpoints.ts and
 // src/cli/persona-corrections.ts) must route its response through the
 // matching function below before returning it externally.
+//
+// 2026-08-20 ruling (Flare): `src/core/tools/builtin/fetch-memory.ts`'s `fetch_memory` tool is a
+// DIFFERENT trust boundary -- an LLM persona calling this on itself mid-conversation, not an
+// external CLI/MCP caller -- but its own output must still be a SUBSET of what this file's
+// functions produce, never a superset. `fetch_memory` is geared toward aiding conversation and
+// further data acquisition, not maintaining the data, and Ei's own models run with far smaller
+// context windows than an external caller, so a higher signal-to-noise ratio (hiding MORE than
+// ADR-031 strictly requires, e.g. `persona_groups`) is intentional and fine. Hiding LESS than
+// ADR-031 requires is not -- that's the drift this ruling closes. `fetch-memory.ts` composes on
+// top of `stripHiddenDataItemFields` below rather than hand-maintaining its own independent
+// field list, so this subset relationship is guaranteed by the code's own structure, not merely
+// by two lists someone has to remember to keep in sync.
 // ---------------------------------------------------------------------------
 
 /**

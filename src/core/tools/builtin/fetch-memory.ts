@@ -1,23 +1,37 @@
 import type { ToolExecutor } from "../types.js";
 import type { Fact, Topic, Person, Quote, HumanEntity } from "../../types.js";
+import { stripHiddenDataItemFields } from "../../entity-schemas.js";
 
 type GetHuman = () => HumanEntity;
 
+// 2026-08-20 ruling (Flare, .sisyphus/issues/fetch-memory-adr031-field-drift.md): fetch_memory's
+// output is a DIFFERENT trust boundary than the external CLI/MCP surface
+// stripHiddenDataItemFields governs (an LLM persona calling this on itself mid-conversation, not
+// an external caller) -- but it must still be a SUBSET of that surface, never a superset. Ei's
+// own models run with far smaller context windows, so hiding MORE than ADR-031 strictly requires
+// (persona_groups, below) is intentional signal-to-noise reduction for conversation/further-
+// data-acquisition use, not a bug. Hiding LESS -- silently leaking a field ADR-031 already
+// decided must never reach a caller -- was the actual defect this ruling fixes: cleanFact/
+// cleanTopic/cleanPerson used to hand-maintain their own independent exclusion list, which had
+// already drifted (cleanFact was missing rewrite_length_floor; cleanTopic/cleanPerson were both
+// missing exposure_current/exposure_desired). Composing on stripHiddenDataItemFields instead
+// means the ADR-031 baseline can never drift again -- there is only one list to maintain, not two.
+
 function cleanFact(f: Fact): Record<string, unknown> {
-  const { embedding, persona_groups, ...rest } = f;
-  void embedding; void persona_groups;
+  const { persona_groups, ...rest } = stripHiddenDataItemFields(f);
+  void persona_groups;
   return rest;
 }
 
 function cleanTopic(t: Topic): Record<string, unknown> {
-  const { embedding, rewrite_length_floor, persona_groups, last_ei_asked, ...rest } = t;
-  void embedding; void rewrite_length_floor; void persona_groups; void last_ei_asked;
+  const { persona_groups, ...rest } = stripHiddenDataItemFields(t);
+  void persona_groups;
   return rest;
 }
 
 function cleanPerson(p: Person): Record<string, unknown> {
-  const { embedding, rewrite_length_floor, persona_groups, last_ei_asked, ...rest } = p;
-  void embedding; void rewrite_length_floor; void persona_groups; void last_ei_asked;
+  const { persona_groups, ...rest } = stripHiddenDataItemFields(p);
+  void persona_groups;
   return rest;
 }
 
