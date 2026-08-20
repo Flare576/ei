@@ -8,12 +8,7 @@ import type { StateManager } from "../state-manager.js";
 import type { HeartbeatCheckResult, EiHeartbeatResult } from "../../prompts/heartbeat/types.js";
 import { crossFind } from "../utils/index.js";
 import { qualifyEiMessage } from "../utils/message-id.js";
-
-// D4 (Bolt-006 review I1): strips C0/C1 control characters — including the
-// ESC lead-in that begins any ANSI/OSC escape sequence — from a string
-// before it reaches a terminal log sink. Never applied to content stored to
-// state; only to log previews.
-const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F-\u009F]/g;
+import { stripControlChars } from "../utils/message-refusal.js";
 
 export function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void {
   const personaId = response.request.data.personaId as string;
@@ -58,7 +53,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
   if (!result) {
     throw new Error("[EiHeartbeat] No parsed result");
   }
-  console.log(`[EiHeartbeat] Parsed result - should_respond: ${result.should_respond}, id: ${String(result.id ?? '(none)').replace(CONTROL_CHARS_RE, "")}, my_response: ${result.my_response ? '(present)' : '(none)'}`);
+  console.log(`[EiHeartbeat] Parsed result - should_respond: ${result.should_respond}, id: ${stripControlChars(String(result.id ?? '(none)'))}, my_response: ${result.my_response ? '(present)' : '(none)'}`);
   // D6 (Bolt-006 review I5): validate my_response's shape before any state
   // mutation below. my_response is optional (omitted is fine — no message to
   // send), but if present it must be a non-empty string; anything else is a
@@ -86,7 +81,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
   if (result.id !== undefined) {
     const offeredIds = response.request.data.offeredIds as string[] | undefined;
     if (!offeredIds?.includes(result.id)) {
-      console.warn(`[handleEiHeartbeat] Rejected id "${String(result.id).replace(CONTROL_CHARS_RE, "")}" -- not present in this request's offered-id snapshot`);
+      console.warn(`[handleEiHeartbeat] Rejected id "${stripControlChars(String(result.id))}" -- not present in this request's offered-id snapshot`);
       return;
     }
   }
@@ -114,7 +109,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
     // with no id is a deliberate response, never equivalent to
     // should_respond=false, and must not be silently dropped (Spec §4.10, D2).
     if (result.my_response) {
-      console.log(`[EiHeartbeat] Sending message (Temporal Anchor): "${result.my_response.replace(CONTROL_CHARS_RE, "").substring(0, 100)}${result.my_response.length > 100 ? '...' : ''}"`);
+      console.log(`[EiHeartbeat] Sending message (Temporal Anchor): "${stripControlChars(result.my_response).substring(0, 100)}${result.my_response.length > 100 ? '...' : ''}"`);
       sendMessage(result.my_response);
     } else {
       console.log("[EiHeartbeat] should_respond=true but no id and no my_response provided");
@@ -125,7 +120,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
   const isTUI = response.request.data.isTUI as boolean;
   const found = crossFind(result.id, state.getHuman(), state.persona_getAll(), (personaId) => state.signals_get(personaId));
   if (!found) {
-    console.warn(`[handleEiHeartbeat] Could not find item with id "${String(result.id).replace(CONTROL_CHARS_RE, "")}"`);
+    console.warn(`[handleEiHeartbeat] Could not find item with id "${stripControlChars(String(result.id))}"`);
     return;
   }
 
@@ -138,7 +133,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
   }
 
   if (result.my_response) {
-    console.log(`[EiHeartbeat] Sending message: "${result.my_response.replace(CONTROL_CHARS_RE, "").substring(0, 100)}${result.my_response.length > 100 ? '...' : ''}"`);
+    console.log(`[EiHeartbeat] Sending message: "${stripControlChars(result.my_response).substring(0, 100)}${result.my_response.length > 100 ? '...' : ''}"`);
     sendMessage(result.my_response);
   }
 
@@ -158,7 +153,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
       console.log(`[handleEiHeartbeat] Reached out about signal "${found.id}" (persona ${found.personaId}, ${found.lens} lens)`);
       break;
     default:
-      console.warn(`[handleEiHeartbeat] Unexpected item type "${found.type}" for id "${String(result.id).replace(CONTROL_CHARS_RE, "")}"`);
+      console.warn(`[handleEiHeartbeat] Unexpected item type "${found.type}" for id "${stripControlChars(String(result.id))}"`);
   }
 
   const newPersonIds = (response.request.data.newPersonIds ?? []) as string[];

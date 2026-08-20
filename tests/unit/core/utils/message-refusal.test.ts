@@ -2,13 +2,15 @@
 // test file existed for this module before now (it was only exercised
 // indirectly through fetch-message.test.ts and retrieval-resolver.test.ts).
 // This file locks down classifyRefusedMessageId/classifyMalformedRoomPrimary's
-// id-free reason wording and sanitizeMessageIdForLog's control-byte strip
-// (I6, .sisyphus/reviews/quote-attestation-final-implementation.md).
+// id-free reason wording and stripControlChars's control-byte strip (I6,
+// .sisyphus/reviews/quote-attestation-final-implementation.md). Renamed
+// 2026-08-19 from sanitizeMessageIdForLog when three independent duplicate
+// implementations of this same regex were consolidated into this one export.
 import { describe, it, expect } from "vitest";
 import {
   classifyRefusedMessageId,
   classifyMalformedRoomPrimary,
-  sanitizeMessageIdForLog,
+  stripControlChars,
 } from "../../../../src/core/utils/message-refusal.js";
 
 describe("classifyRefusedMessageId", () => {
@@ -76,29 +78,37 @@ describe("classifyMalformedRoomPrimary", () => {
   });
 });
 
-describe("sanitizeMessageIdForLog", () => {
+describe("stripControlChars", () => {
   it("returns a clean id unchanged", () => {
-    expect(sanitizeMessageIdForLog("ei:00000000-0000-4000-8000-000000000000")).toBe(
+    expect(stripControlChars("ei:00000000-0000-4000-8000-000000000000")).toBe(
       "ei:00000000-0000-4000-8000-000000000000"
     );
   });
 
   it("strips C0 control bytes (including ESC-driven ANSI sequences) while keeping the rest of the id legible", () => {
     const evil = "attest\x1b[31mRED\x1b[0mquote-1";
-    const cleaned = sanitizeMessageIdForLog(evil);
+    const cleaned = stripControlChars(evil);
     expect(cleaned).not.toContain("\x1b");
     expect(cleaned).toBe("attest[31mRED[0mquote-1");
   });
 
   it("strips a bell character and other C0 bytes", () => {
-    expect(sanitizeMessageIdForLog("id\x07with\x00bell")).toBe("idwithbell");
+    expect(stripControlChars("id\x07with\x00bell")).toBe("idwithbell");
   });
 
   it("strips C1 control bytes (0x7f-0x9f)", () => {
-    expect(sanitizeMessageIdForLog("id\x7fwith\x9fdel")).toBe("idwithdel");
+    expect(stripControlChars("id\x7fwith\x9fdel")).toBe("idwithdel");
   });
 
   it("returns an empty string unchanged", () => {
-    expect(sanitizeMessageIdForLog("")).toBe("");
+    expect(stripControlChars("")).toBe("");
+  });
+
+  it("strips control bytes from non-id, model-controlled content the same way -- generalized 2026-08-19 beyond just message ids", () => {
+    const claim = "Runs the real build\x1b[31m before declaring green\x07.";
+    const cleaned = stripControlChars(claim);
+    expect(cleaned).not.toContain("\x1b");
+    expect(cleaned).not.toContain("\x07");
+    expect(cleaned).toBe("Runs the real build[31m before declaring green.");
   });
 });

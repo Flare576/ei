@@ -4,6 +4,7 @@ import { queuePersonaSignalScan, type ExtractionContext } from "../../core/orche
 import { resolvePersonaLinkedPeople } from "../../core/utils/identifier-utils.js";
 import { ensureAgentPersona, resolveCanonicalAgent } from "../../core/personas/opencode-agent.js";
 import { qualifyOmpMessage } from "../../core/utils/message-id.js";
+import { stripControlChars } from "../../core/utils/message-refusal.js";
 import { convertToEiMessage } from "../shared/message-converter.js";
 import { getMachineId } from "../machine-id.js";
 import { OmpReader } from "./reader.js";
@@ -36,18 +37,6 @@ function updateProcessedState(stateManager: StateManager, processedSessions: Rec
       },
     },
   });
-}
-
-/**
- * D10 (Beta review I5): strips C0 (U+0000-U+001F, U+007F) and C1
- * (U+0080-U+009F) control characters from a transcript-derived string
- * before it reaches console output or becomes a persisted
- * `PersonaEntity.display_name`/alias via `ensureAgentPersona` — a
- * poisoned filename or `session_init.agent` value can neither corrupt
- * terminal output nor create a durable poisoned Persona record.
- */
-function stripControlChars(value: string): string {
-  return value.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
 }
 
 /**

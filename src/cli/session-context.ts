@@ -2,7 +2,7 @@ import type { CodexMessage } from "../integrations/codex/types.js";
 import type { ICodexReader } from "../integrations/codex/types.js";
 import type { ICursorReader } from "../integrations/cursor/types.js";
 import type { IOpenCodeReader } from "../integrations/opencode/types.js";
-import { sanitizeMessageIdForLog } from "../core/utils/message-refusal.js";
+import { stripControlChars } from "../core/utils/message-refusal.js";
 
 export type SessionContextFailureKind =
   | "transcript-unreadable"
@@ -35,7 +35,7 @@ export async function getRecentSessionMessages(
         messages: [],
         failure: {
           kind: "transcript-unreadable",
-          message: `Could not read transcript at ${sanitizeMessageIdForLog(transcriptPath)}: ${sanitizeMessageIdForLog(err instanceof Error ? err.message : String(err))}`,
+          message: `Could not read transcript at ${stripControlChars(transcriptPath)}: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
         },
       };
     }
@@ -53,7 +53,7 @@ export async function getRecentSessionMessages(
         failure: {
           kind: "reader-unavailable",
           hookSource: "codex",
-          message: `Could not load codex transcript parser: ${sanitizeMessageIdForLog(err instanceof Error ? err.message : String(err))}`,
+          message: `Could not load codex transcript parser: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
         },
       };
     }
@@ -105,7 +105,7 @@ export async function getRecentSessionMessages(
         messages: [],
         failure: {
           kind: "record-unprocessable",
-          message: `Could not parse transcript records at ${sanitizeMessageIdForLog(transcriptPath)}: ${sanitizeMessageIdForLog(err instanceof Error ? err.message : String(err))}`,
+          message: `Could not parse transcript records at ${stripControlChars(transcriptPath)}: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
         },
       };
     }
@@ -128,7 +128,7 @@ export async function getRecentSessionMessages(
         failure: {
           kind: "reader-unavailable",
           hookSource,
-          message: `Could not load opencode-plugin reader: ${sanitizeMessageIdForLog(err instanceof Error ? err.message : String(err))}`,
+          message: `Could not load opencode-plugin reader: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
         },
       };
     }
@@ -145,7 +145,7 @@ export async function getRecentSessionMessages(
         failure: {
           kind: "reader-retrieval-failed",
           hookSource,
-          message: `Could not retrieve opencode-plugin session messages: ${sanitizeMessageIdForLog(err instanceof Error ? err.message : String(err))}`,
+          message: `Could not retrieve opencode-plugin session messages: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
         },
       };
     }
@@ -166,7 +166,7 @@ export async function getRecentSessionMessages(
         failure: {
           kind: "reader-unavailable",
           hookSource,
-          message: `Could not load cursor reader: ${sanitizeMessageIdForLog(err instanceof Error ? err.message : String(err))}`,
+          message: `Could not load cursor reader: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
         },
       };
     }
@@ -188,7 +188,7 @@ export async function getRecentSessionMessages(
         failure: {
           kind: "reader-retrieval-failed",
           hookSource,
-          message: `Could not retrieve cursor session messages: ${sanitizeMessageIdForLog(err instanceof Error ? err.message : String(err))}`,
+          message: `Could not retrieve cursor session messages: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
         },
       };
     }
@@ -209,7 +209,7 @@ export async function getRecentSessionMessages(
         failure: {
           kind: "reader-unavailable",
           hookSource,
-          message: `Could not load codex reader: ${sanitizeMessageIdForLog(err instanceof Error ? err.message : String(err))}`,
+          message: `Could not load codex reader: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
         },
       };
     }
@@ -231,7 +231,7 @@ export async function getRecentSessionMessages(
         failure: {
           kind: "reader-retrieval-failed",
           hookSource,
-          message: `Could not retrieve codex session messages: ${sanitizeMessageIdForLog(err instanceof Error ? err.message : String(err))}`,
+          message: `Could not retrieve codex session messages: ${stripControlChars(err instanceof Error ? err.message : String(err))}`,
         },
       };
     }

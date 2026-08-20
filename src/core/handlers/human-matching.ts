@@ -17,6 +17,7 @@ import { mergeOverlappingQuotes, unionIds } from "../corrections.js";
 import { resolveMessageWindow, getMessageText } from "./utils.js";
 import type { PersonaObservation } from "../types/signals.js";
 import { sanitizeEiPersonaIdentifiers, normalizeIdentifierType, isEiPersonaIdentifierType } from "../utils/identifier-utils.js";
+import { stripControlChars } from "../utils/message-refusal.js";
 
 export function handleTopicMatch(response: LLMResponse, state: StateManager): void {
   const result = response.parsed as ItemMatchResult | undefined;
@@ -37,7 +38,7 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
     const human = state.getHuman();
     resolvedTopic = human.topics.find(t => t.id === matched_guid) ?? null;
     if (!resolvedTopic) {
-      console.warn(`[handleTopicMatch] matched_guid "${matched_guid}" not found in topics — treating as new`);
+      console.warn(`[handleTopicMatch] matched_guid "${stripControlChars(matched_guid)}" not found in topics — treating as new`);
       matched_guid = null;
     }
   }
@@ -62,8 +63,8 @@ export function handleTopicMatch(response: LLMResponse, state: StateManager): vo
   };
 
   queueTopicUpdate(result, context, state, resolvedTopic);
-  const matched = matched_guid ? `matched GUID "${matched_guid}"` : "no match (new topic)";
-  console.log(`[handleTopicMatch] topic "${context.candidateName}": ${matched}`);
+  const matched = matched_guid ? `matched GUID "${stripControlChars(matched_guid)}"` : "no match (new topic)";
+  console.log(`[handleTopicMatch] topic "${stripControlChars(context.candidateName)}": ${matched}`);
 }
 
 export async function handleTopicUpdate(response: LLMResponse, state: StateManager): Promise<void> {
@@ -636,7 +637,7 @@ export function handlePersonaSignalMatch(response: LLMResponse, state: StateMana
         .map((s) => s.id)
     );
     if (!openIds.has(rawGuid)) {
-      console.warn(`[handlePersonaSignalMatch] matched_guid "${rawGuid}" not in ${lens} open list — no-op per D11, never coerced to "new"`);
+      console.warn(`[handlePersonaSignalMatch] matched_guid "${stripControlChars(rawGuid)}" not in ${lens} open list — no-op per D11, never coerced to "new"`);
       return;
     }
     matched = rawGuid;

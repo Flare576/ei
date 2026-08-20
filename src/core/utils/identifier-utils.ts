@@ -3,7 +3,7 @@ import type { PersonaEntity } from "../types/entities.js";
 import { isReservedPersonaId } from "../types/entities.js";
 import type { StateManager } from "../state-manager.js";
 import { BUILT_IN_IDENTIFIER_TYPES } from "../constants/built-in-identifier-types.js";
-import { sanitizeMessageIdForLog } from "./message-refusal.js";
+import { stripControlChars } from "./message-refusal.js";
 
 export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -27,7 +27,7 @@ const INVALID_PERSONA_VALUE_PLACEHOLDER = "[invalid value]";
  * `handlePersonUpdate`, merged straight from the raw model response) skip
  * it entirely, so a printable, instruction-shaped string can still carry
  * an "Ei Persona" type tag into `guardPersonaLinks` unsanitized. Stripping
- * control bytes (sanitizeMessageIdForLog) is not enough on its own --
+ * control bytes (stripControlChars) is not enough on its own --
  * printable attacker text survives that unchanged. Anything that fails
  * this check is replaced with a fixed, safe placeholder instead of being
  * embedded raw; this never affects which identifiers actually survive the
@@ -211,7 +211,7 @@ export function guardPersonaLinks(
   const priorValues = new Set(
     (priorStored?.identifiers ?? []).filter(isEiPersonaLinkIdentifier).map(i => i.value)
   );
-  const personName = sanitizeMessageIdForLog(candidate.name);
+  const personName = stripControlChars(candidate.name);
 
   const refusals: PersonaLinkRefusal[] = [];
   let survivors: PersonIdentifier[];

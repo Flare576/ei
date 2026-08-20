@@ -55,7 +55,7 @@ import type { PersonaEntity, PersonaIdentityDelta } from "../core/types/entities
 import type { PersonaTrait, PersonaTopic } from "../core/types/data-items.js";
 import type { PersonaObservation, EmergentSignal } from "../core/types/signals.js";
 import type { CorrectionRecord, MergePatch, CorrectionObservationAdd, CorrectionSignalConfirm, CorrectionSignalDismiss } from "../core/corrections.js";
-import { sanitizeMessageIdForLog } from "../core/utils/message-refusal.js";
+import { stripControlChars } from "../core/utils/message-refusal.js";
 // `personaBaseShape`/`personaTraitSchema`/`personaTopicSchema` and the
 // derived create/patch/candidate schemas now live in
 // `src/core/entity-schemas.ts` (relocated 2026-08-07, Beta's review
@@ -263,7 +263,7 @@ export async function updatePersonaEntity(id: string, body: unknown): Promise<Ex
   }
   const existing = resolveOwnPersona(state.personas, id);
   if (!existing) {
-    throw new Error(`No persona found with id: ${sanitizeMessageIdForLog(id)}`);
+    throw new Error(`No persona found with id: ${stripControlChars(id)}`);
   }
 
   const now = new Date().toISOString();
@@ -309,7 +309,7 @@ export async function removePersonaEntity(id: string): Promise<void> {
     throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
   }
   if (!resolveOwnPersona(state.personas, id)) {
-    throw new Error(`No persona found with id: ${sanitizeMessageIdForLog(id)}`);
+    throw new Error(`No persona found with id: ${stripControlChars(id)}`);
   }
 
   // CRITICAL: this check MUST run here, synchronously, before
@@ -465,7 +465,7 @@ export async function addPersonaObservation(
     throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
   }
   if (!resolveOwnPersona(state.personas, personaId)) {
-    throw new Error(`No persona found with id: ${sanitizeMessageIdForLog(personaId)}`);
+    throw new Error(`No persona found with id: ${stripControlChars(personaId)}`);
   }
   if (parsed.observer_kind === "other_persona") {
     if (parsed.observer_persona_id === personaId) {
@@ -473,7 +473,7 @@ export async function addPersonaObservation(
     }
     const observer = resolveOwnPersona(state.personas, parsed.observer_persona_id!);
     if (!observer || observer.entity.is_archived) {
-      throw new CorrectionValidationError(`observer_persona_id "${sanitizeMessageIdForLog(parsed.observer_persona_id!)}" does not resolve to an active persona`);
+      throw new CorrectionValidationError(`observer_persona_id "${stripControlChars(parsed.observer_persona_id!)}" does not resolve to an active persona`);
     }
   }
 
@@ -507,7 +507,7 @@ export async function addPersonaObservation(
   const observations = drained?.personas[personaId]?.observations ?? [];
   const observation = observations[observations.length - 1];
   if (!observation) {
-    throw new Error(`Observation for persona ${sanitizeMessageIdForLog(personaId)} did not persist after self-drain`);
+    throw new Error(`Observation for persona ${stripControlChars(personaId)} did not persist after self-drain`);
   }
   return { status: "recorded", observation };
 }
@@ -545,7 +545,7 @@ export async function applyPersonaSignal(
     throw new Error("No saved state found. Is EI_DATA_PATH set correctly?");
   }
   if (!resolveOwnPersona(state.personas, personaId)) {
-    throw new Error(`No persona found with id: ${sanitizeMessageIdForLog(personaId)}`);
+    throw new Error(`No persona found with id: ${stripControlChars(personaId)}`);
   }
 
   const now = new Date().toISOString();
@@ -579,7 +579,7 @@ export async function applyPersonaSignal(
   const signals = drained?.personas[personaId]?.signals;
   const signal = signals ? [...signals.persona, ...signals.agent].find((s) => s.id === signalId) : undefined;
   if (!signal) {
-    throw new Error(`Signal ${sanitizeMessageIdForLog(signalId)} not found on persona ${sanitizeMessageIdForLog(personaId)} after drain`);
+    throw new Error(`Signal ${stripControlChars(signalId)} not found on persona ${stripControlChars(personaId)} after drain`);
   }
   return { status: "recorded", signal };
 }

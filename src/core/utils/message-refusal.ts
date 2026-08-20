@@ -78,19 +78,30 @@ export function classifyRefusedMessageId(id: string): TerminalRefusal | null {
 }
 
 /**
- * Strips C0 (0x00-0x1F) and C1 (0x7F-0x9F) control bytes from a
- * caller-supplied message id before it reaches a terminal-capable log
- * line (I6, .sisyphus/reviews/quote-attestation-final-implementation.md).
- * Every refusal `reason` above (and classifyMalformedRoomPrimary's below)
- * instead drops the id outright, matching this session's established
- * precedent for a PUBLIC response -- the caller already knows what id
- * they supplied, so omitting it loses no information. A LOG line is a
- * different sink with a different tradeoff: an operator reading it did
- * NOT supply the id and has a real debugging use for seeing it, so this
- * strips control bytes rather than dropping the id entirely.
+ * Strips C0 (0x00-0x1F) and C1 (0x7F-0x9F) control bytes -- including the
+ * ESC lead-in that begins any ANSI/OSC escape sequence -- from a
+ * caller-supplied, model- or transcript-controlled string. The original,
+ * narrower home of this exact regex (I6,
+ * .sisyphus/reviews/quote-attestation-final-implementation.md) was a
+ * terminal-capable log line specifically: every refusal `reason` above
+ * (and `classifyMalformedRoomPrimary`'s below) instead drops an id
+ * outright, matching this session's established precedent for a PUBLIC
+ * response -- the caller already knows what id they supplied, so
+ * omitting it loses no information. A LOG line is a different sink with
+ * a different tradeoff: an operator reading it did NOT supply the id and
+ * has a real debugging use for seeing it, so this strips control bytes
+ * rather than dropping the value entirely. Consolidated 2026-08-19 from
+ * three independent, byte-identical duplicates of this same regex
+ * (`heartbeat.ts`'s local `CONTROL_CHARS_RE`, `omp/importer.ts`'s local
+ * `stripControlChars`) into this single export -- the omp importer's own
+ * duplicate also applied this strip to a value about to be PERSISTED
+ * (`PersonaEntity.display_name`/alias via `ensureAgentPersona`), not only
+ * logged, so this function's contract now explicitly covers both sinks:
+ * anywhere a model- or transcript-controlled string reaches a
+ * terminal-capable surface, logged or persisted for later display.
  */
-export function sanitizeMessageIdForLog(id: string): string {
-  return id.replace(/[\x00-\x1f\x7f-\x9f]/g, "");
+export function stripControlChars(value: string): string {
+  return value.replace(/[\x00-\x1f\x7f-\x9f]/g, "");
 }
 
 /** The minimal shape this classifier needs from a room message — a structural subset of RoomMessage, declared locally so this module doesn't need to import core/types to stay minimal. */

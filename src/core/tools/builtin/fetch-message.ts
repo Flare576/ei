@@ -2,7 +2,7 @@ import type { ToolExecutor } from "../types.js";
 import type { Message } from "../../types.js";
 import type { RoomMessage, RoomSummary } from "../../types/rooms.js";
 import type { PersonaEntity } from "../../types/entities.js";
-import { classifyRefusedMessageId, classifyMalformedRoomPrimary, sanitizeMessageIdForLog } from "../../utils/message-refusal.js";
+import { classifyRefusedMessageId, classifyMalformedRoomPrimary, stripControlChars } from "../../utils/message-refusal.js";
 
 interface CleanMessage {
   id: string;
@@ -61,7 +61,7 @@ export function createFetchMessageExecutor(
       // every log line below prints this sanitized copy, never the raw
       // `id` -- a control/ANSI-bearing caller-supplied id must not reach
       // a terminal-capable log sink unescaped.
-      const logId = sanitizeMessageIdForLog(id);
+      const logId = stripControlChars(id);
 
       console.log(`[fetch_message] called with id="${logId}", before=${before}, after=${after}`);
 
