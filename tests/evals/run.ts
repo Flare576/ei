@@ -44,7 +44,7 @@ Examples:
   npm run test:evals -- --filter=regression     Case filter across all files
 
 Observe scripts are separate dev tools — run directly:
-  npx vite-node tests/evals/reflection-critic.observe.ts
+  npx vite-node tests/evals/persona-signal-scan-regression-control.observe.ts
 `);
 }
 

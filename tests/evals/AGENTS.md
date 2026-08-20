@@ -31,7 +31,7 @@ The runner (`tests/evals/run.ts`) discovers all `*.eval.ts` files automatically 
 Observe scripts (`*.observe.ts`) are dev tools for watching model behavior — they don't assert pass/fail and aren't part of the test gate. Run them directly:
 
 ```bash
-npx vite-node tests/evals/reflection-critic.observe.ts
+npx vite-node tests/evals/persona-signal-scan-regression-control.observe.ts
 ```
 
 ### knowledge-synthesis.observe.ts — Real-data synthesis pipeline
