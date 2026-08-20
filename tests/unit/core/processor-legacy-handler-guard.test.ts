@@ -68,6 +68,7 @@ vi.mock("../../../src/core/queue-processor.js", () => ({
   QueueProcessor: vi.fn().mockImplementation(() => ({
     getState: queueProcessorGetStateSpy,
     start: queueProcessorStartSpy,
+    abort: vi.fn(),
   })),
 }));
 

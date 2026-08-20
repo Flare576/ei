@@ -69,6 +69,7 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   checkAndQueueRoomExtraction: vi.fn(),
   queueTargetedPersonUpdate: vi.fn(),
   queueTargetedTopicUpdate: vi.fn(),
+  queuePersonaSignalValidate: vi.fn(),
 }));
 
 import { loadLatestState } from "../../../src/cli/retrieval.js";
