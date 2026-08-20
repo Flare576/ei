@@ -11,6 +11,7 @@ import { handleEiHeartbeat } from "../../../src/core/handlers/heartbeat.js";
 import { createMockStorage, createDefaultTestState } from "../../helpers/mock-storage.js";
 import { LLMNextStep, ContextStatus } from "../../../src/core/types.js";
 import type { PersonaEntity, StorageState, EmergentSignal, LLMResponse, Message } from "../../../src/core/types.js";
+import type { TemporalAnchor } from "../../../src/prompts/index.js";
 
 // Preserve Zod's namespace export under Vitest's bare-specifier interop
 // (same shim as tests/unit/core/state-manager.test.ts) -- this file
@@ -357,7 +358,7 @@ describe("queueEiHeartbeat -- signal candidate producer (Bolt 011, R1/AT1)", () 
     const human = sm.getHuman();
     // facts/people/topics/pending-updates all empty by construction of
     // makeStateManager's default human/persona fixtures (AT1's own setup).
-    await queueEiHeartbeat(sm, human, [], false, 28800000, undefined);
+    await queueEiHeartbeat(sm, human, [], false);
 
     const activeItems = sm.queue_getAllActiveItems();
     expect(activeItems).toHaveLength(1);
@@ -379,7 +380,7 @@ describe("handleEiHeartbeat -- signal choice end-to-end (Bolt 011, R2/AT2)", () 
     )!;
 
     const human = sm.getHuman();
-    await queueEiHeartbeat(sm, human, [], false, 28800000, undefined);
+    await queueEiHeartbeat(sm, human, [], false);
 
     const request = sm.queue_claimHighest()!;
     expect(request.next_step).toBe(LLMNextStep.HandleEiHeartbeat);
@@ -423,7 +424,7 @@ describe("cross-surface cooldown-race resolution (Bolt 011, D3, R3/AT3)", () => 
     // ...then Ei's heartbeat assembles second, over every persona
     // including p1.
     const human = sm.getHuman();
-    await queueEiHeartbeat(sm, human, [], false, 28800000, undefined);
+    await queueEiHeartbeat(sm, human, [], false);
 
     // Stamped exactly once, by the first assembly to run.
     expect(sm.signals_get("p1").persona[0].last_surfaced_at).toBeDefined();
@@ -454,7 +455,7 @@ describe("cross-surface cooldown-race resolution (Bolt 011, D3, R3/AT3)", () => 
 
     // Same cycle, opposite order: Ei's heartbeat assembles first...
     const human = sm.getHuman();
-    await queueEiHeartbeat(sm, human, [], false, 28800000, undefined);
+    await queueEiHeartbeat(sm, human, [], false);
     // ...then p1's own heartbeat check assembles second.
     await queueHeartbeatCheck(sm, "p1", false);
 
@@ -488,7 +489,7 @@ describe("queueEiHeartbeat -- gentle-surface eligibility not widened (Bolt 011, 
     )!;
 
     const human = sm.getHuman();
-    await queueEiHeartbeat(sm, human, [], false, 28800000, undefined);
+    await queueEiHeartbeat(sm, human, [], false);
 
     // Below Bolt 005's own gentle-surface floor -- no eligible item at all,
     // so queueEiHeartbeat has nothing to enqueue yet.
@@ -499,13 +500,135 @@ describe("queueEiHeartbeat -- gentle-surface eligibility not widened (Bolt 011, 
       "persona",
       makeSignalInput({ dimension: "identity", recurrence_count: 2 })
     )!;
-    await queueEiHeartbeat(sm, human, [], false, 28800000, undefined);
+    await queueEiHeartbeat(sm, human, [], false);
 
     const items = sm.queue_getAllActiveItems();
     expect(items).toHaveLength(1);
     const text = `${items[0].system}${items[0].user}`;
     expect(text).not.toContain(belowFloor.id);
     expect(text).toContain(eligible.id);
+  });
+});
+
+/** An "Always"-status message old enough to have aged past the context
+ * window, so `buildTemporalAnchorsFromHistory` classifies it as an
+ * eligible Temporal Anchor rather than ordinary recent history. */
+function makeOldAlwaysMessage(id: string, ageMs: number): Message {
+  return {
+    id,
+    role: "human",
+    content: "Remember: my anniversary is coming up next week.",
+    timestamp: new Date(Date.now() - ageMs).toISOString(),
+    read: true,
+    context_status: ContextStatus.Always,
+  };
+}
+
+describe("queueEiHeartbeat -- Temporal Anchor reachability when it's the only eligible candidate (2026-08-19 fix; contract revised 2026-08-20, S9)", () => {
+  const contextWindowMs = 28800000;
+
+  function makeAnchorFromMessage(m: Message): TemporalAnchor {
+    return { id: m.id, role: "human", content: m.content, silence_reason: m.silence_reason, timestamp: m.timestamp, _synthesis: m._synthesis };
+  }
+
+  it("an anchor-only heartbeat (zero ordinary items, one precomputed Temporal Anchor) still enqueues exactly one HandleEiHeartbeat request whose prompt includes the anchor", async () => {
+    const sm = await makeStateManager();
+    const human = sm.getHuman();
+    // facts/people/topics/personas all empty by construction of
+    // makeStateManager's default fixtures -- ordinary `items` stays empty,
+    // isolating this test to the Temporal Anchor path.
+    const anchor = makeOldAlwaysMessage("anchor-1", contextWindowMs * 2);
+
+    // 2026-08-20 (S9): queueEiHeartbeat no longer extracts anchors from
+    // `history` itself -- that responsibility moved to its caller
+    // (queueHeartbeatCheck, tested end-to-end below). This test now
+    // supplies the precomputed anchor directly, proving this function's
+    // own contract: given a non-empty temporalAnchors list, it enqueues
+    // even with zero ordinary items and zero history.
+    await queueEiHeartbeat(sm, human, [], false, [makeAnchorFromMessage(anchor)]);
+
+    const activeItems = sm.queue_getAllActiveItems();
+    expect(activeItems).toHaveLength(1);
+    expect(activeItems[0].next_step).toBe(LLMNextStep.HandleEiHeartbeat);
+    expect(`${activeItems[0].system}${activeItems[0].user}`).toContain(anchor.content);
+  });
+
+  it("with neither ordinary items nor a supplied temporal anchor, queueEiHeartbeat still queues nothing", async () => {
+    const sm = await makeStateManager();
+    const human = sm.getHuman();
+    await queueEiHeartbeat(sm, human, [], false);
+    expect(sm.queue_getAllActiveItems()).toHaveLength(0);
+  });
+});
+
+describe("queueHeartbeatCheck -- anchor-only heartbeat reachable through the real scheduler path (2026-08-20 fix, S9)", () => {
+  const contextWindowMs = 28800000;
+
+  // 2026-08-19's fix reordered queueEiHeartbeat's own internal emptiness
+  // check against anchors it built from whatever `history` it was handed
+  // -- but queueHeartbeatCheck (the real, only caller in production) ran
+  // filterMessagesForContext on that history FIRST, which drops any
+  // message older than the context window with no exemption for
+  // ContextStatus.Always. An old anchor never survived long enough to
+  // reach the 2026-08-19 fix at all. These tests exercise the real
+  // scheduler entry point directly, with a genuinely raw, unfiltered old
+  // message in real persistent storage -- not a pre-shaped array handed
+  // straight to the inner function.
+
+  it("Ei: an old Always-status message with no other eligible items queues exactly one HandleEiHeartbeat request containing that anchor", async () => {
+    const sm = await makeStateManager();
+    sm.persona_add(makePersona({ id: "ei", display_name: "Ei", context_window_ms: contextWindowMs }));
+    const anchor = makeOldAlwaysMessage("anchor-1", contextWindowMs * 2);
+    sm.messages_append("ei", anchor);
+
+    await queueHeartbeatCheck(sm, "ei", false);
+
+    const activeItems = sm.queue_getAllActiveItems();
+    expect(activeItems).toHaveLength(1);
+    expect(activeItems[0].next_step).toBe(LLMNextStep.HandleEiHeartbeat);
+    expect(`${activeItems[0].system}${activeItems[0].user}`).toContain(anchor.content);
+  });
+
+  it("Ei: a recent Always-status message (not old enough to need anchoring) queues nothing", async () => {
+    const sm = await makeStateManager();
+    sm.persona_add(makePersona({ id: "ei", display_name: "Ei", context_window_ms: contextWindowMs }));
+    const recent = makeOldAlwaysMessage("recent-1", 1000);
+    sm.messages_append("ei", recent);
+
+    await queueHeartbeatCheck(sm, "ei", false);
+
+    expect(sm.queue_getAllActiveItems()).toHaveLength(0);
+  });
+
+  it("Ei: an old ORDINARY (non-Always) message alone queues nothing -- age alone is not sufficient", async () => {
+    const sm = await makeStateManager();
+    sm.persona_add(makePersona({ id: "ei", display_name: "Ei", context_window_ms: contextWindowMs }));
+    const oldOrdinary: Message = {
+      id: "old-ordinary-1",
+      role: "human",
+      content: "just some old chat",
+      timestamp: new Date(Date.now() - contextWindowMs * 2).toISOString(),
+      read: true,
+    };
+    sm.messages_append("ei", oldOrdinary);
+
+    await queueHeartbeatCheck(sm, "ei", false);
+
+    expect(sm.queue_getAllActiveItems()).toHaveLength(0);
+  });
+
+  it("ordinary persona: an old Always-status message with no other eligible items queues exactly one HandleHeartbeatCheck request containing that anchor -- the same fix applies to both branches, not just Ei's", async () => {
+    const sm = await makeStateManager();
+    sm.persona_add(makePersona({ id: "p1", display_name: "Persona One", context_window_ms: contextWindowMs }));
+    const anchor = makeOldAlwaysMessage("anchor-p1", contextWindowMs * 2);
+    sm.messages_append("p1", anchor);
+
+    await queueHeartbeatCheck(sm, "p1", false);
+
+    const activeItems = sm.queue_getAllActiveItems();
+    expect(activeItems).toHaveLength(1);
+    expect(activeItems[0].next_step).toBe(LLMNextStep.HandleHeartbeatCheck);
+    expect(`${activeItems[0].system}${activeItems[0].user}`).toContain(anchor.content);
   });
 });
 

@@ -159,8 +159,7 @@ export async function queueEiHeartbeat(
   human: HumanEntity,
   history: Message[],
   isTUI: boolean,
-  contextWindowMs: number,
-  contextBoundary: string | undefined
+  temporalAnchors: TemporalAnchor[] = []
 ): Promise<void> {
   const now = Date.now();
   const engagementGapThreshold = 0.2;
@@ -313,17 +312,24 @@ export async function queueEiHeartbeat(
     }
   }
 
-  if (items.length === 0) {
-    console.log("[queueEiHeartbeat] No items to address, skipping");
+  // 2026-08-20 fix (S9, independent review finding): `temporalAnchors` is
+  // now a caller-supplied parameter, not built here. The 2026-08-19 fix
+  // below reordered the emptiness check against already-extracted
+  // anchors, but that reordering alone was moot: this function used to
+  // call `buildTemporalAnchorsFromHistory` on its own `history` parameter
+  // AFTER `queueHeartbeatCheck` had already run `filterMessagesForContext`
+  // on it -- that filter has no exemption for `ContextStatus.Always`, so
+  // any genuinely old anchor was already discarded before it ever reached
+  // this function. Anchor extraction now happens once, in
+  // `queueHeartbeatCheck`, on RAW history, BEFORE that window filter runs
+  // -- see the comment there. `history` here is already the final,
+  // anchor-extracted-and-window-filtered list.
+  if (items.length === 0 && temporalAnchors.length === 0) {
+    console.log("[queueEiHeartbeat] No items or temporal anchors to address, skipping");
     return;
   }
 
-  const { temporalAnchors, prunedHistory } = buildTemporalAnchorsFromHistory(
-    history,
-    contextWindowMs,
-    contextBoundary
-  );
-  const recentHistory = prunedHistory.slice(-10);
+  const recentHistory = history.slice(-10);
   const promptData: EiHeartbeatPromptData = {
     items,
     recent_history: recentHistory,
@@ -355,12 +361,29 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
   const model = getModelForPersona(sm, personaId);
   console.log(`[HeartbeatCheck ${persona.display_name}] Queueing heartbeat check (model: ${model})`);
   const human = sm.getHuman();
-   const history = sm.messages_get(personaId);
-   const contextWindowMs = persona.context_window_ms ?? human.settings?.default_context_window_ms ?? 28800000;
-   const contextHistory = filterMessagesForContext(history, persona.context_boundary, contextWindowMs);
+  const history = sm.messages_get(personaId);
+  const contextWindowMs = persona.context_window_ms ?? human.settings?.default_context_window_ms ?? 28800000;
+
+  // 2026-08-20 fix (S9, independent review finding): Temporal Anchors must
+  // be extracted from RAW history BEFORE the generic context-window
+  // filter runs. An `Always`-status anchor is specifically exempt from
+  // the window/boundary age check by design -- that's the entire point of
+  // "Always" -- but `filterMessagesForContext`'s own filter has no such
+  // exemption, so running it first silently discarded any genuinely old
+  // anchor before `buildTemporalAnchorsFromHistory` ever got a chance to
+  // rescue it. This shared setup fed BOTH branches below (Ei's own
+  // heartbeat and every ordinary persona's) -- the bug was here, not in
+  // either branch, so fixing only one would have left the other with the
+  // identical defect.
+  const { temporalAnchors, prunedHistory: rawPruned } = buildTemporalAnchorsFromHistory(
+    history,
+    contextWindowMs,
+    persona.context_boundary
+  );
+  const contextHistory = filterMessagesForContext(rawPruned, persona.context_boundary, contextWindowMs);
 
   if (personaId === "ei") {
-    await queueEiHeartbeat(sm, human, contextHistory, isTUI, contextWindowMs, persona.context_boundary);
+    await queueEiHeartbeat(sm, human, contextHistory, isTUI, temporalAnchors);
     return;
   }
 
@@ -378,12 +401,6 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
         b.exposure_desired - b.exposure_current - (a.exposure_desired - a.exposure_current)
     );
 
-  const { temporalAnchors, prunedHistory } = buildTemporalAnchorsFromHistory(
-    contextHistory,
-    contextWindowMs,
-    persona.context_boundary
-  );
-
   const signals = assembleHeartbeatSignalCandidates(sm, personaId);
 
   const promptData: HeartbeatCheckPromptData = {
@@ -397,7 +414,7 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
       topics: sortByEngagementGap(filteredHuman.topics).slice(0, 5),
       people: sortByEngagementGap(filteredHuman.people).slice(0, 5),
     },
-    recent_history: prunedHistory.slice(-10),
+    recent_history: contextHistory.slice(-10),
     temporal_anchors: temporalAnchors,
     inactive_days: inactiveDays,
     signals,
