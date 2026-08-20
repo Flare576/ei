@@ -297,6 +297,32 @@ describe("assembleHeartbeatSignalCandidates (Bolt 005, D6, R4/AT4)", () => {
 
     expect(result).toEqual([]);
   });
+
+  it("excludes equality-boundary candidates in every dimension and leaves them unstamped", async () => {
+    const sm = await makeStateManager();
+    sm.persona_add(makePersona({ id: "p1" }));
+    const identity = sm.signal_add(
+      "p1",
+      "persona",
+      makeSignalInput({ dimension: "identity", recurrence_count: 3 })
+    )!;
+    const behavior = sm.signal_add(
+      "p1",
+      "persona",
+      makeSignalInput({ dimension: "behavior", recurrence_count: 2 })
+    )!;
+    const voice = sm.signal_add(
+      "p1",
+      "agent",
+      makeSignalInput({ dimension: "voice", recurrence_count: 2 })
+    )!;
+
+    expect(assembleHeartbeatSignalCandidates(sm, "p1")).toEqual([]);
+    const signals = sm.signals_get("p1");
+    expect(signals.persona.find((signal) => signal.id === identity.id)?.last_surfaced_at).toBeUndefined();
+    expect(signals.persona.find((signal) => signal.id === behavior.id)?.last_surfaced_at).toBeUndefined();
+    expect(signals.agent.find((signal) => signal.id === voice.id)?.last_surfaced_at).toBeUndefined();
+  });
 });
 
 // =============================================================================

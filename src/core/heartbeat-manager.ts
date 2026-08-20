@@ -8,6 +8,7 @@ import {
   type EmergentSignal,
 } from "./types.js";
 import { StateManager } from "./state-manager.js";
+import { PROMOTION_INDEPENDENCE_THRESHOLD } from "./state/index.js";
 import { getMessageContent } from "./handlers/utils.js";
 import {
   buildHeartbeatCheckPrompt,
@@ -107,17 +108,30 @@ export function countTrailingPersonaMessages(history: Message[]): number {
  * naming the signal, since the freeform `should_respond`/`topic`/`message`
  * result has no field naming which shown item was picked.
  *
+ * Gentle-surface band ceiling: derived explicitly from
+ * `PROMOTION_INDEPENDENCE_THRESHOLD[dimension]` — the SAME table Bolt 004's
+ * promotion arithmetic uses — rather than trusting the invariant that a
+ * `candidate`-status signal's `recurrence_count` is already below its own
+ * dimension's threshold (true today, since `promoteIfEligible` flips
+ * `status` to `recurring` the instant that threshold is reached, but this
+ * function checks it directly instead of depending on that invariant
+ * holding forever). For a threshold-2 dimension (`behavior`/`voice`) the
+ * band is empty by construction — no `recurrence_count` value is both
+ * above the raw-single-observation floor and below a threshold of 2 — so
+ * those dimensions never gentle-surface, which is correct, not a gap. A
+ * future change to any dimension's threshold widens or narrows the gentle
+ * band automatically, with no second number to keep in sync.
+ *
  * Cooldown: a signal whose `last_surfaced_at` is unset is always eligible
  * (never yet surfaced); one whose `last_surfaced_at` IS set is eligible
  * again only once `last_observed_at` has moved past it — new corroborating
  * evidence arrived since the last surfacing (D2/R2).
  *
  * A standalone, exported function — never inlined into `queueHeartbeatCheck`
- * — so `bolt-persona-emergence-signals-011`'s analogous Ei-heartbeat
- * candidate producer can call this exact eligibility/cooldown/stamp policy
- * from `queueEiHeartbeat` instead of re-deriving it (D4). This Bolt does not
- * call it from `queueEiHeartbeat` itself, and does not decide the
- * cross-surface cooldown-race question Bolt 011 still needs to answer.
+ * — so the analogous Ei-heartbeat candidate producer can call this exact
+ * eligibility/cooldown/stamp policy from `queueEiHeartbeat` instead of
+ * re-deriving it (D4) — enforced by `queueEiHeartbeat`'s own test coverage
+ * below, not by a second implementation.
  */
 export function assembleHeartbeatSignalCandidates(sm: StateManager, personaId: string): EmergentSignal[] {
   const { persona, agent } = sm.signals_get(personaId);
@@ -126,6 +140,7 @@ export function assembleHeartbeatSignalCandidates(sm: StateManager, personaId: s
     (signal) =>
       signal.status === "candidate" &&
       signal.recurrence_count >= 2 &&
+      signal.recurrence_count < PROMOTION_INDEPENDENCE_THRESHOLD[signal.dimension] &&
       (!signal.last_surfaced_at || signal.last_observed_at > signal.last_surfaced_at)
   );
   for (const signal of eligible) {

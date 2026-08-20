@@ -47,8 +47,16 @@ export interface SignalReduceResult {
  * ADR-038 item 11 lists: 2 independent contexts promotes a `behavior`/
  * `voice` claim; that same 2-context evidence set does NOT promote an
  * `identity`/`values`/`relationship` claim, which needs a 3rd.
+ *
+ * Exported: `heartbeat-manager.ts`'s `assembleHeartbeatSignalCandidates` (Bolt 005) derives the
+ * gentle-surface band's own ceiling from this SAME table rather than a
+ * second hardcoded number — a `candidate`-status signal's `recurrence_count`
+ * is already guaranteed below its own dimension's threshold here
+ * (`promoteIfEligible` flips status to `recurring` the instant it's
+ * reached), so referencing this table directly there is belt-and-suspenders
+ * against that invariant ever drifting, not merely decoration.
  */
-const PROMOTION_INDEPENDENCE_THRESHOLD: Record<SignalDimension, number> = {
+export const PROMOTION_INDEPENDENCE_THRESHOLD: Record<SignalDimension, number> = {
   behavior: 2,
   voice: 2,
   identity: 3,
