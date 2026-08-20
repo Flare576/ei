@@ -2,21 +2,7 @@ import type { EiHeartbeatPromptData, EiHeartbeatItem, PromptOutput } from "./typ
 import type { Message } from "../../core/types.js";
 import { formatMessagesAsPlaceholders, getMessageDisplayText } from "../message-utils.js";
 import { buildTemporalAnchorsSection } from "../response/sections.js";
-
-/**
- * bolt-persona-emergence-signals-011: same escaping treatment as
- * `check.ts`'s `escapeSignalClaimText` (Bolt 005, D5) -- a persisted
- * `EmergentSignal.claim` is untrusted, LLM-originated reference data, and
- * every literal `<`/`>` must be escaped BEFORE the claim is wrapped in its
- * `<signal-claim>` boundary below, or a claim containing a tag-shaped
- * substring (e.g. `</signal-claim>`) could close the boundary early and
- * reach un-delimited prompt space. Duplicated rather than imported --
- * this file and `check.ts` each keep their own formatting helpers
- * (see `countTrailingPersonaMessages`/`getLastPersonaMessage` below).
- */
-function escapeSignalClaimText(claim: string): string {
-  return claim.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+import { escapeSignalClaimText } from "./utils.js";
 
 function formatItem(item: EiHeartbeatItem): string {
   switch (item.type) {

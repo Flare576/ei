@@ -11,6 +11,8 @@ import { formatMessagesAsPlaceholders, getMessageDisplayText } from "../message-
 import { getMessageContent } from "../../core/handlers/utils.js";
 import { partitionTraits } from "../trait-utils.js";
 import { buildTemporalAnchorsSection } from "../response/sections.js";
+import { escapeSignalClaimText } from "./utils.js";
+
 function formatTopicsWithGaps(topics: Topic[]): string {
   if (topics.length === 0) return "(No topics with engagement gaps)";
   
@@ -31,18 +33,6 @@ function formatPeopleWithGaps(people: Person[]): string {
       return `- **${p.name}** (${p.relationship}, gap: +${gap.toFixed(2)}): ${p.description}`;
     })
     .join('\n');
-}
-
-/**
- * D5 (wave-3 re-review): every literal `<`/`>` in a persisted claim must be
- * escaped BEFORE the claim is wrapped in its `<signal-claim>` boundary —
- * otherwise a claim containing the literal substring `</signal-claim>` (or
- * any other tag-shaped text) closes the boundary early and reaches
- * un-delimited prompt space. The escaped text is inert to a model reading
- * XML-shaped tags; it is never unescaped before rendering.
- */
-function escapeSignalClaimText(claim: string): string {
-  return claim.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /**
