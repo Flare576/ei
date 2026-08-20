@@ -158,9 +158,10 @@ Each tier has its own runner; they don't mix. Run the right command for the righ
 | `npm run test:evals` | vite-node | LLM quality evals | Hits live LLM; not part of CI |
 | `bash ci/structural-checks.sh` | grep | Architectural invariants | Fast; no runtime needed |
 +
-**If `npm run test:src` fails with `globalThis.Bun readonly` or `vi.mock is not a function`**: your `node` binary is Bun's shim, not real Node. In OMP/harness sessions `which node` may resolve to `/private/tmp/bun-node-*/node`, and `node --version` may error instead of printing a version. Run root Vitest with an explicit NVM Node **22+** path instead:
+**If `npm run test:src`, or ANY direct `vitest run <file>` invocation, fails with `globalThis.Bun readonly`, `vi.mock is not a function`, or a test file collects 0 tests with `z.string is undefined` / a crash inside `entity-schemas.ts` (any file that transitively imports it, directly or via `retrieval.ts`/`mcp.ts`/`fetch-memory.ts`/etc., hits this)**: your `node` binary is Bun's shim, not real Node — this is NOT a code defect, it's an environment misconfiguration, and it has independently produced false "0 tests collected" findings during review before (2026-08-20, this session's own Beta pass on `fetch-memory.test.ts`/`mcp.test.ts`/`retrieval-resolver.test.ts` — all three collect and pass cleanly under the correct binary). In OMP/harness sessions `which node` may resolve to `/private/tmp/bun-node-*/node`, and `node --version` may error instead of printing a version. Run Vitest — root `npm run test:src` OR a direct `vitest run <specific-file>` — with an explicit NVM Node **22+** path instead:
 ```bash
 /path/to/.nvm/versions/node/v22.x.y/bin/node node_modules/.bin/vitest run
+/path/to/.nvm/versions/node/v22.x.y/bin/node node_modules/.bin/vitest run tests/unit/some-file.test.ts
 ```
 +
 **If root Vitest is mostly green but `tests/unit/cli.test.ts` fails only on** `creates a fact and prints the generated id with the requested record` **with** `Unexpected end of JSON input`: you're likely on Node 20. That test's `spawnSync("bun", ...)` child process can return `status: 0` with empty `stdout` inside Vitest on Node 20, even though the same `bun src/cli.ts create ...` call works outside Vitest. Re-run `test:src` under Node 22+.
