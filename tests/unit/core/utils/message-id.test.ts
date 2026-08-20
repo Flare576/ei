@@ -7,6 +7,7 @@ import {
   qualifyClaudeCodeMessage,
   qualifyCursorMessage,
   qualifyCodexMessage,
+  qualifyOmpMessage,
   qualifyDocumentMessage,
 } from "../../../../src/core/utils/message-id.js"
 
@@ -218,5 +219,21 @@ describe("qualify helpers — round-trips", () => {
     expect(fq).toBe("import:document:slug:uuid")
     const r = parseMessageId(fq)
     expect(r).toMatchObject({ integration: "import", session: "slug", nativeId: "uuid" })
+  })
+
+  it("qualifyOmpMessage round-trips a plain colon-free path", () => {
+    const fq = qualifyOmpMessage("m", "/fake/root/Worker.jsonl", "n")
+    const r = parseMessageId(fq)
+    expect(r).toMatchObject({ integration: "omp", machine: "m", session: "/fake/root/Worker.jsonl", nativeId: "n" })
+  })
+
+  it("S1 fix: qualifyOmpMessage round-trips a session path containing a literal colon -- a legal POSIX/macOS path character the unencoded scheme used to truncate at", () => {
+    const colonPath = "/tmp/a:b/Worker.jsonl"
+    const fq = qualifyOmpMessage("test-machine", colonPath, "m1")
+    // The colon inside the path must not be mistaken for a field
+    // separator -- pre-fix, this produced session: "/tmp/a", nativeId:
+    // "b/Worker.jsonl:m1".
+    const r = parseMessageId(fq)
+    expect(r).toMatchObject({ integration: "omp", machine: "test-machine", session: colonPath, nativeId: "m1" })
   })
 })

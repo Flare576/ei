@@ -28,6 +28,7 @@ import {
   qualifyCursorMessage,
   qualifyCodexMessage,
   qualifyPiMessage,
+  qualifyOmpMessage,
 } from "../../../src/core/utils/message-id.js";
 
 const MACHINE = "test-machine";
@@ -69,6 +70,32 @@ const mockPiGetMessageById = vi.fn();
 vi.mock("../../../src/integrations/pi/reader.js", () => ({
   PiReader: vi.fn().mockImplementation(() => ({
     getMessageById: mockPiGetMessageById,
+  })),
+}));
+
+// OMP has no getMessageById -- readTranscript returns the whole session,
+// keyed by path (the transcript's own unique locator, per the 2026-08-19
+// message-locator fix), so the mock must dispatch on its own argument
+// rather than return one fixed value -- this is what actually proves two
+// distinct paths resolve to two distinct transcripts, never whichever one
+// mocked last.
+const mockOmpTranscriptsByPath = new Map<string, unknown>();
+const mockOmpReadTranscript = vi.fn(async (path: string) => mockOmpTranscriptsByPath.get(path) ?? null);
+// S2 fix (.sisyphus/reviews/session-fixes-review/beta-code-review.md):
+// resolveExternalMessage's "omp" case now checks listTranscripts()'s own
+// returned set before reading -- every path a test registers in
+// mockOmpTranscriptsByPath is implicitly "a real, importable transcript"
+// for that test's own purposes, so this mock derives eligibility from the
+// exact same map, never a second list to keep in sync. A path a test
+// deliberately never registers (the unlisted/out-of-root S2 case) is
+// correctly ineligible.
+const mockOmpListTranscripts = vi.fn(async () =>
+  [...mockOmpTranscriptsByPath.keys()].map((path) => ({ path, cd: 2, label: path.split("/").pop() ?? path }))
+);
+vi.mock("../../../src/integrations/omp/reader.js", () => ({
+  OmpReader: vi.fn().mockImplementation(() => ({
+    readTranscript: mockOmpReadTranscript,
+    listTranscripts: mockOmpListTranscripts,
   })),
 }));
 
@@ -114,6 +141,10 @@ const CODEX_QUALIFIED_ID = qualifyCodexMessage(MACHINE, CODEX_SESSION_ID, CODEX_
 const PI_SESSION_ID = "pi-session-1";
 const PI_MSG_ID = "pi-msg-1";
 const PI_QUALIFIED_ID = qualifyPiMessage(MACHINE, PI_SESSION_ID, PI_MSG_ID);
+
+const OMP_PATH = "/fake/root/a/Worker.jsonl";
+const OMP_MSG_ID = "omp-msg-1";
+const OMP_QUALIFIED_ID = qualifyOmpMessage(MACHINE, OMP_PATH, OMP_MSG_ID);
 
 // --- fixture builders ---------------------------------------------------
 
@@ -655,6 +686,150 @@ describe("resolveExternalMessage — pi", () => {
     const result = expectResolved(await resolveExternalMessage(PI_QUALIFIED_ID));
     expect(result.speaker).toEqual({ kind: "human", display_name: "Human" });
     expect("id" in result.speaker).toBe(false);
+  });
+});
+
+// --- omp ---------------------------------------------------------------
+
+describe("resolveExternalMessage — omp", () => {
+  beforeEach(() => {
+    mockOmpTranscriptsByPath.clear();
+  });
+
+  const OMP_SESSION_MESSAGE = { id: OMP_MSG_ID, role: "assistant" as const, content: "Wrote thorough tests", timestamp: NOW };
+
+  it("resolves an omp message, deriving the speaker display name from the transcript's own resolved sub-agent", async () => {
+    mockOmpTranscriptsByPath.set(OMP_PATH, {
+      path: OMP_PATH,
+      provenance: { harness: "omp", mode: "delegated", agent_id: "sisyphus" },
+      messages: [OMP_SESSION_MESSAGE],
+      firstMessageAt: NOW,
+      lastMessageAt: NOW,
+    });
+
+    const result = await resolveExternalMessage(OMP_QUALIFIED_ID);
+
+    expect(result).toEqual({
+      origin_kind: "omp",
+      source_id: OMP_QUALIFIED_ID,
+      container: { kind: "session", id: OMP_PATH, display_name: "Sisyphus" },
+      speaker: { kind: "agent", id: undefined, display_name: "Sisyphus" },
+      timestamp: NOW,
+      content: "Wrote thorough tests",
+      before: [],
+      after: [],
+    });
+    expect(mockOmpReadTranscript).toHaveBeenCalledWith(OMP_PATH);
+  });
+
+  it("maps user role to speaker.kind human", async () => {
+    mockOmpTranscriptsByPath.set(OMP_PATH, {
+      path: OMP_PATH,
+      provenance: { harness: "omp", mode: "delegated", agent_id: "sisyphus" },
+      messages: [{ id: OMP_MSG_ID, role: "user" as const, content: "Hi from the human", timestamp: NOW }],
+      firstMessageAt: NOW,
+      lastMessageAt: NOW,
+    });
+
+    const result = expectResolved(await resolveExternalMessage(OMP_QUALIFIED_ID));
+    expect(result.speaker).toEqual({ kind: "human", display_name: "Human" });
+  });
+
+  it("falls back to a generic display name when the transcript's own provenance never resolved an agent (direct-probe defensive path)", async () => {
+    mockOmpTranscriptsByPath.set(OMP_PATH, {
+      path: OMP_PATH,
+      provenance: { harness: "omp", mode: "delegated" },
+      messages: [OMP_SESSION_MESSAGE],
+      firstMessageAt: NOW,
+      lastMessageAt: NOW,
+    });
+
+    const result = expectResolved(await resolveExternalMessage(OMP_QUALIFIED_ID));
+    expect(result.speaker).toEqual({ kind: "agent", id: undefined, display_name: "OMP Sub-Agent" });
+  });
+
+  it("returns null when the transcript no longer exists at its own recorded path", async () => {
+    // Nothing registered in mockOmpTranscriptsByPath for OMP_PATH.
+    const result = await resolveExternalMessage(OMP_QUALIFIED_ID);
+    expect(result).toBeNull();
+  });
+
+  it("closure oracle: two distinct transcripts sharing a filename and a colliding native id round-trip to their own, distinct source events, never each other's", async () => {
+    const pathA = "/fake/root/a/Worker.jsonl";
+    const pathB = "/fake/root/b/Worker.jsonl";
+    const collidingNativeId = "m1"; // same native id in both transcripts, deliberately
+
+    mockOmpTranscriptsByPath.set(pathA, {
+      path: pathA,
+      provenance: { harness: "omp", mode: "delegated", agent_id: "sisyphus" },
+      messages: [{ id: collidingNativeId, role: "assistant" as const, content: "Content from transcript A", timestamp: NOW }],
+      firstMessageAt: NOW,
+      lastMessageAt: NOW,
+    });
+    mockOmpTranscriptsByPath.set(pathB, {
+      path: pathB,
+      provenance: { harness: "omp", mode: "delegated", agent_id: "beta" },
+      messages: [{ id: collidingNativeId, role: "assistant" as const, content: "Content from transcript B", timestamp: NOW }],
+      firstMessageAt: NOW,
+      lastMessageAt: NOW,
+    });
+
+    const idA = qualifyOmpMessage(MACHINE, pathA, collidingNativeId);
+    const idB = qualifyOmpMessage(MACHINE, pathB, collidingNativeId);
+
+    // The qualified ids are distinct despite the identical filename and native id.
+    expect(idA).not.toBe(idB);
+
+    const resultA = expectResolved(await resolveExternalMessage(idA));
+    const resultB = expectResolved(await resolveExternalMessage(idB));
+
+    expect(resultA.content).toBe("Content from transcript A");
+    expect(resultA.speaker.display_name).toBe("Sisyphus");
+    expect(resultB.content).toBe("Content from transcript B");
+    expect(resultB.speaker.display_name).toBe("Beta");
+  });
+
+  it("S1 fix: a transcript path containing a literal colon still round-trips -- the qualified id's session segment is percent-encoded, never truncated at the colon", async () => {
+    const colonPath = "/fake/root/a:b/Worker.jsonl";
+    mockOmpTranscriptsByPath.set(colonPath, {
+      path: colonPath,
+      provenance: { harness: "omp", mode: "delegated", agent_id: "sisyphus" },
+      messages: [{ id: "m1", role: "assistant" as const, content: "Content from a colon-bearing path", timestamp: NOW }],
+      firstMessageAt: NOW,
+      lastMessageAt: NOW,
+    });
+
+    const qualifiedId = qualifyOmpMessage(MACHINE, colonPath, "m1");
+    // Pre-fix, this would have been "session: /fake/root/a, nativeId: b/Worker.jsonl:m1" --
+    // the session segment is now percent-encoded, so the colon inside the
+    // path never gets mistaken for the field separator.
+    expect(qualifiedId).not.toContain(`:${colonPath}:`);
+
+    const result = expectResolved(await resolveExternalMessage(qualifiedId));
+    expect(result.content).toBe("Content from a colon-bearing path");
+  });
+
+
+  it("S2 fix: a same-machine, OMP-shaped path that was never returned by listTranscripts() is refused WITHOUT ever calling readTranscript", async () => {
+    const unlistedPath = "/not/a/real/imported/transcript.jsonl";
+    // Deliberately NOT registered in mockOmpTranscriptsByPath, so
+    // listTranscripts() (backed by that same map) never returns it --
+    // but readTranscript is independently stubbed to prove it, too, is
+    // never actually invoked for this path, not merely that it happens
+    // to return null.
+    mockOmpReadTranscript.mockClear();
+    const qualifiedId = qualifyOmpMessage(MACHINE, unlistedPath, "m1");
+
+    const result = await resolveExternalMessage(qualifiedId);
+
+    expect(result).toBeNull();
+    expect(mockOmpReadTranscript).not.toHaveBeenCalled();
+  });
+  it("cross-machine: refuses with an error, never attempting to read a transcript from another machine", async () => {
+    const foreignId = qualifyOmpMessage("other-machine", OMP_PATH, OMP_MSG_ID);
+    const result = await resolveExternalMessage(foreignId);
+    expect(result).toEqual({ error: expect.stringContaining("other-machine") });
+    expect(mockOmpReadTranscript).not.toHaveBeenCalled();
   });
 });
 

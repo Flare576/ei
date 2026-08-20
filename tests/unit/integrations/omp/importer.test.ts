@@ -7,6 +7,7 @@ import { createMockStorage } from "../../../helpers/mock-storage.js";
 import { classifyObservationLens } from "../../../../src/core/utils/persona-signal-lens.js";
 import { handlers } from "../../../../src/core/handlers/index.js";
 import { resolveCanonicalAgent } from "../../../../src/core/personas/opencode-agent.js";
+import { parseMessageId } from "../../../../src/core/utils/message-id.js";
 
 // Preserve Zod's namespace export under Vitest's bare-specifier interop —
 // same workaround as tests/unit/core/handlers/extraction.test.ts and
@@ -229,6 +230,64 @@ describe("importOmpSessions", () => {
       expect(second.scansQueued).toBe(0);
       expect(second.transcriptsProcessed).toBe(0);
       expect(scanRequestsFor(sm)).toHaveLength(1); // still exactly one — no duplicate
+    });
+  });
+
+  describe("message-locator round-trip: two distinct transcripts sharing a filename and a colliding native id (2026-08-19 fix)", () => {
+    it("produces two distinct, individually persisted message ids -- never a collision from truncating to basename", async () => {
+      sm.persona_add(makeTestPersona("backend-engineer-persona", "Backend Engineer"));
+      sm.human_person_upsert(makeLinkedPerson("backend-engineer-person", "Backend Engineer Bot", "backend-engineer-persona"));
+
+      const recordA: OmpTranscriptRecord = { path: "/fake/root/a/Worker.jsonl", cd: 3, label: "Worker" };
+      const recordB: OmpTranscriptRecord = { path: "/fake/root/b/Worker.jsonl", cd: 3, label: "Worker" };
+      const sessionA: OmpSession = {
+        path: recordA.path,
+        provenance: { harness: "omp", mode: "delegated", agent_id: "backend-engineer", agent_definition_ref: "omp:backend-engineer" },
+        // Same native message id ("m1") as sessionB, deliberately -- the
+        // pre-fix basename-only session key would have made these two
+        // transcripts qualify to the identical omp:<machine>:Worker.jsonl:m1 id.
+        messages: [{ id: "m1", role: "assistant", content: "content from transcript A", timestamp: "2026-08-01T00:01:00.000Z" }],
+        firstMessageAt: "2026-08-01T00:01:00.000Z",
+        lastMessageAt: "2026-08-01T00:01:00.000Z",
+      };
+      const sessionB: OmpSession = {
+        path: recordB.path,
+        provenance: { harness: "omp", mode: "delegated", agent_id: "backend-engineer", agent_definition_ref: "omp:backend-engineer" },
+        messages: [{ id: "m1", role: "assistant", content: "content from transcript B", timestamp: "2026-08-01T00:02:00.000Z" }],
+        firstMessageAt: "2026-08-01T00:02:00.000Z",
+        lastMessageAt: "2026-08-01T00:02:00.000Z",
+      };
+      const sessionsByPath = new Map<string, OmpSession>([[recordA.path, sessionA], [recordB.path, sessionB]]);
+      const reader = {
+        listTranscripts: async () => [recordA, recordB],
+        readTranscript: async (path: string) => sessionsByPath.get(path) ?? null,
+      };
+
+      const result = await importOmpSessions({ stateManager: sm, reader });
+      expect(result.transcriptsProcessed).toBe(2);
+      expect(result.scansQueued).toBe(2);
+
+      const persisted = sm.messages_get("backend-engineer-persona");
+      expect(persisted).toHaveLength(2);
+
+      const msgA = persisted.find(m => m.content === "content from transcript A")!;
+      const msgB = persisted.find(m => m.content === "content from transcript B")!;
+      expect(msgA).toBeDefined();
+      expect(msgB).toBeDefined();
+
+      // The closure oracle itself: distinct qualified ids for genuinely
+      // distinct source events that shared a filename and a colliding
+      // native id -- each round-tripping back through parseMessageId to
+      // its own full transcript path, never the pre-fix basename that
+      // would have made them identical. The session segment is
+      // percent-encoded on the wire (S1 fix, since a real transcript path
+      // can legally contain a colon on POSIX/macOS) -- check the decoded
+      // round-trip property, not the raw string shape.
+      expect(msgA.id).not.toBe(msgB.id);
+      expect(parseMessageId(msgA.id).session).toBe(recordA.path);
+      expect(parseMessageId(msgB.id).session).toBe(recordB.path);
+      expect(parseMessageId(msgA.id).nativeId).toBe("m1");
+      expect(parseMessageId(msgB.id).nativeId).toBe("m1");
     });
   });
 

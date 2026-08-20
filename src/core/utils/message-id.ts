@@ -97,7 +97,7 @@ export function parseMessageId(id: string): ParsedMessageId {
     return {
       integration: "omp",
       machine: parts[1],
-      session: parts[2],
+      session: decodeURIComponent(parts[2]),
       nativeId: parts.slice(3).join(":"),
       raw: id,
     }
@@ -156,8 +156,21 @@ export function qualifyPiMessage(machine: string, sessionId: string, nativeId: s
   return `pi:${machine}:${sessionId}:${nativeId}`
 }
 
+// 2026-08-20 fix (S1, .sisyphus/reviews/session-fixes-review/beta-code-review.md):
+// unlike every sibling integration's `sessionId` (an opaque session id
+// string that never contains a colon in practice), OMP's `sessionId` is a
+// real filesystem path -- and a colon is a legal path character on
+// POSIX/macOS. `parseMessageId` below treats the "session" segment as
+// exactly one colon-delimited field (`parts[2]`, matching every other
+// integration's own convention -- only the LAST segment, `nativeId`, is
+// colon-tolerant via `.slice(N).join(":")`), so an unescaped path
+// containing a colon silently truncated the session and corrupted the
+// native id. `encodeURIComponent` never emits a literal `:` in its output
+// (colons become `%3A`), so the round-trip through `parts[2]` is safe;
+// `decodeURIComponent` in the parser below recovers the exact original
+// path.
 export function qualifyOmpMessage(machine: string, sessionId: string, nativeId: string): string {
-  return `omp:${machine}:${sessionId}:${nativeId}`
+  return `omp:${machine}:${encodeURIComponent(sessionId)}:${nativeId}`
 }
 
 export function qualifyDocumentMessage(slug: string, uuid: string): string {

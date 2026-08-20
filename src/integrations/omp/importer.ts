@@ -131,7 +131,19 @@ export async function importOmpSessions(options: OmpImporterOptions): Promise<Om
         continue;
       }
 
-      const sessionKey = record.path.split("/").pop() ?? record.path;
+      // 2026-08-19 fix (message-locator round-trip): the qualified message
+      // ID's "session" segment must BE the transcript's own unique
+      // locator, not a lossy display label -- record.path (already the
+      // full unique discriminator `listTranscripts` sorts by) is the only
+      // field that both round-trips (resolveExternalMessage's own "omp"
+      // case reads a transcript straight back off this exact path) and
+      // never collides (two distinct transcripts always have distinct
+      // paths, even when they share a filename). The old
+      // `record.path.split("/").pop()` basename lost both properties:
+      // unresolvable, and two differently nested same-named files with
+      // colliding native ids produced identical qualified ids for
+      // genuinely distinct source events.
+      const sessionKey = record.path;
       const messages: Message[] = session.messages.map((m) => convertToEiMessage(m, sessionKey, qualifyOmpMessage));
 
       // D7 (Beta review I1, CRITICAL): persist the converted messages into

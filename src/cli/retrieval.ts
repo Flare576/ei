@@ -6,7 +6,7 @@ import { crossFind } from "../core/utils/index.ts";
 import { join } from "path";
 import { readFile } from "fs/promises";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
-import { parseMessageId, qualifyOpenCodeMessage, qualifyClaudeCodeMessage, qualifyCursorMessage, qualifyCodexMessage, qualifyPiMessage } from "../core/utils/message-id.js";
+import { parseMessageId, qualifyOpenCodeMessage, qualifyClaudeCodeMessage, qualifyCursorMessage, qualifyCodexMessage, qualifyPiMessage, qualifyOmpMessage } from "../core/utils/message-id.js";
 import { getMachineId } from "../integrations/machine-id.js";
 import { readCorrections, applyCorrectionsToState } from "../core/corrections.js";
 import type { QuoteCorrectionSkip } from "../core/corrections.js";
@@ -21,6 +21,8 @@ import type { CodexMessage } from "../integrations/codex/types.js";
 import { CODEX_PERSONA_NAME } from "../integrations/codex/types.js";
 import type { PiMessage } from "../integrations/pi/types.js";
 import { PI_PERSONA_NAME } from "../integrations/pi/types.js";
+import type { OmpMessage } from "../integrations/omp/types.js";
+import { resolveCanonicalAgent } from "../core/personas/opencode-agent.js";
 
 const STATE_FILE = "state.json";
 const BACKUP_FILE = "state.backup.json";
@@ -487,7 +489,8 @@ export type ResolvedMessageOriginKind =
   | "claudecode"
   | "cursor"
   | "codex"
-  | "pi";
+  | "pi"
+  | "omp";
 
 export interface ResolvedMessageContainer {
   /** "persona" = a direct 1:1 thread, "room" = a multi-participant room, "session" = an external coding-tool session. */
@@ -835,6 +838,71 @@ export async function resolveExternalMessage(
           ...toPi(win.message),
           before: win.before.map(toPi),
           after: win.after.map(toPi),
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    case "omp": {
+      if (parsed.machine !== getMachineId()) {
+        return { error: `Message is from machine '${parsed.machine}', not available on this machine (${getMachineId()})` };
+      }
+      try {
+        // Deliberately its own case, not folded into "pi": OMP and Pi are
+        // separate products (docs/adr/ADR-026-integration-granularity-per-harness.md
+        // already flagged, and deliberately deferred, an existing
+        // conflation between them elsewhere in the pi/ importer — this
+        // resolver must not add a new one). `parsed.session` is the
+        // transcript's own full path (the importer's qualified-id fix).
+        const { OmpReader } = await import("../integrations/omp/reader.js");
+        const reader = new OmpReader();
+        // 2026-08-20 fix (S2, .sisyphus/reviews/session-fixes-review/beta-code-review.md):
+        // a same-machine check alone is NOT sufficient before reading an
+        // arbitrary caller-supplied path -- `readTranscript` only verifies
+        // file-safety (regular file, non-symlink, size limit), never that
+        // the path is actually an eligible OMP transcript (under the
+        // session root, `.jsonl`, CD2+). Without this, a same-machine
+        // qualified ID naming ANY locally-readable, OMP-shaped JSONL file
+        // could be read and returned through the public `ei_fetch_message`/
+        // `ei --id` surface, regardless of whether it was ever actually
+        // imported. Resolving against `listTranscripts()`'s own returned
+        // set (the exact same discovery the importer itself uses) closes
+        // that gap: only a transcript this project would ACTUALLY import
+        // is ever readable through this resolver.
+        const eligiblePaths = new Set((await reader.listTranscripts()).map(r => r.path));
+        if (!eligiblePaths.has(parsed.session!)) return null;
+        const session = await reader.readTranscript(parsed.session!);
+        if (!session) return null;
+        const idx = session.messages.findIndex(m => m.id === parsed.nativeId);
+        if (idx === -1) return null;
+
+        // Speaker identity comes from THIS transcript's own resolved
+        // sub-agent (same canonicalization the importer uses to name its
+        // Persona), never a shared/generic name — an OMP transcript with
+        // no resolvable agent was never imported in the first place
+        // (importOmpSessions's own D3 fail-closed guard), so this is a
+        // defensive fallback for a direct probe, not an expected path.
+        const agentDisplayName = session.provenance.agent_id
+          ? resolveCanonicalAgent(session.provenance.agent_id).canonical
+          : "OMP Sub-Agent";
+
+        const container: ResolvedMessageContainer = { kind: "session", id: parsed.session!, display_name: agentDisplayName };
+        const toOmp = (m: OmpMessage): ResolvedMessage => ({
+          origin_kind: "omp",
+          source_id: qualifyOmpMessage(parsed.machine!, parsed.session!, m.id),
+          container,
+          speaker: externalSpeaker(m.role, undefined, agentDisplayName),
+          timestamp: m.timestamp,
+          content: m.content,
+          before: [],
+          after: [],
+        });
+
+        return {
+          ...toOmp(session.messages[idx]),
+          before: session.messages.slice(Math.max(0, idx - before), idx).map(toOmp),
+          after: session.messages.slice(idx + 1, idx + 1 + after).map(toOmp),
         };
       } catch {
         return null;
