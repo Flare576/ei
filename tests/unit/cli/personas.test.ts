@@ -144,7 +144,7 @@ describe("buildEiRelationshipBlock — output structure", () => {
   });
 
   it("includes the Working Style section header", () => {
-    expect(buildEiRelationshipBlock(makePersonaResult())).toContain("### Working Style");
+    expect(buildEiRelationshipBlock(makePersonaResult())).toContain("## Working Style");
   });
 
   it("includes the Shared Context section header", () => {
@@ -152,48 +152,59 @@ describe("buildEiRelationshipBlock — output structure", () => {
   });
 });
 
-describe("buildEiRelationshipBlock — trait filtering", () => {
-  it("excludes traits with strength below 0.7", () => {
-    const persona = makePersonaResult({ traits: [makeTrait("Sneaky", 0.5)] });
+describe("buildEiRelationshipBlock — trait rendering (GH #99: no threshold, no cap)", () => {
+  it("renders a guardrail (strength 0) name-only, under the Must NEVER Do header, with no description or percentage", () => {
+    const persona = makePersonaResult({ traits: [makeTrait("Sneaky", 0)] });
     const result = buildEiRelationshipBlock(persona);
-    expect(result).not.toContain("Sneaky");
-    expect(result).toContain("(no traits above threshold)");
+    expect(result).toContain("### Must NEVER Do — User Explicitly Asked You To Stop");
+    expect(result).toContain("**Sneaky**");
+    expect(result).not.toContain("Sneaky description");
   });
 
-  it("includes traits with strength exactly 0.7 (inclusive boundary)", () => {
-    const persona = makePersonaResult({ traits: [makeTrait("Boundary", 0.7)] });
-    expect(buildEiRelationshipBlock(persona)).toContain("Boundary");
-  });
-
-  it("includes traits with strength above 0.7", () => {
-    const persona = makePersonaResult({ traits: [makeTrait("Strong", 0.9)] });
-    expect(buildEiRelationshipBlock(persona)).toContain("Strong");
-  });
-
-  it("excludes trait at 0.699 (just below boundary)", () => {
-    const persona = makePersonaResult({ traits: [makeTrait("AlmostThere", 0.699)] });
+  it("renders a low-strength trait (0.1) — no threshold excludes it", () => {
+    const persona = makePersonaResult({ traits: [makeTrait("Faint", 0.1)] });
     const result = buildEiRelationshipBlock(persona);
-    expect(result).not.toContain("AlmostThere");
+    expect(result).toContain("### Subtle Undercurrents");
+    expect(result).toContain("**Faint**: Faint description");
   });
 
-  it("shows fallback text when all traits are below threshold", () => {
-    const persona = makePersonaResult({
-      traits: [makeTrait("Weak", 0.3), makeTrait("Weaker", 0.1)],
-    });
-    expect(buildEiRelationshipBlock(persona)).toContain("(no traits above threshold)");
+  it("renders a moderate-strength trait (0.5) — the documented default for a freshly seeded trait", () => {
+    const persona = makePersonaResult({ traits: [makeTrait("Fresh", 0.5)] });
+    const result = buildEiRelationshipBlock(persona);
+    expect(result).toContain("### Noticeable in Casual Messages");
+    expect(result).toContain("**Fresh**: Fresh description");
   });
 
-  it("shows fallback text when traits array is empty", () => {
+  it("renders a strong trait (0.75) under Strong Tendencies", () => {
+    const persona = makePersonaResult({ traits: [makeTrait("Sturdy", 0.75)] });
+    const result = buildEiRelationshipBlock(persona);
+    expect(result).toContain("### Strong Tendencies");
+    expect(result).toContain("**Sturdy**: Sturdy description");
+  });
+
+  it("renders a defining trait (0.95) under Core Expression", () => {
+    const persona = makePersonaResult({ traits: [makeTrait("Defining", 0.95)] });
+    const result = buildEiRelationshipBlock(persona);
+    expect(result).toContain("### Core Expression");
+    expect(result).toContain("**Defining**: Defining description");
+  });
+
+  it("shows fallback text only when traits array is genuinely empty", () => {
     const persona = makePersonaResult({ traits: [] });
-    expect(buildEiRelationshipBlock(persona)).toContain("(no traits above threshold)");
+    expect(buildEiRelationshipBlock(persona)).toContain("(no traits recorded)");
   });
 
-  it("sorts qualifying traits descending by strength", () => {
+  it("never shows the fallback text when any trait exists, regardless of strength", () => {
+    const persona = makePersonaResult({ traits: [makeTrait("Weak", 0.05)] });
+    expect(buildEiRelationshipBlock(persona)).not.toContain("(no traits recorded)");
+  });
+
+  it("sorts traits within a bucket descending by strength", () => {
     const persona = makePersonaResult({
       traits: [
-        makeTrait("Copper", 0.75),   // weakest of the three → last
-        makeTrait("Platinum", 0.95), // strongest → first
-        makeTrait("Silver", 0.85),   // middle → second
+        makeTrait("Copper", 0.75),
+        makeTrait("Platinum", 0.95),
+        makeTrait("Silver", 0.85),
       ],
     });
     const result = buildEiRelationshipBlock(persona);
@@ -204,25 +215,34 @@ describe("buildEiRelationshipBlock — trait filtering", () => {
     expect(silverPos).toBeLessThan(copperPos);
   });
 
-  it("formats strength as a rounded integer percentage", () => {
-    const persona = makePersonaResult({ traits: [makeTrait("Precise", 0.777)] });
-    // Math.round(0.777 * 100) = 78
-    expect(buildEiRelationshipBlock(persona)).toContain("(78%)");
+  it("does not cap the number of rendered traits (GH #99: capped-not-thresholded was rejected for this surface)", () => {
+    const traits = Array.from({ length: 20 }, (_, i) => makeTrait(`Trait${i}`, 0.5));
+    const persona = makePersonaResult({ traits });
+    const result = buildEiRelationshipBlock(persona);
+    for (const t of traits) {
+      expect(result).toContain(`**${t.name}**`);
+    }
   });
 
-  it("formats strength at exactly 0.7 as 70%", () => {
-    const persona = makePersonaResult({ traits: [makeTrait("Exact", 0.7)] });
-    expect(buildEiRelationshipBlock(persona)).toContain("(70%)");
-  });
-
-  it("excludes a trait with undefined strength while a 0.8 trait qualifies (undefined defaults to 0.5, not 0.7)", () => {
+  it("treats undefined strength as the 0.5 default — it renders, it is not a guardrail", () => {
     const undefinedStrength = { ...makeTrait("Unset", 0.9), strength: undefined } as PersonaTrait;
+    const persona = makePersonaResult({ traits: [undefinedStrength] });
+    const result = buildEiRelationshipBlock(persona);
+    expect(result).toContain("### Noticeable in Casual Messages");
+    expect(result).toContain("**Unset**: Unset description");
+    expect(result).not.toContain("Must NEVER Do");
+  });
+
+  it("renders guardrails and active traits together when both are present", () => {
     const persona = makePersonaResult({
-      traits: [undefinedStrength, makeTrait("Confirmed", 0.8)],
+      traits: [makeTrait("StopThis", 0), makeTrait("KeepDoing", 0.8)],
     });
     const result = buildEiRelationshipBlock(persona);
-    expect(result).not.toContain("Unset");
-    expect(result).toContain("Confirmed");
+    expect(result).toContain("### Must NEVER Do — User Explicitly Asked You To Stop");
+    expect(result).toContain("**StopThis**");
+    expect(result).not.toContain("StopThis description");
+    expect(result).toContain("### Strong Tendencies");
+    expect(result).toContain("**KeepDoing**: KeepDoing description");
   });
 });
 

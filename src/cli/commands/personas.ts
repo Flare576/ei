@@ -1,6 +1,20 @@
 import { loadLatestState, retrievePersonas, retrievePersonasSemantic, mapPersona } from "../retrieval";
 import { getEmbeddingService } from "../../core/embedding-service";
+import { partitionTraits, bucketTraits } from "../../prompts/trait-utils";
 import type { PersonaResult } from "../retrieval";
+
+// Mirrors response/sections.ts's TRAIT_BUCKETS (kept as its own copy, same
+// pattern room/sections.ts already follows, rather than a cross-cutting
+// export change out of scope for this fix). Deliberately uncapped: GH #99 —
+// a persona's traits exist for a reason, and this block is small enough
+// that budgeting them out was never the point of the >= 0.7 filter it
+// replaces.
+const RELATIONSHIP_TRAIT_BUCKETS = [
+  { min: 90, max: 100, header: "### Core Expression\nThese define you. They should be evident in every response." },
+  { min: 66, max: 89,  header: "### Strong Tendencies\nFrequent and traceable, but not in every sentence." },
+  { min: 36, max: 65,  header: "### Noticeable in Casual Messages\nPresent but not dominating — surfaces naturally, not constantly." },
+  { min: 1,  max: 35,  header: "### Subtle Undercurrents\nBackground texture only. Use sparingly or subtly." },
+] as const;
 
 export async function execute(query: string, limit: number, options: { recent?: boolean } = {}): Promise<PersonaResult[]> {
   const state = await loadLatestState();
@@ -52,11 +66,21 @@ export async function execute(query: string, limit: number, options: { recent?: 
  * cue this builder previously emitted here).
  */
 export function buildEiRelationshipBlock(persona: PersonaResult, hasActiveSignals?: boolean): string {
-  const strongTraits = (persona.traits ?? [])
-    .filter((t) => (t.strength ?? 0.5) >= 0.7)
-    .sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5))
-    .map((t) => `**${t.name}** (${Math.round((t.strength ?? 0.5) * 100)}%): ${t.description}`)
-    .join("\n");
+  const { guardrails, active } = partitionTraits(persona.traits ?? []);
+  const sortedActive = [...active].sort((a, b) => (b.strength ?? 0.5) - (a.strength ?? 0.5));
+
+  const traitSections: string[] = [];
+  if (guardrails.length > 0) {
+    const lines = guardrails.map((t) => `**${t.name}**`).join("\n");
+    traitSections.push(`### Must NEVER Do — User Explicitly Asked You To Stop\n${lines}`);
+  }
+  for (const { bucket, traits: inBucket } of bucketTraits(sortedActive, RELATIONSHIP_TRAIT_BUCKETS)) {
+    if (inBucket.length === 0) continue;
+    const lines = inBucket.map((t) => `**${t.name}**: ${t.description}`).join("\n");
+    traitSections.push(`${bucket.header}\n${lines}`);
+  }
+  const traitsBlock = traitSections.length > 0 ? traitSections.join("\n\n") : "(no traits recorded)";
+
   const sortedTopics = [...(persona.topics ?? [])]
     .sort((a, b) => b.exposure_current - a.exposure_current)
     .map((t) => `**${t.name}**: ${t.perspective} — ${t.approach}`)
@@ -77,8 +101,9 @@ export function buildEiRelationshipBlock(persona: PersonaResult, hasActiveSignal
     "",
     persona.base_prompt ?? "",
     "",
-    "### Working Style",
-    strongTraits || "(no traits above threshold)",
+    "## Working Style",
+    "",
+    traitsBlock,
     "",
     "### Shared Context",
     sortedTopics || "(no topics)",
