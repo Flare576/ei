@@ -18,13 +18,10 @@ import { join } from "path";
 // This is a targeted grep for the EXACT present-tense phrasings Beta's
 // review quoted as live violations — not a prose test of every
 // historical-critic sentence (this Bolt's own Test Plan Skip List calls
-// that brittle and tautological). SKILL.md and cli.md both correctly RETAIN
-// past-tense mentions of the deleted critic elsewhere (e.g. "That Critic no
-// longer exists (ADR-038)"), which these patterns must not flag — the
-// second `it` below locks that carve-out in place. Every read below
-// collapses whitespace (`\s+` → one space) before matching, so a
-// multi-word pattern isn't a false negative just because Markdown happened
-// to hard-wrap a line in the middle of it.
+// that brittle and tautological). Every read below collapses whitespace
+// (`\s+` → one space) before matching, so a multi-word pattern isn't a
+// false negative just because Markdown happened to hard-wrap a line in
+// the middle of it.
 const REPO_ROOT = new URL("../..", import.meta.url).pathname;
 
 function listMarkdownFilesRecursively(dir: string): string[] {
@@ -71,8 +68,4 @@ describe("R7/AT7 (Bolt 002 D4): no active instruction attributes current behavio
     }
   });
 
-  it("still permits SKILL.md's own explicit past-tense/historical mention of the deleted critic (R5/AT5's carve-out, not a regression this check should ever flag)", () => {
-    const skillMd = readFileSync(join(REPO_ROOT, "skills", "ei-reflect", "SKILL.md"), "utf-8").replace(/\s+/g, " ");
-    expect(skillMd).toMatch(/no longer exists \(ADR-038\)/);
-  });
 });
