@@ -186,6 +186,123 @@ export function buildPersonaNoteTools(personaId: string): ToolDefinition[] {
   ];
 }
 
+export function registerPersonaIdentityExecutors(
+  getMyIdentity: ToolExecutor,
+  editTrait: ToolExecutor,
+  editTopic: ToolExecutor,
+  updateDescription: ToolExecutor
+): void {
+  executorRegistry.set(getMyIdentity.name, getMyIdentity);
+  executorRegistry.set(editTrait.name, editTrait);
+  executorRegistry.set(editTopic.name, editTopic);
+  executorRegistry.set(updateDescription.name, updateDescription);
+}
+
+/**
+ * Build per-request ToolDefinition objects for the four native identity tools, injecting the
+ * current personaId via config so the shared executors know which persona to read/write.
+ * get_my_identity is read-only and left at heartbeat_eligible's default (true); the three
+ * write tools are each explicitly heartbeat_eligible: false (D1).
+ */
+export function buildPersonaIdentityTools(personaId: string): ToolDefinition[] {
+  const now = new Date(0).toISOString();
+  return [
+    {
+      id: `builtin-get-my-identity-${personaId}`,
+      provider_id: "ei",
+      name: "get_my_identity",
+      display_name: "Get My Identity",
+      description: "Retrieve your own complete identity: every current trait and topic, each carrying a stable id, plus your short and long description. Use this before edit_trait/edit_topic to look up the id of the item you want to change, or just to see your full current self-model.",
+      input_schema: {
+        type: "object",
+        properties: {},
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+    },
+    {
+      id: `builtin-edit-trait-${personaId}`,
+      provider_id: "ei",
+      name: "edit_trait",
+      display_name: "Edit Trait",
+      description: "Add, remove, or update one of your own traits. action: \"add\" requires name, description, and sentiment (-1 to 1; strength 0-1 is optional) and mints a fresh id. action: \"remove\" requires the id of an existing trait and deletes exactly that one. action: \"update\" requires the id of an existing trait plus one or more fields to change (name, description, sentiment, strength) — only the supplied fields are changed. Look up ids via get_my_identity first.",
+      input_schema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["add", "remove", "update"], description: "Which operation to perform." },
+          id: { type: "string", description: "Existing trait id — required for remove/update." },
+          name: { type: "string", description: "Trait name — required for add." },
+          description: { type: "string", description: "Trait description — required for add." },
+          sentiment: { type: "number", description: "Sentiment from -1 to 1 — required for add." },
+          strength: { type: "number", description: "Optional strength from 0 to 1." },
+        },
+        required: ["action"],
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
+    },
+    {
+      id: `builtin-edit-topic-${personaId}`,
+      provider_id: "ei",
+      name: "edit_topic",
+      display_name: "Edit Topic",
+      description: "Add, remove, or update one of your own topics. action: \"add\" requires name, perspective, approach, personal_stake, sentiment (-1 to 1), exposure_current (0-1), and exposure_desired (0-1), and mints a fresh id. action: \"remove\" requires the id of an existing topic and deletes exactly that one. action: \"update\" requires the id of an existing topic plus one or more fields to change — only the supplied fields are changed. Look up ids via get_my_identity first.",
+      input_schema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["add", "remove", "update"], description: "Which operation to perform." },
+          id: { type: "string", description: "Existing topic id — required for remove/update." },
+          name: { type: "string", description: "Topic name — required for add." },
+          perspective: { type: "string", description: "Your view/opinion on this topic — required for add." },
+          approach: { type: "string", description: "How you prefer to engage with this topic — required for add." },
+          personal_stake: { type: "string", description: "Why this topic matters to you personally — required for add." },
+          sentiment: { type: "number", description: "Sentiment from -1 to 1 — required for add." },
+          exposure_current: { type: "number", description: "How recently discussed, 0 to 1 — required for add." },
+          exposure_desired: { type: "number", description: "How much you want to discuss it, 0 to 1 — required for add." },
+        },
+        required: ["action"],
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
+    },
+    {
+      id: `builtin-update-description-${personaId}`,
+      provider_id: "ei",
+      name: "update_description",
+      display_name: "Update Description",
+      description: "Update your own short and/or long description. Supply short_description and/or long_description — only the supplied field(s) change, the other is left untouched. Changing long_description recomputes your description embedding.",
+      input_schema: {
+        type: "object",
+        properties: {
+          short_description: { type: "string", description: "New short description. Omit to leave unchanged." },
+          long_description: { type: "string", description: "New long description. Omit to leave unchanged." },
+        },
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
+    },
+  ];
+}
+
 /**
  * Register the file_read, list_directory, directory_tree, search_files, grep, and get_file_info
  * executors — called by Processor on TUI/Node only.

@@ -55,8 +55,9 @@ import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { bootstrapTools } from "./bootstrap-tools.js";
 import { seedBuiltinFacts, migrateLearnedOn, migrateMessageIds, migrateSlackToMultiWorkspace, seedSettings } from "./migrations.js";
 import { IntegrationSyncManager } from "./integration-sync-manager.js";
-import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, SYSTEM_TOOLS } from "./tools/index.js";
+import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, registerPersonaIdentityExecutors, buildPersonaIdentityTools, SYSTEM_TOOLS } from "./tools/index.js";
 import { createAddNoteExecutor, createClearNoteExecutor } from "./tools/builtin/persona-notes.js";
+import { createGetMyIdentityExecutor, createEditTraitExecutor, createEditTopicExecutor, createUpdateDescriptionExecutor } from "./tools/builtin/persona-identity.js";
 import { createFindMemoryExecutor } from "./tools/builtin/find-memory.js";
 import { createFetchMemoryExecutor } from "./tools/builtin/fetch-memory.js";
 import { createFetchMessageExecutor } from "./tools/builtin/fetch-message.js";
@@ -268,6 +269,12 @@ export class Processor {
     registerPersonaNoteExecutors(
       createAddNoteExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.stateManager.persona_update.bind(this.stateManager)),
       createClearNoteExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.stateManager.persona_update.bind(this.stateManager))
+    );
+    registerPersonaIdentityExecutors(
+      createGetMyIdentityExecutor(this.stateManager.persona_getById.bind(this.stateManager)),
+      createEditTraitExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.stateManager.persona_update.bind(this.stateManager)),
+      createEditTopicExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.stateManager.persona_update.bind(this.stateManager)),
+      createUpdateDescriptionExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.updatePersona.bind(this))
     );
     if (this.isTUI) {
       await registerFileReadExecutor();
@@ -699,7 +706,7 @@ const toolNextSteps = new Set([
                 t.name === "find_memory" || t.name === "fetch_memory" || t.name === "fetch_message"
               );
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
-              tools = [...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
+              tools = [...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...buildPersonaIdentityTools(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
               if (isHeartbeatRequest) {
                 tools = tools.filter(t => t.heartbeat_eligible !== false);
               }
