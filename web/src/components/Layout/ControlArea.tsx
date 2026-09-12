@@ -11,8 +11,6 @@ export interface ControlAreaProps {
   onSyncAndExit?: () => void;
   isSaving?: boolean;
   onQueueClick?: () => void;
-  pendingReflectionPersonas?: Array<{ id: string; display_name: string }>;
-  onReflectionClick?: (personaId: string) => void;
 }
 
 export function ControlArea({ 
@@ -24,8 +22,6 @@ export function ControlArea({
   onSyncAndExit,
   isSaving,
   onQueueClick,
-  pendingReflectionPersonas = [],
-  onReflectionClick,
 }: ControlAreaProps) {
   const isPaused = queueStatus.state === "paused";
   const isBusy = queueStatus.state === "busy";
@@ -71,17 +67,6 @@ export function ControlArea({
           {queueStatus.embedding_warning && (
             <span className="ei-control-area__dlq" title="Embedding service unavailable — topic/person matching using recent items">⚠ embed</span>
           )}
-          {pendingReflectionPersonas.map(p => (
-            <span
-              key={p.id}
-              className="ei-control-area__reflection-badge"
-              title={`${p.display_name} has a pending reflection — click to review`}
-              onClick={() => onReflectionClick?.(p.id)}
-              role="button"
-            >
-              ✦ {p.display_name}
-            </span>
-          ))}
         </span>
         <button
           className={`ei-btn ei-btn--icon ${isPaused ? "ei-play-btn" : "ei-pause-btn"}`}
