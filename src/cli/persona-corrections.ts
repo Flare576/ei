@@ -566,9 +566,8 @@ export async function applyPersonaSignal(
   // helpers create/update already use, BEFORE the correction is built —
   // parsed.delta.traits/topics carry an optional `id`/`last_updated`
   // (personaTraitSchema/personaTopicSchema, exactly like create/update's
-  // own input), and pending_update is later applied for real by
-  // Processor.finalizeReflection, which needs every child fully
-  // materialized, not the wire-optional shape a raw cast to
+  // own input), and `pending_update` must hold fully materialized
+  // children, not the wire-optional shape a raw cast to
   // PersonaIdentityDelta would have let through unmaterialized.
   const delta: PersonaIdentityDelta | undefined = parsed.delta
     ? {

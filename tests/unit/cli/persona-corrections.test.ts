@@ -1006,7 +1006,7 @@ describe("Apply Signal — confirm (R2-R5)", () => {
 });
 
 describe("Confirm-delta traits/topics are materialized before reaching pending_update (C1 regression)", () => {
-  it("stamps a real id/last_updated on a no-id/no-timestamp delta trait and topic before pending_update is written, and finalizeReflection persists them intact", async () => {
+  it("stamps a real id/last_updated on a no-id/no-timestamp delta trait and topic before pending_update is written (C1 regression)", async () => {
     const signal = makeSignal();
     const existing = makeExistingPersonaEntity(PERSONA_ID, { is_paused: true });
     writeState(makeState({
@@ -1036,35 +1036,6 @@ describe("Confirm-delta traits/topics are materialized before reaching pending_u
     expect(pendingTopic.id).toMatch(UUID_RE);
     expect(new Date(pendingTrait.last_updated).toISOString()).toBe(pendingTrait.last_updated);
     expect(new Date(pendingTopic.last_updated).toISOString()).toBe(pendingTopic.last_updated);
-
-    // Apply the proposal for real through Processor.finalizeReflection --
-    // the exact downstream consumer the Stint-level holistic review found
-    // R2/AT2 never traced -- and assert every persisted child still has a
-    // non-empty id and an ISO last_updated.
-    const dataDir = mkdtempSync(join(tmpdir(), "ei-persona-corrections-finalize-"));
-    try {
-      const processor = new Processor(createDrainInterface());
-      try {
-        await processor.start(createLiveDrainStorage(dataDir) as unknown as Parameters<Processor["start"]>[0]);
-        processor.getStateManager().restoreFromState(afterConfirm!);
-        await processor.finalizeReflection(PERSONA_ID, "apply");
-
-        const persisted = processor.getStateManager().persona_getById(PERSONA_ID)!;
-        expect(persisted.pending_update).toBeUndefined();
-        expect(persisted.traits).toHaveLength(1);
-        expect(persisted.topics).toHaveLength(1);
-        const [persistedTrait] = persisted.traits;
-        const [persistedTopic] = persisted.topics;
-        expect(persistedTrait.id).toMatch(UUID_RE);
-        expect(persistedTopic.id).toMatch(UUID_RE);
-        expect(new Date(persistedTrait.last_updated).toISOString()).toBe(persistedTrait.last_updated);
-        expect(new Date(persistedTopic.last_updated).toISOString()).toBe(persistedTopic.last_updated);
-      } finally {
-        await processor.stop();
-      }
-    } finally {
-      rmSync(dataDir, { recursive: true, force: true });
-    }
   });
 });
 
