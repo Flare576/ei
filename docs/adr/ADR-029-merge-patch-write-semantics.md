@@ -180,6 +180,12 @@ arbitrary content into it could fabricate a reflection proposal that appears in 
 Ei's own Critic produced it. ADR-014 spent its entire argument narrowing what a caller may assert about
 provenance; opening this would contradict it for no gain.
 
+
+> **2026-09-11 addendum:** This clause is **superseded by ADR-039** as applied to `pending_update`
+> specifically — the field itself is deleted, so there is nothing left to be clearable-but-not-settable.
+> Kept here as the historical record of the original rationale; the general merge-patch/clearable-field
+> discipline this ADR establishes for every other field is unaffected.
+
 ## Alternatives Considered
 
 ### Alternative A: Keep full-record replacement, add a preserve-on-omit list

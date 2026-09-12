@@ -46,6 +46,7 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [036](ADR-036-instruction-repositioning-is-not-a-validated-fix.md) | Instruction Repositioning Is Not a Validated Fix for Extraction Prompt Data-Handling Defects — Real Failure Cases Come First | Accepted | 2026-08-10 | Current |
 | [037](ADR-037-extraction-prompts-stay-single-purpose.md) | Extraction and Reducer Prompts Stay Single-Purpose | Accepted | 2026-08-11 | Current |
 | [038](ADR-038-persona-signals-supersede-the-reflection-critic.md) | Attributed Persona Signals Replace the Reflection Critic and Its Append-Only Log | Accepted | 2026-08-11 | Current |
+| [039](ADR-039-signal-resolution-status-only-separate-identity-tools.md) | Signal Resolution Is Status-Only; Identity Editing Is a Separate Native Tool Set | Accepted | 2026-09-11 | Current |
 
 ## Conventions
 

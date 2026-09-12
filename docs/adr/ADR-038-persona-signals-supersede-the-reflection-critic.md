@@ -213,7 +213,7 @@ a Persona-linked description climbing across ceremonies without new signals behi
 observation that should reopen this decision; volume alone is not, per ADR-024 and the reason this whole
 bundle exists.
 
-### 7. Apply-Signal's transition table, and the `pending_update` collision refusal
+### 7. Apply-Signal's transition table: status-only for both lenses, identity editing lives elsewhere
 
 Two new CLI/MCP write operations join the existing `ei create/update/remove
 fact/topic/person/quote/persona` family, and both go through the corrections queue — CLI/MCP runs
@@ -232,46 +232,26 @@ storage forever, with no scheduled pass to eventually notice it.
 (`signal.confirm` / `signal.dismiss`, same family as the existing `patch` op), applied atomically at drain
 time:
 
-| Disposition | Source status | Lens | Identity delta supplied | Result |
-|---|---|---|---|---|
-| `confirm` | `candidate` or `recurring` | Agent | no | `status: "reviewed"`, `reviewed_by` (actor + timestamp). No `PersonaEntity` write. |
-| `confirm` | `candidate` or `recurring` | Agent | yes | Identical to the row above — the delta is **ignored**, not applied. No `PersonaEntity` write of any kind. |
-| `confirm` | `candidate` or `recurring` | Persona | no | `status: "reviewed"`, `reviewed_by`. No `PersonaEntity` write. |
-| `confirm` | `candidate` or `recurring` | Persona | yes, and `pending_update` is unset | `status: "reviewed"`, `reviewed_by`, **plus** a complete `pending_update` proposal written in the same atomic step. |
-| `confirm` | `candidate` or `recurring` | Persona | yes, and `pending_update` is already set | **Refused whole.** Signal status unchanged; existing proposal untouched. |
-| `confirm` | `dismissed` or `reviewed` | either | either | Refused, no state change. |
-| `dismiss` | `candidate` or `recurring` | either | n/a | `status: "dismissed"`, `dismissed_by` (actor + timestamp). No `PersonaEntity` write. |
-| `dismiss` | `dismissed` or `reviewed` | either | n/a | Refused, no state change. |
+| Disposition | Source status | Lens | Result |
+|---|---|---|---|
+| `confirm` | `candidate` or `recurring` | either | `status: "reviewed"`, `reviewed_by` (actor + timestamp). No `PersonaEntity` write, for either lens. |
+| `confirm` | `dismissed` or `reviewed` | either | Refused, no state change. |
+| `dismiss` | `candidate` or `recurring` | either | `status: "dismissed"`, `dismissed_by` (actor + timestamp). No `PersonaEntity` write. |
+| `dismiss` | `dismissed` or `reviewed` | either | Refused, no state change. |
 
-**Why an Agent-lens confirm never writes Ei's own state.** Per ADR-001, a Persona's identity and an
-agent's operating contract are separate records. A `reviewed` Agent-lens signal is a durable, readable
-finding that a human — or an external reflection's Agent lens — acts on by editing the harness's own
-agent-definition file. This write surface has no reach into harness files and does not pretend otherwise;
-that is why an Agent-lens confirm has exactly one effect, the status transition, and why supplying an
-identity delta with one is silently ignored rather than honored.
-
-**Why a Persona-lens confirm *proposes* instead of applying.** The delta lands as a complete
-`pending_update` object — `{ short_description, long_description, traits, topics, critique, created_at }`,
-the shape already required at `src/core/types/entities.ts:181-188` — where `critique` is synthesized to
-cite the signal (e.g. `"Confirmed via CLI/MCP from signal <id>: <claim>"`) and `created_at` is the drain
-timestamp. That is exactly where the existing TUI/Web pending-update UI already looks, and that UI's
-accept/dismiss flow (`Processor.finalizeReflection`, `src/core/processor.ts:1385`) remains the **only**
-code path that ever writes proposed identity fields onto `PersonaEntity`. It is unchanged by this work and
-is never called directly by the correction handler. This mirrors ADR-014 (attestation verifies against a
-resolved source rather than trusting a caller's assertion) and ADR-029 clause 5 (`pending_update` is
-clearable but not settable, so a caller cannot fabricate a proposal that looks Critic-authored). A caller
-may confirm evidence the system already produced, and may *propose* through the same human gate the
-deleted Critic used — but may not author an outcome the promotion policy would not have reached on its
-own.
-
-**Why a second proposal is refused rather than merged.** When a `pending_update` a human has not yet
-reviewed already exists, the whole `signal.confirm` is refused and the signal's status is left at
-`candidate`/`recurring`. Deliberate: silently merging into or overwriting an unreviewed proposal would
-destroy a pending human decision, and partially applying (transition the status, drop the delta) would
-leave the signal `reviewed` with its delta lost and no way to retry. Because nothing changed, a retry
-after the existing proposal is resolved behaves exactly like a first attempt. The cost is that a refused
-caller gets no automatic retry — a human must resolve the outstanding proposal first — and that refusal is
-observable, so a caller can prompt for it rather than diverging silently from what it asked for.
+**Neither lens's confirm ever writes `PersonaEntity`.** Both lenses have exactly one effect: the status
+transition and its audit stamp. An Agent-lens confirm never writes Ei's own state because — per ADR-001,
+a Persona's identity and an agent's operating contract are separate records — a `reviewed` Agent-lens
+signal is a durable, readable finding that a human, or an external reflection's Agent lens, acts on by
+editing the harness's own agent-definition file; this write surface has no reach into harness files and
+doesn't pretend otherwise. A Persona-lens confirm never writes `PersonaEntity` either, for a different
+reason: identity editing is its own separate concern, handled by a dedicated native tool set (read a
+Persona's own identity with ids, then add/remove/update specific traits/topics, or update its
+description) — see ADR-039, which is the full record of that design and supersedes this item's own
+original transition table (which had a Persona-lens confirm optionally stage a `pending_update`
+proposal; that mechanism, and `pending_update` itself, are retired). Confirming a signal and editing
+identity are two acts a Persona performs independently, in either order, whenever it decides to — not
+one call producing the other.
 
 ### 8. Cognitive Distance is directory depth, and `definition_revision` is a content hash
 
