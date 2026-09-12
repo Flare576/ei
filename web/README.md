@@ -29,16 +29,6 @@ To **add a new persona**, click the `+` button at the top of the persona panel. 
 
 To **edit a persona** — their traits, topics, or settings — hover over their name in the list and click the pencil icon.
 
-### Reflections
-
-After enough conversations, Ei notices patterns in how a persona has been evolving — topics they've started caring about more, traits that have shifted, things that should probably be part of their identity now. When that happens, Ei generates a **reflection**: a proposed update to who that persona is.
-
-A small badge (✦) appears on the persona's pill in the left panel when a reflection is pending. Click it to open the Reflection Review.
-
-The review shows you a side-by-side: the persona's current identity on the left, and the proposed changes on the right. You can edit the proposal directly, chat with the persona to think it through, then either **Save and Apply** or **Dismiss** it.
-
-Nothing applies automatically. You decide what sticks.
-
 ### Manage Your Data
 
 As you chat, Ei builds up a picture of you: facts, personality traits, people in your life, and topics you care about. You can view and edit all of this directly.
