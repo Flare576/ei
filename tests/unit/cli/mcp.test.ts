@@ -1,5 +1,19 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 
+// Preserve Zod's namespace export under Vitest's bare-specifier interop --
+// same workaround as tests/unit/cli/corrections-endpoints.test.ts and
+// tests/unit/cli/persona-corrections.test.ts. Without it, evaluating
+// mcp.ts's own module-level zod schema literals (ei_signal_confirm/
+// ei_signal_dismiss/ei_quote_* inputSchema) throws "z.string is not a
+// function" while this file's other imports are being collected.
+vi.mock("zod", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    z: (actual.z ?? actual.default ?? actual) as Record<string, unknown>,
+  };
+});
+
 const {
   MockCorrectionValidationError,
   mockRetrieveBalanced,
@@ -15,6 +29,7 @@ const {
   mockCreatePersonaEntity,
   mockUpdatePersonaEntity,
   mockRemovePersonaEntity,
+  mockApplyPersonaSignal,
 } = vi.hoisted(() => {
   class MockCorrectionValidationError extends Error {}
   return {
@@ -34,6 +49,7 @@ const {
     mockCreatePersonaEntity: vi.fn(),
     mockUpdatePersonaEntity: vi.fn(),
     mockRemovePersonaEntity: vi.fn(),
+    mockApplyPersonaSignal: vi.fn(),
   };
 });
 
@@ -58,6 +74,7 @@ vi.mock("../../../src/cli/persona-corrections.js", () => ({
   createPersonaEntity: mockCreatePersonaEntity,
   updatePersonaEntity: mockUpdatePersonaEntity,
   removePersonaEntity: mockRemovePersonaEntity,
+  applyPersonaSignal: mockApplyPersonaSignal,
 }));
 
 
@@ -585,6 +602,106 @@ describe("MCP server", () => {
     expect(content[0].text).toContain("Error: Invalid quote (relink)");
     expect(result.isError).toBe(true);
   });
+  // Bolt 003 D3/R3/AT3: ei_signal_confirm/ei_signal_dismiss register a
+  // `.passthrough()` z.object() schema instance, same rationale as the
+  // quote tools above (I1) -- a raw shape gets rebuilt by the MCP SDK
+  // into a non-strict z.object() that silently strips an undeclared key
+  // (including a caller-forged `delta`) before the handler ever sees
+  // it. mcp.ts's own rejectUnknownSignalFields() checks the parsed
+  // object against an allow-list BEFORE any named field is
+  // destructured, returning isError: true with the same fixed,
+  // generic message shape the quote tools' own helper uses.
+  describe("ei_signal_confirm / ei_signal_dismiss (Bolt 003 D1/D3, R1/R3, AT1/AT3)", () => {
+    it("registers ei_signal_confirm and ei_signal_dismiss tools", async () => {
+      ({ client } = await setupClient());
+      const result = await client.listTools();
+      const names = result.tools.map((t) => t.name);
+      expect(names).toContain("ei_signal_confirm");
+      expect(names).toContain("ei_signal_dismiss");
+    });
+
+    it("ei_signal_confirm's schema declares only persona_id/signal_id/actor -- no delta", async () => {
+      ({ client } = await setupClient());
+      const tools = await client.listTools();
+      const tool = tools.tools.find((t) => t.name === "ei_signal_confirm");
+      const properties = (tool!.inputSchema as Record<string, unknown>).properties as Record<string, unknown>;
+      expect(Object.keys(properties).sort()).toEqual(["actor", "persona_id", "signal_id"]);
+    });
+
+    it("ei_signal_confirm rejects an undeclared 'delta' argument with isError: true, never reaching applyPersonaSignal (AT1/AT3)", async () => {
+      ({ client } = await setupClient());
+      const callsBefore = mockApplyPersonaSignal.mock.calls.length;
+      const result = await client.callTool({
+        name: "ei_signal_confirm",
+        arguments: { persona_id: "persona-1", signal_id: "signal-1", actor: "flare576", delta: { short_description: "x", long_description: "y", traits: [], topics: [] } },
+      });
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(content[0].text).toBe("Error: Invalid signal (confirm): unrecognized field(s) present");
+      expect(result.isError).toBe(true);
+      expect(mockApplyPersonaSignal.mock.calls.length).toBe(callsBefore);
+    });
+
+    it("ei_signal_confirm rejects a delta member field supplied at the top level (short_description), same as a full delta (AT1)", async () => {
+      ({ client } = await setupClient());
+      const callsBefore = mockApplyPersonaSignal.mock.calls.length;
+      const result = await client.callTool({
+        name: "ei_signal_confirm",
+        arguments: { persona_id: "persona-1", signal_id: "signal-1", actor: "flare576", short_description: "Terse." },
+      });
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(content[0].text).toBe("Error: Invalid signal (confirm): unrecognized field(s) present");
+      expect(result.isError).toBe(true);
+      expect(mockApplyPersonaSignal.mock.calls.length).toBe(callsBefore);
+    });
+
+    it("ei_signal_confirm forwards persona_id/signal_id/actor to applyPersonaSignal and returns the result as JSON", async () => {
+      mockApplyPersonaSignal.mockResolvedValueOnce({ status: "recorded", signal: { id: "signal-1", status: "reviewed" } });
+      ({ client } = await setupClient());
+      const result = await client.callTool({
+        name: "ei_signal_confirm",
+        arguments: { persona_id: "persona-1", signal_id: "signal-1", actor: "flare576" },
+      });
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(JSON.parse(content[0].text)).toEqual({ status: "recorded", signal: { id: "signal-1", status: "reviewed" } });
+      expect(result.isError).toBeUndefined();
+      expect(mockApplyPersonaSignal).toHaveBeenCalledWith("persona-1", "signal-1", "confirm", { actor: "flare576" });
+    });
+
+    it("ei_signal_dismiss's schema declares only persona_id/signal_id/actor -- no delta", async () => {
+      ({ client } = await setupClient());
+      const tools = await client.listTools();
+      const tool = tools.tools.find((t) => t.name === "ei_signal_dismiss");
+      const properties = (tool!.inputSchema as Record<string, unknown>).properties as Record<string, unknown>;
+      expect(Object.keys(properties).sort()).toEqual(["actor", "persona_id", "signal_id"]);
+    });
+
+    it("ei_signal_dismiss rejects an undeclared 'delta' argument with isError: true, never reaching applyPersonaSignal (AT1/AT3)", async () => {
+      ({ client } = await setupClient());
+      const callsBefore = mockApplyPersonaSignal.mock.calls.length;
+      const result = await client.callTool({
+        name: "ei_signal_dismiss",
+        arguments: { persona_id: "persona-1", signal_id: "signal-1", actor: "flare576", delta: { short_description: "x", long_description: "y", traits: [], topics: [] } },
+      });
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(content[0].text).toBe("Error: Invalid signal (dismiss): unrecognized field(s) present");
+      expect(result.isError).toBe(true);
+      expect(mockApplyPersonaSignal.mock.calls.length).toBe(callsBefore);
+    });
+
+    it("ei_signal_dismiss forwards persona_id/signal_id/actor to applyPersonaSignal and returns the result as JSON", async () => {
+      mockApplyPersonaSignal.mockResolvedValueOnce({ status: "recorded", signal: { id: "signal-1", status: "dismissed" } });
+      ({ client } = await setupClient());
+      const result = await client.callTool({
+        name: "ei_signal_dismiss",
+        arguments: { persona_id: "persona-1", signal_id: "signal-1", actor: "flare576" },
+      });
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(JSON.parse(content[0].text)).toEqual({ status: "recorded", signal: { id: "signal-1", status: "dismissed" } });
+      expect(result.isError).toBeUndefined();
+      expect(mockApplyPersonaSignal).toHaveBeenCalledWith("persona-1", "signal-1", "dismiss", { actor: "flare576" });
+    });
+  });
+
   describe("ei_signal_list", () => {
     it("registers the ei_signal_list tool", async () => {
       ({ client } = await setupClient());
