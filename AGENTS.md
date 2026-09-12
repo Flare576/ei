@@ -409,6 +409,10 @@ Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedl
 | `find_memory` | `any` | Semantic embedding search of `StateManager.searchHumanData()` — no external call. Supports optional `persona` filter for scoping to a specific persona's learned data. |
 | `fetch_memory` | `any` | Full-record lookup for a human entity (Fact, Topic, Person, or Quote) by ID. Use when `find_memory` returns an item and you need its complete details. |
 | `fetch_message` | `any` | Retrieve a specific message by its fully-qualified ID with optional `before`/`after` context window. Accepts FQ IDs (`opencode:machine:session:id`, `ei:uuid`, `claudecode:...`, `cursor:...`, `codex:...`) and routes to the correct source DB. Returns message content, surrounding context, and session metadata. |
+| `get_my_identity` | `any` | Retrieve your own complete identity: every current trait and topic (each carrying a stable id), plus your short and long description. Read-only — heartbeat-eligible. |
+| `edit_trait` | `any` | Add, remove, or update one of your own traits. `action: "add"` requires name/description/sentiment and mints a fresh id; `action: "remove"`/`"update"` operate on an existing id looked up via `get_my_identity`. Direct in-process write — heartbeat-ineligible. |
+| `edit_topic` | `any` | Add, remove, or update one of your own topics (perspective, approach, personal_stake, sentiment, exposure_current, exposure_desired). Same add/remove/update action shape as `edit_trait`. Direct in-process write — heartbeat-ineligible. |
+| `update_description` | `any` | Update your own short and/or long description; only the supplied field(s) change. Changing `long_description` recomputes its embedding. Direct in-process write — heartbeat-ineligible. |
 | `file_read` | `node` | Read a file from local filesystem (TUI only) |
 | `list_directory` | `node` | List directory contents (TUI only) |
 | `directory_tree` | `node` | Recursive directory tree up to configurable depth (TUI only) |

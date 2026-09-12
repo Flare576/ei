@@ -96,6 +96,10 @@ Personas can use tools. Not just read-from-memory tools — *actual* tools. Web 
 | `find_memory` | Semantic search of your personal memory — facts, traits, topics, people, quotes. Personas call this automatically when the conversation touches something they might know about you. Supports the `persona` filter to scope results to what a specific persona has learned. |
 | `fetch_memory` | Full-record lookup for a specific human entity (Fact, Topic, Person, or Quote) by ID. Use after `find_memory` to retrieve complete details. |
 | `fetch_message` | Retrieve a specific message by fully-qualified ID with optional surrounding context. Searches Ei conversations and supported external coding-session stores. |
+| `get_my_identity` | See your persona's full self-model: every trait and topic (each with a stable id) plus its short and long description. *(read-only, heartbeat-eligible)* |
+| `edit_trait` | Add, remove, or update one of your own traits. *(heartbeat-ineligible)* |
+| `edit_topic` | Add, remove, or update one of your own topics. *(heartbeat-ineligible)* |
+| `update_description` | Update your own short and/or long description. *(heartbeat-ineligible)* |
 | `file_read` | Read a file from your local filesystem *(TUI only)* |
 | `list_directory` | Explore folder structure *(TUI only)* |
 | `directory_tree` | Recursive directory tree *(TUI only)* |
