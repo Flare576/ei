@@ -890,9 +890,8 @@ const toolNextSteps = new Set([
       // signal_dismiss ever touches state, exactly mirroring the
       // self-drain functions above which already call it before their
       // own first mutation. signal_confirm/signal_dismiss throw on
-      // refusal (not found, terminal status, or a delta/pending_update
-      // collision) — left uncaught here, exactly like every other
-      // malformed/rejected record, so drainCorrections()'s own
+      // refusal (not found, or terminal status) — left uncaught here,
+      // exactly like every other malformed/rejected record, so
       // try/catch logs it and moves on without wedging the queue.
       assertValidCorrection(record);
       if (record.op === "observation.add") {
@@ -911,7 +910,7 @@ const toolNextSteps = new Set([
         }
         queuePersonaSignalMatch(observation, record.lens, this.stateManager, undefined);
       } else if (record.op === "signal.confirm") {
-        this.stateManager.signal_confirm(record.id, record.signal_id, record.actor, record.delta);
+        this.stateManager.signal_confirm(record.id, record.signal_id, record.actor);
       } else {
         this.stateManager.signal_dismiss(record.id, record.signal_id, record.actor);
       }
