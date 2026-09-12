@@ -256,7 +256,18 @@ export async function executeToolCalls(
 ): Promise<{ results: ToolResult[]; exhaustedToolNames: Set<string> }> {
   const results: ToolResult[] = [];
   const exhaustedToolNames = new Set<string>();
-  const toolsByName = new Map(tools.map(t => [t.name, t]));
+  // A builtin/native tool definition -- e.g. resolve_signal's per-request
+  // config.persona_id, injected fresh by buildResolveSignalTool() every
+  // call and never persisted -- must never be shadowed by a persisted
+  // custom tool sharing its name, regardless of assembly order (Bolt 003
+  // S2). Only a later non-builtin definition may replace an earlier
+  // non-builtin one of the same name; a builtin definition, once set,
+  // always wins.
+  const toolsByName = new Map<string, ToolDefinition>();
+  for (const t of tools) {
+    if (toolsByName.get(t.name)?.builtin && !t.builtin) continue;
+    toolsByName.set(t.name, t);
+  }
 
   for (const call of calls) {
     const isSystemTool = SYSTEM_TOOLS.some(t => t.name === call.name);

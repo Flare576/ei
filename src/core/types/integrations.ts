@@ -45,6 +45,24 @@ export interface ToolDefinition {
   heartbeat_eligible?: boolean;        // Whether heartbeat-classified requests may include this tool. Default: true (eligible) when absent.
 }
 
+// Reserved tool names (Bolt 003 S2): native tools whose per-request
+// ToolDefinition injects a caller-bound `config` value (e.g.
+// resolve_signal's `config.persona_id`, assembled fresh by
+// buildResolveSignalTool() every request, never persisted). A persisted
+// custom ToolDefinition sharing one of these names could otherwise be
+// assigned to a persona and collide with the native definition at
+// tool-assembly time; executeToolCalls's builtin-wins name selection
+// (src/core/tools/index.ts) already makes such a collision harmless at
+// execution time, but rejecting the name at creation/rename closes the
+// collision earlier — same reserved-name pattern as
+// RESERVED_PERSONA_NAMES (src/core/types/entities.ts).
+export const RESERVED_TOOL_NAMES = ["resolve_signal"] as const;
+export type ReservedToolName = typeof RESERVED_TOOL_NAMES[number];
+
+export function isReservedToolName(name: string): boolean {
+  return (RESERVED_TOOL_NAMES as readonly string[]).includes(name);
+}
+
 // =============================================================================
 // API TYPES
 // =============================================================================
