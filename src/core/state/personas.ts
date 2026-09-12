@@ -696,9 +696,9 @@ export class PersonaState {
    * regardless of any delta the caller supplies." For a Persona-lens
    * signal with a delta and no collision, the same atomic step also
    * writes a `pending_update` PROPOSAL (never applies the delta
-   * directly — `Processor.finalizeReflection` remains the only path
-   * that ever writes identity fields onto `PersonaEntity`, unchanged by
-   * this Bolt).
+   * directly — nothing in this Bolt's scope reads or applies a
+   * `pending_update` proposal; it remains staged data on
+   * `PersonaEntity` only).
    */
   signal_confirm(personaId: string, signalId: string, actor: string, timestamp: string, delta?: PersonaIdentityDelta): EmergentSignal {
     const data = this.personas.get(personaId);

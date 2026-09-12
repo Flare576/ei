@@ -62,7 +62,7 @@ import { createFetchMemoryExecutor } from "./tools/builtin/fetch-memory.js";
 import { createFetchMessageExecutor } from "./tools/builtin/fetch-message.js";
 import { EI_WELCOME_MESSAGE, EI_PERSONA_DEFINITION } from "../templates/welcome.js";
 import { EMMETT_PERSONA_DEFINITION } from "../templates/emmett.js";
-import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueReflectionDrain, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction, queueTargetedPersonUpdate, queueTargetedTopicUpdate, queuePersonaSignalMatch } from "./orchestrators/index.js";
+import { shouldStartCeremony, startCeremony, handleCeremonyProgress, queueUserDedupRequest, queueRoomCapture, queuePersonaCapture, checkAndQueueRoomExtraction, queueTargetedPersonUpdate, queueTargetedTopicUpdate, queuePersonaSignalMatch } from "./orchestrators/index.js";
 import { finishDocumentBatch } from "./handlers/document-segmentation.js";
 import { buildSynthesisPrompt } from "../prompts/synthesis/index.js";
 import { DEFAULT_SEED_TRAITS } from "./constants/seed-traits.js";
@@ -1444,43 +1444,6 @@ const toolNextSteps = new Set([
   async updatePersona(personaId: string, updates: Partial<PersonaEntity>): Promise<void> {
     const ok = await updatePersona(this.stateManager, personaId, updates);
     if (ok) this.interface.onPersonaUpdated?.(personaId);
-  }
-
-  async finalizeReflection(
-    personaId: string,
-    action: "apply" | "dismiss",
-    identity?: { short_description?: string; long_description: string; traits: NonNullable<PersonaEntity["pending_update"]>["traits"]; topics: NonNullable<PersonaEntity["pending_update"]>["topics"] }
-  ): Promise<void> {
-    const persona = this.stateManager.persona_getById(personaId);
-    if (!persona) return;
-
-    const source = identity ?? (persona.pending_update ? {
-      short_description: persona.pending_update.short_description,
-      long_description: persona.pending_update.long_description,
-      traits: persona.pending_update.traits,
-      topics: persona.pending_update.topics,
-    } : null);
-
-    const updates: Partial<PersonaEntity> = { pending_update: undefined };
-
-    if (action === "apply" && source) {
-      updates.short_description = source.short_description;
-      updates.long_description = source.long_description;
-      updates.traits = source.traits.map(t => ({
-        ...t,
-        id: t.id?.startsWith("pending-") ? crypto.randomUUID() : t.id,
-      }));
-      updates.topics = source.topics.map(t => ({
-        ...t,
-        id: t.id?.startsWith("pending-") ? crypto.randomUUID() : t.id,
-      }));
-    }
-
-    const ok = await updatePersona(this.stateManager, personaId, updates);
-    if (ok) {
-      queueReflectionDrain(personaId, this.stateManager);
-      this.interface.onPersonaUpdated?.(personaId);
-    }
   }
 
   async updateRoom(roomId: string, updates: Partial<RoomEntity>): Promise<void> {

@@ -5,7 +5,7 @@ import type { PersonaSummary } from "../../../src/core/types.js";
 import { useKeyboardNav } from "../context/keyboard.js";
 
 interface PersonaListOverlayProps {
-  personas: PersonaSummary[];
+  personas: Pick<PersonaSummary, "id" | "display_name" | "short_description">[];
   activePersonaId: string | null;
   title?: string;
   onSelect: (personaId: string) => void;

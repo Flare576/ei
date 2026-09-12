@@ -111,11 +111,6 @@ All commands start with `/`. Append `!` to any command as a shorthand for `--for
 | `/pause <duration>` | | Pause for a duration: `2h`, `1d`, `1w`, `30m` |
 | `/resume` | `/unpause` | Resume the current paused persona |
 | `/resume <name>` | `/unpause <name>` | Resume a specific paused persona |
-| `/reflect` | | Review a pending identity reflection (see badge on persona pill) |
-| `/reflect generate` | | Write current + proposed YAML files to disk for editing |
-| `/reflect update` | | Read edited `proposed.yaml` back into Ei |
-| `/reflect apply` | | Apply the proposed identity to the persona |
-| `/reflect dismiss` | | Discard without changing anything |
 
 ### Rooms
 

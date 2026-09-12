@@ -58,7 +58,7 @@ function applyTheme(activeThemeId: string | undefined, customThemes: ThemeDefini
   style.textContent = `[data-theme="custom"] {\n${themeToStyleString(tokens)}\n}`;
   document.head.appendChild(style);
 }
-import { HumanEditor, PersonaEditor, PersonaCreatorModal, PersonaReflectionModal, RoomCreatorModal, RoomEditorModal, ArchivedPersonasModal, ArchivedRoomsModal } from "./components/EntityEditor";
+import { HumanEditor, PersonaEditor, PersonaCreatorModal, RoomCreatorModal, RoomEditorModal, ArchivedPersonasModal, ArchivedRoomsModal } from "./components/EntityEditor";
 import { RoomOverviewOverlay, CYPTreeView, FFAContextView, MAPScoreView } from "./components/Rooms";
 import { QuoteCaptureModal, QuoteManagementModal } from "./components/Quote";
 import { SettingsModal } from "./components/Settings";
@@ -69,7 +69,6 @@ import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionMod
 import { Onboarding } from "./components/Onboarding";
 import { QueuePanel } from "./components/Queue/QueuePanel";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
-import { useReflection } from "./hooks/useReflection";
 import { useQueueHandlers } from "./hooks/useQueueHandlers";
 import { useHumanDataHandlers } from "./hooks/useHumanDataHandlers";
 import { useOAuthCallbacks } from "./hooks/useOAuthCallbacks";
@@ -210,23 +209,6 @@ function App() {
   const [isSaving, setIsSaving] = useState(false);
 
   const { spotifyAuthError, setSpotifyAuthError } = useOAuthCallbacks(processorRef);
-
-  const {
-    showReflectionModal,
-    reflectionPersonaId,
-    reflectionPersona,
-    reflectionMessages,
-    reflectionInputValue,
-    reflectionPersonaIdRef,
-    setReflectionMessages,
-    setReflectionInputValue,
-    handleOpenReflection,
-    handleReflectionSendMessage,
-    handleReflectionSaveAndApply,
-    handleReflectionDismiss,
-    handleReflectionClose,
-    handleReflectionPendingUpdateChange,
-  } = useReflection(processor, setPersonas);
 
   const {
     showQueuePanel,
@@ -396,9 +378,6 @@ function App() {
       onMessageAdded: (personaId) => {
         if (personaId === activePersonaIdRef.current) {
           processorRef.current?.getMessages(personaId).then(setMessages);
-        }
-        if (personaId === reflectionPersonaIdRef.current) {
-          processorRef.current?.getMessages(personaId).then(setReflectionMessages);
         }
         processorRef.current?.getPersonaList().then(setPersonas);
       },
@@ -1264,8 +1243,6 @@ function App() {
           onSyncAndExit={human?.settings?.sync ? handleSaveAndExit : undefined}
           isSaving={isSaving}
           onQueueClick={handleQueuePanelOpen}
-          pendingReflectionPersonas={personas.filter(p => !p.is_archived && p.has_pending_update).map(p => ({ id: p.id, display_name: p.display_name }))}
-          onReflectionClick={handleOpenReflection}
         />
       }
       leftPanel={
@@ -1280,7 +1257,6 @@ function App() {
           onArchivePersona={handleArchivePersona}
           onDeletePersona={handleDeletePersona}
           onEditPersona={handleEditPersona}
-          onReflectionClick={handleOpenReflection}
           onShowArchived={handleShowArchivedPersonas}
           rooms={rooms}
           activeRoomId={activeRoomId}
@@ -1514,32 +1490,6 @@ function App() {
       onUpdate={personaCreatorInitialData?.mode === 'update' ? handlePersonaUpdateFromPreview : undefined}
       personas={personas.map(p => ({ id: p.id, display_name: p.display_name }))}
     />
-
-    {showReflectionModal && reflectionPersonaId && reflectionPersona?.pending_update && (
-      <PersonaReflectionModal
-        isOpen={showReflectionModal}
-        personaName={reflectionPersona.display_name}
-        currentIdentity={{
-          long_description: reflectionPersona.long_description ?? '',
-          short_description: reflectionPersona.short_description ?? '',
-          traits: reflectionPersona.traits,
-          topics: reflectionPersona.topics,
-        }}
-        pendingUpdate={reflectionPersona.pending_update}
-        activePersonaId={reflectionPersonaId}
-        messages={reflectionMessages}
-        inputValue={reflectionInputValue}
-        quotes={quotes}
-        onInputChange={setReflectionInputValue}
-        onSendMessage={handleReflectionSendMessage}
-        onMarkMessageRead={handleMarkMessageRead}
-        onRecallPending={handleRecallPending}
-        onSaveAndApply={handleReflectionSaveAndApply}
-        onDismiss={handleReflectionDismiss}
-        onClose={handleReflectionClose}
-        onPendingUpdateChange={handleReflectionPendingUpdateChange}
-      />
-    )}
 
     <ArchivedRoomsModal
       isOpen={showArchivedRooms}
