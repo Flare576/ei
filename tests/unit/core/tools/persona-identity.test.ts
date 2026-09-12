@@ -335,6 +335,107 @@ describe("createEditTraitExecutor", () => {
     expect(getPersona).not.toHaveBeenCalledWith("other-persona");
     expect(updatePersona.mock.calls[0][0]).toBe("persona-1");
   });
+
+  describe("numeric domain bounds (S1)", () => {
+    it.each([-1, 0, 1])("add: persists boundary sentiment value %s", async (sentiment) => {
+      getPersona.mockReturnValue(makePersona({ traits: [] }));
+      const result = JSON.parse(
+        await executor.execute({ action: "add", name: "Bold", description: "D", sentiment }, { persona_id: "persona-1" })
+      );
+      expect(result.added).toBe(true);
+      expect(result.trait.sentiment).toBe(sentiment);
+    });
+
+    it.each([-1.0001, 1.0001, -2, 2])(
+      "add: rejects out-of-range sentiment %s without writing, leaving the persona unchanged",
+      async (sentiment) => {
+        const persona = makePersona({ traits: [] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const result = JSON.parse(
+          await executor.execute({ action: "add", name: "Bold", description: "D", sentiment }, { persona_id: "persona-1" })
+        );
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+
+    it.each([0, 1])("add: persists boundary strength value %s", async (strength) => {
+      getPersona.mockReturnValue(makePersona({ traits: [] }));
+      const result = JSON.parse(
+        await executor.execute(
+          { action: "add", name: "Bold", description: "D", sentiment: 0, strength },
+          { persona_id: "persona-1" }
+        )
+      );
+      expect(result.trait.strength).toBe(strength);
+    });
+
+    it.each([-0.0001, 1.0001, -1, 2])(
+      "add: rejects out-of-range strength %s without writing, leaving the persona unchanged",
+      async (strength) => {
+        const persona = makePersona({ traits: [] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const result = JSON.parse(
+          await executor.execute(
+            { action: "add", name: "Bold", description: "D", sentiment: 0, strength },
+            { persona_id: "persona-1" }
+          )
+        );
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+
+    it.each([-1, 0, 1])("update: persists boundary sentiment value %s", async (sentiment) => {
+      getPersona.mockReturnValue(makePersona({ traits: [makeTrait({ id: "t1" })] }));
+      const result = JSON.parse(
+        await executor.execute({ action: "update", id: "t1", sentiment }, { persona_id: "persona-1" })
+      );
+      expect(result.trait.sentiment).toBe(sentiment);
+    });
+
+    it.each([-1.5, 1.5])(
+      "update: rejects out-of-range sentiment %s without writing, leaving the persona unchanged",
+      async (sentiment) => {
+        const persona = makePersona({ traits: [makeTrait({ id: "t1" })] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const result = JSON.parse(
+          await executor.execute({ action: "update", id: "t1", sentiment }, { persona_id: "persona-1" })
+        );
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+
+    it.each([0, 1])("update: persists boundary strength value %s", async (strength) => {
+      getPersona.mockReturnValue(makePersona({ traits: [makeTrait({ id: "t1" })] }));
+      const result = JSON.parse(
+        await executor.execute({ action: "update", id: "t1", strength }, { persona_id: "persona-1" })
+      );
+      expect(result.trait.strength).toBe(strength);
+    });
+
+    it.each([-0.5, 1.5])(
+      "update: rejects out-of-range strength %s without writing, leaving the persona unchanged",
+      async (strength) => {
+        const persona = makePersona({ traits: [makeTrait({ id: "t1" })] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const result = JSON.parse(
+          await executor.execute({ action: "update", id: "t1", strength }, { persona_id: "persona-1" })
+        );
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+  });
 });
 
 // =============================================================================
@@ -502,6 +603,144 @@ describe("createEditTopicExecutor", () => {
     expect(getPersona).not.toHaveBeenCalledWith("other-persona");
     expect(updatePersona.mock.calls[0][0]).toBe("persona-1");
   });
+
+  describe("numeric domain bounds (S1)", () => {
+    it.each([-1, 0, 1])("add: persists boundary sentiment value %s", async (sentiment) => {
+      getPersona.mockReturnValue(makePersona({ topics: [] }));
+      const args = { action: "add", name: "Cooking", perspective: "P", approach: "A", personal_stake: "S", sentiment, exposure_current: 0.5, exposure_desired: 0.5 };
+      const result = JSON.parse(await executor.execute(args, { persona_id: "persona-1" }));
+      expect(result.added).toBe(true);
+      expect(result.topic.sentiment).toBe(sentiment);
+    });
+
+    it.each([-1.0001, 1.0001, -2, 2])(
+      "add: rejects out-of-range sentiment %s without writing, leaving the persona unchanged",
+      async (sentiment) => {
+        const persona = makePersona({ topics: [] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const args = { action: "add", name: "Cooking", perspective: "P", approach: "A", personal_stake: "S", sentiment, exposure_current: 0.5, exposure_desired: 0.5 };
+        const result = JSON.parse(await executor.execute(args, { persona_id: "persona-1" }));
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+
+    it.each([0, 1])("add: persists boundary exposure_current/exposure_desired value %s", async (exposure) => {
+      getPersona.mockReturnValue(makePersona({ topics: [] }));
+      const args = {
+        action: "add", name: "Cooking", perspective: "P", approach: "A", personal_stake: "S", sentiment: 0.5,
+        exposure_current: exposure, exposure_desired: exposure,
+      };
+      const result = JSON.parse(await executor.execute(args, { persona_id: "persona-1" }));
+      expect(result.topic.exposure_current).toBe(exposure);
+      expect(result.topic.exposure_desired).toBe(exposure);
+    });
+
+    it.each([-0.0001, 1.0001, -1, 2])(
+      "add: rejects out-of-range exposure_current %s without writing, leaving the persona unchanged",
+      async (exposure_current) => {
+        const persona = makePersona({ topics: [] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const args = {
+          action: "add", name: "Cooking", perspective: "P", approach: "A", personal_stake: "S", sentiment: 0.5,
+          exposure_current, exposure_desired: 0.5,
+        };
+        const result = JSON.parse(await executor.execute(args, { persona_id: "persona-1" }));
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+
+    it.each([-0.0001, 1.0001, -1, 2])(
+      "add: rejects out-of-range exposure_desired %s without writing, leaving the persona unchanged",
+      async (exposure_desired) => {
+        const persona = makePersona({ topics: [] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const args = {
+          action: "add", name: "Cooking", perspective: "P", approach: "A", personal_stake: "S", sentiment: 0.5,
+          exposure_current: 0.5, exposure_desired,
+        };
+        const result = JSON.parse(await executor.execute(args, { persona_id: "persona-1" }));
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+
+    it.each([-1, 0, 1])("update: persists boundary sentiment value %s", async (sentiment) => {
+      getPersona.mockReturnValue(makePersona({ topics: [makeTopic({ id: "t1" })] }));
+      const result = JSON.parse(
+        await executor.execute({ action: "update", id: "t1", sentiment }, { persona_id: "persona-1" })
+      );
+      expect(result.topic.sentiment).toBe(sentiment);
+    });
+
+    it.each([-1.5, 1.5])(
+      "update: rejects out-of-range sentiment %s without writing, leaving the persona unchanged",
+      async (sentiment) => {
+        const persona = makePersona({ topics: [makeTopic({ id: "t1" })] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const result = JSON.parse(
+          await executor.execute({ action: "update", id: "t1", sentiment }, { persona_id: "persona-1" })
+        );
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+
+    it.each([0, 1])("update: persists boundary exposure_current value %s", async (exposure_current) => {
+      getPersona.mockReturnValue(makePersona({ topics: [makeTopic({ id: "t1" })] }));
+      const result = JSON.parse(
+        await executor.execute({ action: "update", id: "t1", exposure_current }, { persona_id: "persona-1" })
+      );
+      expect(result.topic.exposure_current).toBe(exposure_current);
+    });
+
+    it.each([-0.5, 1.5])(
+      "update: rejects out-of-range exposure_current %s without writing, leaving the persona unchanged",
+      async (exposure_current) => {
+        const persona = makePersona({ topics: [makeTopic({ id: "t1" })] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const result = JSON.parse(
+          await executor.execute({ action: "update", id: "t1", exposure_current }, { persona_id: "persona-1" })
+        );
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+
+    it.each([0, 1])("update: persists boundary exposure_desired value %s", async (exposure_desired) => {
+      getPersona.mockReturnValue(makePersona({ topics: [makeTopic({ id: "t1" })] }));
+      const result = JSON.parse(
+        await executor.execute({ action: "update", id: "t1", exposure_desired }, { persona_id: "persona-1" })
+      );
+      expect(result.topic.exposure_desired).toBe(exposure_desired);
+    });
+
+    it.each([-0.5, 1.5])(
+      "update: rejects out-of-range exposure_desired %s without writing, leaving the persona unchanged",
+      async (exposure_desired) => {
+        const persona = makePersona({ topics: [makeTopic({ id: "t1" })] });
+        const snapshot = JSON.parse(JSON.stringify(persona));
+        getPersona.mockReturnValue(persona);
+        const result = JSON.parse(
+          await executor.execute({ action: "update", id: "t1", exposure_desired }, { persona_id: "persona-1" })
+        );
+        expect(result.error).toBeDefined();
+        expect(updatePersona).not.toHaveBeenCalled();
+        expect(persona).toEqual(snapshot);
+      }
+    );
+  });
 });
 
 // =============================================================================
@@ -571,6 +810,60 @@ describe("createUpdateDescriptionExecutor", () => {
     expect(getPersona).toHaveBeenCalledWith("persona-1");
     expect(getPersona).not.toHaveBeenCalledWith("other-persona");
     expect(updatePersonaAsync.mock.calls[0][0]).toBe("persona-1");
+  });
+
+  describe("malformed supplied field rejection (S2)", () => {
+    it("rejects a non-string short_description without calling updatePersonaAsync", async () => {
+      const persona = makePersona({ short_description: "Old Short", long_description: "Old Long" });
+      const snapshot = JSON.parse(JSON.stringify(persona));
+      getPersona.mockReturnValue(persona);
+
+      const result = JSON.parse(await executor.execute({ short_description: 7 }, { persona_id: "persona-1" }));
+
+      expect(result.error).toBeDefined();
+      expect(updatePersonaAsync).not.toHaveBeenCalled();
+      expect(persona).toEqual(snapshot);
+    });
+
+    it("rejects a non-string long_description without calling updatePersonaAsync", async () => {
+      const persona = makePersona({ short_description: "Old Short", long_description: "Old Long" });
+      const snapshot = JSON.parse(JSON.stringify(persona));
+      getPersona.mockReturnValue(persona);
+
+      const result = JSON.parse(await executor.execute({ long_description: 7 }, { persona_id: "persona-1" }));
+
+      expect(result.error).toBeDefined();
+      expect(updatePersonaAsync).not.toHaveBeenCalled();
+      expect(persona).toEqual(snapshot);
+    });
+
+    it("rejects a mixed request with one malformed and one valid field, making no partial write", async () => {
+      const persona = makePersona({ short_description: "Old Short", long_description: "Old Long" });
+      const snapshot = JSON.parse(JSON.stringify(persona));
+      getPersona.mockReturnValue(persona);
+
+      const result = JSON.parse(
+        await executor.execute({ short_description: 7, long_description: "new long" }, { persona_id: "persona-1" })
+      );
+
+      expect(result.error).toBeDefined();
+      expect(updatePersonaAsync).not.toHaveBeenCalled();
+      expect(persona).toEqual(snapshot);
+    });
+
+    it("rejects a mixed request with the malformed field second, making no partial write", async () => {
+      const persona = makePersona({ short_description: "Old Short", long_description: "Old Long" });
+      const snapshot = JSON.parse(JSON.stringify(persona));
+      getPersona.mockReturnValue(persona);
+
+      const result = JSON.parse(
+        await executor.execute({ short_description: "new short", long_description: 7 }, { persona_id: "persona-1" })
+      );
+
+      expect(result.error).toBeDefined();
+      expect(updatePersonaAsync).not.toHaveBeenCalled();
+      expect(persona).toEqual(snapshot);
+    });
   });
 });
 

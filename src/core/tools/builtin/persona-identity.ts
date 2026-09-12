@@ -22,6 +22,16 @@ function isFiniteNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
 
+/** Sentiment fields (trait.sentiment, topic.sentiment) are declared -1..1 inclusive. */
+function isSentimentValue(v: unknown): v is number {
+  return isFiniteNumber(v) && v >= -1 && v <= 1;
+}
+
+/** Unit-interval fields (trait.strength, topic.exposure_current/exposure_desired) are declared 0..1 inclusive. */
+function isUnitIntervalValue(v: unknown): v is number {
+  return isFiniteNumber(v) && v >= 0 && v <= 1;
+}
+
 // =============================================================================
 // get_my_identity — read-only
 // =============================================================================
@@ -82,7 +92,11 @@ export function createEditTraitExecutor(getPersona: GetPersona, updatePersona: U
         const { name, description, sentiment } = args;
         if (!isNonEmptyString(name)) return rejection("Missing required argument: name");
         if (typeof description !== "string") return rejection("Missing required argument: description");
-        if (!isFiniteNumber(sentiment)) return rejection("Missing required argument: sentiment");
+        if (sentiment === undefined) return rejection("Missing required argument: sentiment");
+        if (!isSentimentValue(sentiment)) return rejection("sentiment must be a number between -1 and 1");
+        if (args.strength !== undefined && !isUnitIntervalValue(args.strength)) {
+          return rejection("strength must be a number between 0 and 1");
+        }
 
         const trait: PersonaTrait = {
           id: crypto.randomUUID(),
@@ -91,7 +105,7 @@ export function createEditTraitExecutor(getPersona: GetPersona, updatePersona: U
           sentiment,
           last_updated: now,
         };
-        if (isFiniteNumber(args.strength)) trait.strength = args.strength;
+        if (args.strength !== undefined) trait.strength = args.strength as number;
 
         traits.push(trait);
         updatePersona(personaId, { traits });
@@ -125,12 +139,12 @@ export function createEditTraitExecutor(getPersona: GetPersona, updatePersona: U
         changed = true;
       }
       if (args.sentiment !== undefined) {
-        if (!isFiniteNumber(args.sentiment)) return rejection("sentiment must be a number");
+        if (!isSentimentValue(args.sentiment)) return rejection("sentiment must be a number between -1 and 1");
         updated.sentiment = args.sentiment;
         changed = true;
       }
       if (args.strength !== undefined) {
-        if (!isFiniteNumber(args.strength)) return rejection("strength must be a number");
+        if (!isUnitIntervalValue(args.strength)) return rejection("strength must be a number between 0 and 1");
         updated.strength = args.strength;
         changed = true;
       }
@@ -178,9 +192,9 @@ export function createEditTopicExecutor(getPersona: GetPersona, updatePersona: U
         if (typeof perspective !== "string") return rejection("Missing required argument: perspective");
         if (typeof approach !== "string") return rejection("Missing required argument: approach");
         if (typeof personal_stake !== "string") return rejection("Missing required argument: personal_stake");
-        if (!isFiniteNumber(sentiment)) return rejection("Missing required argument: sentiment");
-        if (!isFiniteNumber(exposure_current)) return rejection("Missing required argument: exposure_current");
-        if (!isFiniteNumber(exposure_desired)) return rejection("Missing required argument: exposure_desired");
+        if (!isSentimentValue(sentiment)) return rejection("sentiment must be a number between -1 and 1");
+        if (!isUnitIntervalValue(exposure_current)) return rejection("exposure_current must be a number between 0 and 1");
+        if (!isUnitIntervalValue(exposure_desired)) return rejection("exposure_desired must be a number between 0 and 1");
 
         const topic: PersonaTopic = {
           id: crypto.randomUUID(),
@@ -236,17 +250,17 @@ export function createEditTopicExecutor(getPersona: GetPersona, updatePersona: U
         changed = true;
       }
       if (args.sentiment !== undefined) {
-        if (!isFiniteNumber(args.sentiment)) return rejection("sentiment must be a number");
+        if (!isSentimentValue(args.sentiment)) return rejection("sentiment must be a number between -1 and 1");
         updated.sentiment = args.sentiment;
         changed = true;
       }
       if (args.exposure_current !== undefined) {
-        if (!isFiniteNumber(args.exposure_current)) return rejection("exposure_current must be a number");
+        if (!isUnitIntervalValue(args.exposure_current)) return rejection("exposure_current must be a number between 0 and 1");
         updated.exposure_current = args.exposure_current;
         changed = true;
       }
       if (args.exposure_desired !== undefined) {
-        if (!isFiniteNumber(args.exposure_desired)) return rejection("exposure_desired must be a number");
+        if (!isUnitIntervalValue(args.exposure_desired)) return rejection("exposure_desired must be a number between 0 and 1");
         updated.exposure_desired = args.exposure_desired;
         changed = true;
       }
@@ -284,15 +298,21 @@ export function createUpdateDescriptionExecutor(
         return rejection("Persona not found");
       }
 
-      const hasShort = typeof args.short_description === "string";
-      const hasLong = typeof args.long_description === "string";
-      if (!hasShort && !hasLong) {
+      const shortSupplied = "short_description" in args;
+      const longSupplied = "long_description" in args;
+      if (!shortSupplied && !longSupplied) {
         return rejection("At least one of short_description or long_description is required");
+      }
+      if (shortSupplied && typeof args.short_description !== "string") {
+        return rejection("short_description must be a string");
+      }
+      if (longSupplied && typeof args.long_description !== "string") {
+        return rejection("long_description must be a string");
       }
 
       const updates: Partial<PersonaEntity> = {};
-      if (hasShort) updates.short_description = args.short_description as string;
-      if (hasLong) updates.long_description = args.long_description as string;
+      if (shortSupplied) updates.short_description = args.short_description as string;
+      if (longSupplied) updates.long_description = args.long_description as string;
 
       await updatePersonaAsync(personaId, updates);
       return JSON.stringify({ updated: true, ...updates });
