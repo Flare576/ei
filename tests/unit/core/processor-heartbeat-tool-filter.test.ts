@@ -11,6 +11,18 @@
  * passed to `.start()` without driving a real LLM call.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Vitest/esbuild's ESM<->CJS interop for zod's dual-export shape resolves
+// inconsistently once processor.ts's module graph is partially mocked below
+// (a pre-existing environment quirk, not specific to this file) — normalize
+// it the same way tests/unit/core/processor-legacy-handler-guard.test.ts does.
+vi.mock("zod", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    z: (actual.z ?? actual.default ?? actual) as Record<string, unknown>,
+  };
+});
 import { Processor } from "../../../src/core/processor.js";
 import { LLMNextStep, LLMRequestType, LLMPriority, type LLMRequest } from "../../../src/core/types.js";
 
@@ -206,5 +218,33 @@ describe("Processor heartbeat tool-list classification (Bolt 002)", () => {
     );
     expect(names).toContain("add_note");
     expect(names).toContain("clear_note");
+  });
+
+  // Bolt 003 D2 (signal-ux-bolt-003-signal-resolution-hardening): resolve_signal
+  // is registered heartbeat_eligible: false at buildResolveSignalTool's own
+  // ToolDefinition site — same filter as add_note/clear_note above, extended
+  // to this Bolt's own native tool.
+  it("excludes resolve_signal for a direct HandleHeartbeatCheck request", async () => {
+    const names = await runRequestAndCaptureTools(
+      baseRequest({ next_step: LLMNextStep.HandleHeartbeatCheck, data: { personaId: "test-persona" } })
+    );
+    expect(names).not.toContain("resolve_signal");
+  });
+
+  it("excludes resolve_signal for a HandleToolContinuation whose originalNextStep was HandleHeartbeatCheck", async () => {
+    const names = await runRequestAndCaptureTools(
+      baseRequest({
+        next_step: LLMNextStep.HandleToolContinuation,
+        data: { personaId: "test-persona", originalNextStep: LLMNextStep.HandleHeartbeatCheck },
+      })
+    );
+    expect(names).not.toContain("resolve_signal");
+  });
+
+  it("still includes resolve_signal for an ordinary HandlePersonaResponse request", async () => {
+    const names = await runRequestAndCaptureTools(
+      baseRequest({ next_step: LLMNextStep.HandlePersonaResponse, data: { personaId: "test-persona" } })
+    );
+    expect(names).toContain("resolve_signal");
   });
 });

@@ -55,8 +55,9 @@ import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { bootstrapTools } from "./bootstrap-tools.js";
 import { seedBuiltinFacts, migrateLearnedOn, migrateMessageIds, migrateSlackToMultiWorkspace, seedSettings } from "./migrations.js";
 import { IntegrationSyncManager } from "./integration-sync-manager.js";
-import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, SYSTEM_TOOLS } from "./tools/index.js";
+import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, registerResolveSignalExecutor, buildResolveSignalTool, SYSTEM_TOOLS } from "./tools/index.js";
 import { createAddNoteExecutor, createClearNoteExecutor } from "./tools/builtin/persona-notes.js";
+import { createResolveSignalExecutor } from "./tools/builtin/resolve-signal.js";
 import { createFindMemoryExecutor } from "./tools/builtin/find-memory.js";
 import { createFetchMemoryExecutor } from "./tools/builtin/fetch-memory.js";
 import { createFetchMessageExecutor } from "./tools/builtin/fetch-message.js";
@@ -269,6 +270,10 @@ export class Processor {
       createAddNoteExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.stateManager.persona_update.bind(this.stateManager)),
       createClearNoteExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.stateManager.persona_update.bind(this.stateManager))
     );
+    registerResolveSignalExecutor(createResolveSignalExecutor(
+      this.stateManager.signal_confirm.bind(this.stateManager),
+      this.stateManager.signal_dismiss.bind(this.stateManager)
+    ));
     if (this.isTUI) {
       await registerFileReadExecutor();
       const retrievalPath = "../cli/retrieval.js";
@@ -699,7 +704,7 @@ const toolNextSteps = new Set([
                 t.name === "find_memory" || t.name === "fetch_memory" || t.name === "fetch_message"
               );
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
-              tools = [...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
+              tools = [...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...buildResolveSignalTool(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
               if (isHeartbeatRequest) {
                 tools = tools.filter(t => t.heartbeat_eligible !== false);
               }

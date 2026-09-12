@@ -186,6 +186,52 @@ export function buildPersonaNoteTools(personaId: string): ToolDefinition[] {
   ];
 }
 
+/** Register the `resolve_signal` executor — called by Processor once at
+ * startup (Bolt 003 D2), same shared-registry pattern as
+ * registerPersonaNoteExecutors above. Not persona-specific itself: the
+ * executor resolves which persona it's bound to per-call, from the
+ * `config.persona_id` a per-request ToolDefinition (built by
+ * buildResolveSignalTool below) injects. */
+export function registerResolveSignalExecutor(executor: ToolExecutor): void {
+  executorRegistry.set(executor.name, executor);
+}
+
+/**
+ * Build the per-request ToolDefinition for `resolve_signal` (Bolt 003
+ * D2/D4), injecting the current personaId via config so the shared
+ * executor knows which persona's own signals it may resolve — same
+ * per-request injection pattern as buildPersonaNoteTools above.
+ * `heartbeat_eligible: false` (D2): a write-capable tool, never
+ * reachable from a heartbeat-classified request.
+ */
+export function buildResolveSignalTool(personaId: string): ToolDefinition[] {
+  const now = new Date(0).toISOString();
+  return [
+    {
+      id: `builtin-resolve-signal-${personaId}`,
+      provider_id: "ei",
+      name: "resolve_signal",
+      display_name: "Resolve Signal",
+      description: "Confirm or dismiss one of your own EmergentSignals — a candidate or recurring pattern Ei has noticed about you (identity, voice, behavior) or the human you're talking with is testifying to. Confirming marks it reviewed (agreed, worth keeping as evidence); dismissing marks it dismissed (not accurate, or not worth tracking). This ONLY transitions the signal's own status — it never changes your traits/topics/description directly, and it cannot affect a signal belonging to any other persona. Use ei_signal_list (if you have MCP access) or your own system prompt's signal surfacing to find a signal's id first.",
+      input_schema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "The id of the EmergentSignal to resolve (yours only)." },
+          action: { type: "string", enum: ["confirm", "dismiss"], description: "\"confirm\" marks the signal reviewed; \"dismiss\" marks it dismissed." },
+        },
+        required: ["id", "action"],
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
+    },
+  ];
+}
+
 /**
  * Register the file_read, list_directory, directory_tree, search_files, grep, and get_file_info
  * executors — called by Processor on TUI/Node only.
