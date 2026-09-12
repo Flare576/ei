@@ -877,8 +877,8 @@ describe("Add Observation — R1/AT1", () => {
   });
 });
 
-describe("Apply Signal — confirm (R2-R5)", () => {
-  it("AT2 (R2): Persona-lens confirm with a delta and no existing pending_update proposes correctly", async () => {
+describe("Apply Signal — confirm/dismiss reject delta and unrecognized fields (Bolt 003 D1/R1/AT1)", () => {
+  it("AT1: a delta-bearing confirm is rejected outright, with no correction queued and no state change", async () => {
     const signal = makeSignal();
     const existing = makeExistingPersonaEntity(PERSONA_ID);
     writeState(makeState({
@@ -891,34 +891,56 @@ describe("Apply Signal — confirm (R2-R5)", () => {
       traits: [],
       topics: [],
     };
-    const result = await applyPersonaSignal(PERSONA_ID, signal.id, "confirm", { actor: "flare576", delta });
-    expect(result.status).toBe("recorded");
-    if (result.status !== "recorded") throw new Error("unreachable");
-    expect(result.signal.status).toBe("reviewed");
-    expect(result.signal.reviewed_by).toMatchObject({ actor: "flare576" });
-    expect(typeof result.signal.reviewed_by!.timestamp).toBe("string");
+    await expect(applyPersonaSignal(PERSONA_ID, signal.id, "confirm", { actor: "flare576", delta })).rejects.toThrow(/unrecognized field\(s\) present/);
 
+    expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
     const persisted = await loadLatestState();
     const persona = persisted!.personas[PERSONA_ID].entity;
-    expect(persona.pending_update).toBeDefined();
-    expect(persona.pending_update!.short_description).toBe(delta.short_description);
-    expect(persona.pending_update!.long_description).toBe(delta.long_description);
-    expect(persona.pending_update!.traits).toEqual([]);
-    expect(persona.pending_update!.topics).toEqual([]);
-    expect(typeof persona.pending_update!.critique).toBe("string");
-    expect(persona.pending_update!.critique).toContain(signal.id);
-    expect(typeof persona.pending_update!.created_at).toBe("string");
-
-    // PersonaEntity's OWN identity fields are unchanged -- confirm PROPOSES
-    // via pending_update, never applies directly.
-    expect(persona.display_name).toBe(existing.display_name);
-    expect(persona.short_description).toBe(existing.short_description);
-    expect(persona.long_description).toBe(existing.long_description);
-    expect(persona.traits).toEqual(existing.traits);
-    expect(persona.topics).toEqual(existing.topics);
+    expect(persona.pending_update).toBeUndefined();
+    expect(persona).toEqual(existing);
+    const persistedSignal = persisted!.personas[PERSONA_ID].signals!.persona.find((s) => s.id === signal.id)!;
+    expect(persistedSignal.status).toBe("candidate");
+    expect(persistedSignal.reviewed_by).toBeUndefined();
   });
 
-  it("AT3 (R3): Persona-lens confirm with no delta performs only the status transition", async () => {
+  it("AT1: a delta member field supplied at the top level (short_description) is rejected outright, same as a full delta", async () => {
+    const signal = makeSignal();
+    const existing = makeExistingPersonaEntity(PERSONA_ID);
+    writeState(makeState({
+      [PERSONA_ID]: { entity: existing, messages: [], observations: [], signals: { persona: [signal], agent: [] } },
+    }));
+
+    await expect(applyPersonaSignal(PERSONA_ID, signal.id, "confirm", { actor: "flare576", short_description: "Terse." })).rejects.toThrow(/unrecognized field\(s\) present/);
+    expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
+  });
+
+  it("AT1: a delta-bearing dismiss is rejected outright, with no correction queued and no state change", async () => {
+    const signal = makeSignal();
+    const existing = makeExistingPersonaEntity(PERSONA_ID);
+    writeState(makeState({
+      [PERSONA_ID]: { entity: existing, messages: [], observations: [], signals: { persona: [signal], agent: [] } },
+    }));
+
+    const delta = { short_description: "x", long_description: "y", traits: [], topics: [] };
+    await expect(applyPersonaSignal(PERSONA_ID, signal.id, "dismiss", { actor: "flare576", delta })).rejects.toThrow(/unrecognized field\(s\) present/);
+    expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
+    const persisted = await loadLatestState();
+    const persistedSignal = persisted!.personas[PERSONA_ID].signals!.persona.find((s) => s.id === signal.id)!;
+    expect(persistedSignal.status).toBe("candidate");
+  });
+
+  it("AT1: an unrecognized field entirely unrelated to delta (e.g. foo) is also rejected outright", async () => {
+    const signal = makeSignal();
+    const existing = makeExistingPersonaEntity(PERSONA_ID);
+    writeState(makeState({
+      [PERSONA_ID]: { entity: existing, messages: [], observations: [], signals: { persona: [signal], agent: [] } },
+    }));
+
+    await expect(applyPersonaSignal(PERSONA_ID, signal.id, "confirm", { actor: "flare576", foo: "bar" })).rejects.toThrow(/unrecognized field\(s\) present/);
+    expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
+  });
+
+  it("AT1/AT2: a clean confirm (no delta, no extra field) succeeds and transitions only the signal's status + audit field, for the Persona lens", async () => {
     const signal = makeSignal();
     const existing = makeExistingPersonaEntity(PERSONA_ID);
     writeState(makeState({
@@ -934,108 +956,23 @@ describe("Apply Signal — confirm (R2-R5)", () => {
     const persisted = await loadLatestState();
     const persona = persisted!.personas[PERSONA_ID].entity;
     expect(persona.pending_update).toBeUndefined();
-    expect(persona.display_name).toBe(existing.display_name);
-    expect(persona.short_description).toBe(existing.short_description);
-    expect(persona.long_description).toBe(existing.long_description);
-    expect(persona.traits).toEqual(existing.traits);
-    expect(persona.topics).toEqual(existing.topics);
+    expect(persona).toEqual(existing);
   });
 
-  it("AT4 (R4): Agent-lens confirm never writes PersonaEntity, with or without a supplied delta", async () => {
-    const signalNoDelta = makeSignal({ dimension: "identity" });
-    const signalWithDelta = makeSignal({ dimension: "identity" });
+  it("AT1: a clean confirm succeeds for the Agent lens too, with zero PersonaEntity mutation", async () => {
+    const signal = makeSignal({ dimension: "identity" });
     const existing = makeExistingPersonaEntity(PERSONA_ID);
     writeState(makeState({
-      [PERSONA_ID]: {
-        entity: existing,
-        messages: [],
-        observations: [],
-        signals: { persona: [], agent: [signalNoDelta, signalWithDelta] },
-      },
+      [PERSONA_ID]: { entity: existing, messages: [], observations: [], signals: { persona: [], agent: [signal] } },
     }));
 
-    const resultNoDelta = await applyPersonaSignal(PERSONA_ID, signalNoDelta.id, "confirm", { actor: "flare576" });
-    expect(resultNoDelta.status).toBe("recorded");
-    if (resultNoDelta.status !== "recorded") throw new Error("unreachable");
-    expect(resultNoDelta.signal.status).toBe("reviewed");
-
-    const delta = { short_description: "x", long_description: "y", traits: [], topics: [] };
-    const resultWithDelta = await applyPersonaSignal(PERSONA_ID, signalWithDelta.id, "confirm", { actor: "flare576", delta });
-    expect(resultWithDelta.status).toBe("recorded");
-    if (resultWithDelta.status !== "recorded") throw new Error("unreachable");
-    expect(resultWithDelta.signal.status).toBe("reviewed");
-
-    const persisted = await loadLatestState();
-    const persona = persisted!.personas[PERSONA_ID].entity;
-    expect(persona.pending_update).toBeUndefined();
-    expect(persona.display_name).toBe(existing.display_name);
-    expect(persona.short_description).toBe(existing.short_description);
-    expect(persona.long_description).toBe(existing.long_description);
-    expect(persona.traits).toEqual(existing.traits);
-    expect(persona.topics).toEqual(existing.topics);
-  });
-
-  it("AT5 (R5): a delta-bearing confirm colliding with an existing pending_update is refused, with no state change", async () => {
-    const existingPendingUpdate = {
-      short_description: "Already proposed short.",
-      long_description: "Already proposed long.",
-      traits: [],
-      topics: [],
-      critique: "From an earlier reflection run.",
-      created_at: "2025-12-31T00:00:00.000Z",
-    };
-    const signal = makeSignal();
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { pending_update: existingPendingUpdate });
-    writeState(makeState({
-      [PERSONA_ID]: { entity: existing, messages: [], observations: [], signals: { persona: [signal], agent: [] } },
-    }));
-
-    const delta = { short_description: "New short.", long_description: "New long.", traits: [], topics: [] };
-    await expect(applyPersonaSignal(PERSONA_ID, signal.id, "confirm", { actor: "flare576", delta })).rejects.toThrow(/pending_update/);
-
-    const persisted = await loadLatestState();
-    const persona = persisted!.personas[PERSONA_ID].entity;
-    // The existing proposal is untouched...
-    expect(persona.pending_update).toEqual(existingPendingUpdate);
-    // ...and the signal's own status is unchanged, so a retry after the
-    // existing proposal resolves behaves like a first attempt (D3).
-    const persistedSignal = persisted!.personas[PERSONA_ID].signals!.persona.find((s) => s.id === signal.id)!;
-    expect(persistedSignal.status).toBe("candidate");
-    expect(persistedSignal.reviewed_by).toBeUndefined();
-  });
-});
-
-describe("Confirm-delta traits/topics are materialized before reaching pending_update (C1 regression)", () => {
-  it("stamps a real id/last_updated on a no-id/no-timestamp delta trait and topic before pending_update is written (C1 regression)", async () => {
-    const signal = makeSignal();
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { is_paused: true });
-    writeState(makeState({
-      [PERSONA_ID]: { entity: existing, messages: [], observations: [], signals: { persona: [signal], agent: [] } },
-    }));
-
-    // Neither the trait nor the topic carries an `id`/`last_updated` --
-    // exactly the wire-optional shape personaTraitSchema/personaTopicSchema
-    // accept, and exactly what an unmaterialized delta would have let
-    // through unstamped (C1).
-    const delta = {
-      short_description: "Terse by default.",
-      long_description: "Speaks in short, direct sentences unless asked to elaborate.",
-      traits: [{ name: "Terse", description: "Speaks briefly.", sentiment: 0.2 }],
-      topics: [{ name: "Brevity", perspective: "Values it.", approach: "Gets to the point.", personal_stake: "Saves everyone time.", sentiment: 0.4, exposure_current: 0.2, exposure_desired: 0.5 }],
-    };
-    const result = await applyPersonaSignal(PERSONA_ID, signal.id, "confirm", { actor: "flare576", delta });
+    const result = await applyPersonaSignal(PERSONA_ID, signal.id, "confirm", { actor: "flare576" });
     expect(result.status).toBe("recorded");
+    if (result.status !== "recorded") throw new Error("unreachable");
+    expect(result.signal.status).toBe("reviewed");
 
-    const afterConfirm = await loadLatestState();
-    const pendingUpdate = afterConfirm!.personas[PERSONA_ID].entity.pending_update!;
-    expect(pendingUpdate.traits).toHaveLength(1);
-    expect(pendingUpdate.topics).toHaveLength(1);
-    const [pendingTrait] = pendingUpdate.traits;
-    const [pendingTopic] = pendingUpdate.topics;
-    expect(pendingTrait.id).toMatch(UUID_RE);
-    expect(pendingTopic.id).toMatch(UUID_RE);
-    expect(new Date(pendingTrait.last_updated).toISOString()).toBe(pendingTrait.last_updated);
-    expect(new Date(pendingTopic.last_updated).toISOString()).toBe(pendingTopic.last_updated);
+    const persisted = await loadLatestState();
+    expect(persisted!.personas[PERSONA_ID].entity).toEqual(existing);
   });
 });
 
@@ -1170,9 +1107,11 @@ function makeMalformedObservationAdd(personaId: string): CorrectionRecord {
   } as unknown as CorrectionRecord;
 }
 
-/** A malformed `signal.confirm` wire record -- `delta.traits` is a string,
- * not an array, bypassing the CLI's own zod-validated applyPersonaSignal
- * entirely. */
+/** A malformed `signal.confirm` wire record -- carries a `delta` key,
+ * which Bolt 003 D1/R1/AT1 now always rejects outright as an
+ * unrecognized top-level key regardless of its own internal shape (the
+ * allowlist check runs before delta's own fields are ever inspected) --
+ * bypassing the CLI's own zod-validated applyPersonaSignal entirely. */
 function makeMalformedSignalConfirm(personaId: string, signalId: string): CorrectionRecord {
   return {
     op: "signal.confirm",
@@ -1242,7 +1181,7 @@ describe("Malformed persona-signal records are rejected atomically on both drain
     expect(readFileSync(join(tempDir, "state.json"), "utf-8")).toBe(beforeState);
   });
 
-  it("AT8(b) self-drain: a malformed signal.confirm record (non-array delta.traits) is rejected, with zero signal/PersonaEntity mutation", async () => {
+  it("AT8(b) self-drain: a malformed signal.confirm record (unrecognized delta key, Bolt 003 D1) is rejected, with zero signal/PersonaEntity mutation", async () => {
     const signal = makeSignal();
     const existing = makeExistingPersonaEntity(PERSONA_ID);
     writeState(makeState({
@@ -1250,7 +1189,7 @@ describe("Malformed persona-signal records are rejected atomically on both drain
     }));
     const beforeState = readFileSync(join(tempDir, "state.json"), "utf-8");
 
-    await expect(writeCorrection(makeMalformedSignalConfirm(PERSONA_ID, signal.id))).rejects.toThrow(/traits/);
+    await expect(writeCorrection(makeMalformedSignalConfirm(PERSONA_ID, signal.id))).rejects.toThrow(/delta/);
 
     expect(readFileSync(join(tempDir, "state.json"), "utf-8")).toBe(beforeState);
   });
@@ -1293,7 +1232,7 @@ describe("Malformed persona-signal records are rejected atomically on both drain
     }
   });
 
-  it("AT8(b) live drain: a malformed signal.confirm record (non-array delta.traits) is rejected, with zero signal/PersonaEntity mutation", async () => {
+  it("AT8(b) live drain: a malformed signal.confirm record (unrecognized delta key, Bolt 003 D1) is rejected, with zero signal/PersonaEntity mutation", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "ei-persona-corrections-live-drain-"));
     try {
       const signal = makeSignal();

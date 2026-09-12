@@ -1,4 +1,5 @@
 import type { ToolProvider, ToolDefinition } from "./types.js";
+import { RESERVED_TOOL_NAMES, isReservedToolName } from "./types.js";
 import { StateManager } from "./state-manager.js";
 
 // =============================================================================
@@ -65,6 +66,11 @@ export async function addTool(
   sm: StateManager,
   tool: Omit<ToolDefinition, "id" | "created_at">
 ): Promise<string> {
+  if (isReservedToolName(tool.name)) {
+    throw new Error(
+      `Cannot create tool with reserved name "${tool.name}". Reserved names: ${RESERVED_TOOL_NAMES.join(", ")}`
+    );
+  }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const newTool: ToolDefinition = { ...tool, id, created_at: now };
@@ -77,6 +83,11 @@ export async function updateTool(
   id: string,
   updates: Partial<Omit<ToolDefinition, "id" | "created_at">>
 ): Promise<boolean> {
+  if (updates.name !== undefined && isReservedToolName(updates.name)) {
+    throw new Error(
+      `Cannot rename tool to reserved name "${updates.name}". Reserved names: ${RESERVED_TOOL_NAMES.join(", ")}`
+    );
+  }
   return sm.tools_update(id, updates);
 }
 

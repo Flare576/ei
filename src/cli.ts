@@ -173,8 +173,7 @@ Usage:
                                  attributed to the caller — routed through the same Match/Update-Reduce
                                  pipeline as an extraction-produced observation (see Persona Signals below)
   ei confirm signal <personaId> <signalId> --json '<json>' | --json-file <path>  Mark a candidate/recurring
-                                 EmergentSignal reviewed; a Persona-lens signal may include an identity
-                                 delta, PROPOSED via pending_update, never applied directly
+                                 EmergentSignal reviewed — a pure status transition, never an identity write
   ei dismiss signal <personaId> <signalId> --json '<json>' | --json-file <path>  Mark a candidate/recurring
                                  EmergentSignal dismissed — no identity write, either lens
   ei list signals <personaId>  List every EmergentSignal recorded for a persona, across both lenses (persona +
@@ -203,14 +202,12 @@ Quotes (source-verified — a quote claims someone really said something):
 
 Persona Signals (EmergentSignal — corroborated testimony about a persona's identity or operating contract):
   ei add observation <personaId> --json '{"subject_person_id":"...","observer_kind":"human","dimension":"behavior","direction":"novel","claim":"...","lens":"persona"}'
-  ei confirm signal <personaId> <signalId> --json '{"actor":"flare576"}'  # status transition only, no delta
-  ei confirm signal <personaId> <signalId> --json '{"actor":"flare576","delta":{"short_description":"...","long_description":"...","traits":[],"topics":[]}}'
+  ei confirm signal <personaId> <signalId> --json '{"actor":"flare576"}'
   ei dismiss signal <personaId> <signalId> --json '{"actor":"flare576"}'
-  'confirm'/'dismiss' refuse (no state change) against a signal already dismissed or reviewed — reopening a
-  dismissed signal is exclusively the evidence-citing path in the automatic promotion pipeline, never this
-  write surface. A Persona-lens 'confirm' with a delta is refused outright if that persona already has a
-  pending_update set; resolve the existing proposal (the TUI/Web apply-UI) first, then retry. An Agent-lens
-  'confirm' never writes PersonaEntity, even if a delta is supplied — it only marks the signal reviewed.
+  'confirm'/'dismiss' accept only {"actor"} — never an identity delta or any other field — and perform a
+  pure status transition, no PersonaEntity write, either lens. They refuse (no state change) against a
+  signal already dismissed or reviewed — reopening a dismissed signal is exclusively the evidence-citing
+  path in the automatic promotion pipeline, never this write surface.
 
 Options:
   --number, -n        Maximum number of results (default: 10)

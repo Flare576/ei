@@ -29,8 +29,7 @@
  * See assertValidCorrection and applyQuoteOperation below.
  */
 
-import { z } from "zod";
-import type { HumanEntity, Fact, Topic, Person, Quote, PersonaEntity, StorageState, PersonaObservation, PersonaIdentityDelta, LLMRequest } from "./types.js";
+import type { HumanEntity, Fact, Topic, Person, Quote, PersonaEntity, StorageState, PersonaObservation, LLMRequest } from "./types.js";
 import { isReservedPersonaId } from "./types.js";
 import { guardPersonaLinks, removePersonaLinksToId, sanitizeEiPersonaIdentifiers, type PersonaLinkRefusal } from "./utils/identifier-utils.js";
 import { withLock, atomicWrite } from "../storage/file-lock.js";
@@ -44,7 +43,7 @@ import {
   applyMergePatch,
   type MergePatch,
 } from "./corrections-merge.js";
-import { validateCandidate, topicBaseShape, topicCandidateSchema, personBaseShape, personCandidateSchema, personaBaseShape, personaCandidateSchema, personaTraitSchema, personaTopicSchema, formatValidationIssues } from "./entity-schemas.js";
+import { validateCandidate, topicBaseShape, topicCandidateSchema, personBaseShape, personCandidateSchema, personaBaseShape, personaCandidateSchema } from "./entity-schemas.js";
 export type { MergePatch } from "./corrections-merge.js";
 
 export type CorrectableType = "fact" | "topic" | "person" | "quote" | "persona";
@@ -264,10 +263,12 @@ export interface CorrectionObservationAdd {
   timestamp: string;
 }
 
-/** Apply Signal — confirm (D2/D3/D5, R2-R5). `delta` is Persona-lens only
- * — silently ignored for an Agent-lens signal (D2) — and, when present,
- * is REFUSED (the whole operation, not just the delta) if that Persona's
- * `pending_update` is already set (D3). */
+/** Apply Signal — confirm (Bolt 003 D1/R1/AT1). Never accepts or applies
+ * an identity delta, for either lens or any caller — pure status-
+ * transition bookkeeping only. A `delta` key (or any of its own member
+ * fields at the top level) present on the wire record is rejected
+ * outright by `assertValidPersonaSignalCorrection`'s allowlist, never
+ * reaching this shape. */
 export interface CorrectionSignalConfirm {
   op: "signal.confirm";
   entity_type: "persona";
@@ -276,7 +277,6 @@ export interface CorrectionSignalConfirm {
   id: string;
   signal_id: string;
   actor: string;
-  delta?: PersonaIdentityDelta;
   timestamp: string;
 }
 
@@ -343,6 +343,21 @@ export function resolveOwnPersona(
   return Object.hasOwn(personas, personaId) ? personas[personaId] : undefined;
 }
 
+/** Strict allowlist for a `signal.confirm`/`signal.dismiss` correction
+ * record's own top-level keys (Bolt 003 D1/D3, R1/R3/AT1/AT3) — mirrors
+ * QUOTE_CREATE_FIX_ALLOWED_KEYS's null-prototype-object discipline above
+ * for the same reason (an ordinary object literal resolves inherited
+ * `constructor`/`toString` as truthy). Both operations share one table:
+ * neither accepts `delta` (or any of `delta`'s own member fields —
+ * `short_description`, `long_description`, `traits`, `topics`) at the
+ * top level — D1 narrows the two operations to pure status-transition
+ * bookkeeping, so there is no longer a schema-legal way for either to
+ * carry identity content, unlike Bolt 008's original `signal.confirm`
+ * shape. */
+const SIGNAL_CONFIRM_DISMISS_ALLOWED_KEYS: Record<string, true> = Object.assign(Object.create(null), {
+  op: true, entity_type: true, id: true, signal_id: true, actor: true, timestamp: true,
+});
+
 /**
  * Runtime shape validation for a PersonaSignalCorrectionRecord read back
  * from corrections.json — same rationale as assertValidQuoteCorrection:
@@ -353,8 +368,13 @@ export function resolveOwnPersona(
  *
  * D7 (Beta's Bolt-008-review finding I2): every field gets its own enum/
  * type/range check here, not presence alone — a record that merely HAS a
- * `dimension` key, or a `delta.traits` key that happens to be an array,
- * is not enough; each value's own shape is checked too. This is the ONE
+ * `dimension` key is not enough; each value's own shape is checked too.
+ * D3/R3/AT3 (Bolt 003): a `signal.confirm`/`signal.dismiss` record is
+ * additionally checked against `SIGNAL_CONFIRM_DISMISS_ALLOWED_KEYS`
+ * BEFORE any field-specific check runs, rejecting an unrecognized
+ * top-level key (including `delta`) the same way the quote validator's
+ * own allowlist already does.
+ * This is the ONE
  * grammar both drains call before any observation/signal/PersonaEntity/
  * queue mutation: applyObservationAddToState/applySignalDispositionToPersonas
  * call it directly (self-drain), and Processor.applyCorrectionRecord calls
@@ -416,36 +436,16 @@ function assertValidPersonaSignalCorrection(value: object): asserts value is Per
       throw new Error(`Malformed correction record: observation.add's observation.extraction_confidence must be a number in 0.0-1.0, got ${JSON.stringify(obs.extraction_confidence)}`);
     }
   } else {
-    const record = value as { signal_id?: unknown; actor?: unknown; delta?: unknown };
+    const extraKeys = Object.keys(value).filter((k) => !SIGNAL_CONFIRM_DISMISS_ALLOWED_KEYS[k]);
+    if (extraKeys.length > 0) {
+      throw new Error(`Malformed correction record: ${op} unrecognized key(s) ${extraKeys.join(", ")} — allowed keys are ${Object.keys(SIGNAL_CONFIRM_DISMISS_ALLOWED_KEYS).join(", ")}`);
+    }
+    const record = value as { signal_id?: unknown; actor?: unknown };
     if (typeof record.signal_id !== "string" || record.signal_id.length === 0) {
       throw new Error(`Malformed correction record: ${op} requires a non-empty signal_id`);
     }
     if (typeof record.actor !== "string" || record.actor.length === 0) {
       throw new Error(`Malformed correction record: ${op} requires a non-empty actor`);
-    }
-    if (op === "signal.confirm" && record.delta !== undefined) {
-      const delta = record.delta;
-      if (!delta || typeof delta !== "object" || Array.isArray(delta)) {
-        throw new Error(`Malformed correction record: signal.confirm's delta must be an object`);
-      }
-      const d = delta as Record<string, unknown>;
-      if (typeof d.short_description !== "string") {
-        throw new Error(`Malformed correction record: signal.confirm's delta.short_description must be a string, got ${JSON.stringify(d.short_description)}`);
-      }
-      if (typeof d.long_description !== "string") {
-        throw new Error(`Malformed correction record: signal.confirm's delta.long_description must be a string, got ${JSON.stringify(d.long_description)}`);
-      }
-      const traitsResult = z.array(personaTraitSchema).safeParse(d.traits);
-      if (!traitsResult.success) {
-        throw new Error(`Malformed correction record: signal.confirm's delta.traits is invalid: ${formatValidationIssues(traitsResult.error.issues)}`);
-      }
-      const topicsResult = z.array(personaTopicSchema).safeParse(d.topics);
-      if (!topicsResult.success) {
-        throw new Error(`Malformed correction record: signal.confirm's delta.topics is invalid: ${formatValidationIssues(topicsResult.error.issues)}`);
-      }
-    }
-    if (op === "signal.dismiss" && "delta" in value) {
-      throw new Error(`Malformed correction record: signal.dismiss does not accept a delta`);
     }
   }
 }
@@ -1493,16 +1493,17 @@ export async function applyObservationAddToState(state: StorageState, correction
 }
 
 /**
- * Apply Signal's own drain-time apply (D2-D5, R2-R7, Spec §4.12) — the
+ * Apply Signal's own drain-time apply (D2/D4/D5, R6/R7, Spec §4.12) — the
  * self-drain counterpart to Processor.applyCorrectionRecord's live-drain
  * branch, sharing `PersonaState.signal_confirm`/`signal_dismiss`. Both
- * throw on refusal (not found, terminal status, or — confirm only — a
- * Persona-lens delta colliding with an existing `pending_update`); this
- * function makes no attempt to catch that and turn it into a softer
- * no-op, since a refused Apply Signal is a caller-visible rejection, not
- * an internal inconsistency to paper over — same "throw propagates
- * through writeCorrection() untouched" contract as `patch`'s own
- * not-found case above.
+ * throw on refusal (not found, or terminal status); this function makes
+ * no attempt to catch that and turn it into a softer no-op, since a
+ * refused Apply Signal is a caller-visible rejection, not an internal
+ * inconsistency to paper over — same "throw propagates through
+ * writeCorrection() untouched" contract as `patch`'s own not-found case
+ * above. Neither operation ever writes `PersonaEntity` (Bolt 003 D1) —
+ * `assertValidCorrection` above already refused a `delta`-bearing record
+ * before this function is ever reached.
  */
 export async function applySignalDispositionToPersonas(personas: StorageState["personas"], correction: CorrectionSignalConfirm | CorrectionSignalDismiss): Promise<void> {
   assertValidCorrection(correction);
@@ -1515,7 +1516,7 @@ export async function applySignalDispositionToPersonas(personas: StorageState["p
   personaState.load({ [correction.id]: existing });
   const timestamp = new Date().toISOString();
   if (correction.op === "signal.confirm") {
-    personaState.signal_confirm(correction.id, correction.signal_id, correction.actor, timestamp, correction.delta);
+    personaState.signal_confirm(correction.id, correction.signal_id, correction.actor, timestamp);
   } else {
     personaState.signal_dismiss(correction.id, correction.signal_id, correction.actor, timestamp);
   }

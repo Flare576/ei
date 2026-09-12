@@ -55,9 +55,10 @@ import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { bootstrapTools } from "./bootstrap-tools.js";
 import { seedBuiltinFacts, migrateLearnedOn, migrateMessageIds, migrateSlackToMultiWorkspace, seedSettings } from "./migrations.js";
 import { IntegrationSyncManager } from "./integration-sync-manager.js";
-import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, registerPersonaIdentityExecutors, buildPersonaIdentityTools, SYSTEM_TOOLS } from "./tools/index.js";
+import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, registerPersonaIdentityExecutors, buildPersonaIdentityTools, registerResolveSignalExecutor, buildResolveSignalTool, SYSTEM_TOOLS } from "./tools/index.js";
 import { createAddNoteExecutor, createClearNoteExecutor } from "./tools/builtin/persona-notes.js";
 import { createGetMyIdentityExecutor, createEditTraitExecutor, createEditTopicExecutor, createUpdateDescriptionExecutor } from "./tools/builtin/persona-identity.js";
+import { createResolveSignalExecutor } from "./tools/builtin/resolve-signal.js";
 import { createFindMemoryExecutor } from "./tools/builtin/find-memory.js";
 import { createFetchMemoryExecutor } from "./tools/builtin/fetch-memory.js";
 import { createFetchMessageExecutor } from "./tools/builtin/fetch-message.js";
@@ -276,6 +277,10 @@ export class Processor {
       createEditTopicExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.stateManager.persona_update.bind(this.stateManager)),
       createUpdateDescriptionExecutor(this.stateManager.persona_getById.bind(this.stateManager), this.updatePersona.bind(this))
     );
+    registerResolveSignalExecutor(createResolveSignalExecutor(
+      this.stateManager.signal_confirm.bind(this.stateManager),
+      this.stateManager.signal_dismiss.bind(this.stateManager)
+    ));
     if (this.isTUI) {
       await registerFileReadExecutor();
       const retrievalPath = "../cli/retrieval.js";
@@ -706,7 +711,7 @@ const toolNextSteps = new Set([
                 t.name === "find_memory" || t.name === "fetch_memory" || t.name === "fetch_message"
               );
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
-              tools = [...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...buildPersonaIdentityTools(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
+              tools = [...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...buildPersonaIdentityTools(toolPersonaId), ...buildResolveSignalTool(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
               if (isHeartbeatRequest) {
                 tools = tools.filter(t => t.heartbeat_eligible !== false);
               }
@@ -892,9 +897,8 @@ const toolNextSteps = new Set([
       // signal_dismiss ever touches state, exactly mirroring the
       // self-drain functions above which already call it before their
       // own first mutation. signal_confirm/signal_dismiss throw on
-      // refusal (not found, terminal status, or a delta/pending_update
-      // collision) — left uncaught here, exactly like every other
-      // malformed/rejected record, so drainCorrections()'s own
+      // refusal (not found, or terminal status) — left uncaught here,
+      // exactly like every other malformed/rejected record, so
       // try/catch logs it and moves on without wedging the queue.
       assertValidCorrection(record);
       if (record.op === "observation.add") {
@@ -913,7 +917,7 @@ const toolNextSteps = new Set([
         }
         queuePersonaSignalMatch(observation, record.lens, this.stateManager, undefined);
       } else if (record.op === "signal.confirm") {
-        this.stateManager.signal_confirm(record.id, record.signal_id, record.actor, record.delta);
+        this.stateManager.signal_confirm(record.id, record.signal_id, record.actor);
       } else {
         this.stateManager.signal_dismiss(record.id, record.signal_id, record.actor);
       }

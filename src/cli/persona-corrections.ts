@@ -51,7 +51,7 @@ import { computePersonaDescriptionEmbedding } from "../core/embedding-service.js
 import { CorrectionValidationError } from "./corrections-endpoints.js";
 import { resolvePersonaPatchCandidate, resolveOwnPersona, isParseableIso8601 } from "../core/corrections.js";
 import { isReservedPersonaName, isReservedPersonaId, RESERVED_PERSONA_NAMES } from "../core/types/entities.js";
-import type { PersonaEntity, PersonaIdentityDelta } from "../core/types/entities.js";
+import type { PersonaEntity } from "../core/types/entities.js";
 import type { PersonaTrait, PersonaTopic } from "../core/types/data-items.js";
 import type { PersonaObservation, EmergentSignal } from "../core/types/signals.js";
 import type { CorrectionRecord, MergePatch, CorrectionObservationAdd, CorrectionSignalConfirm, CorrectionSignalDismiss } from "../core/corrections.js";
@@ -337,15 +337,17 @@ export async function removePersonaEntity(id: string): Promise<void> {
 // `ei_signal_confirm`/`ei_signal_dismiss` (CLI, src/cli.ts; MCP, src/cli/
 // mcp.ts). Same family as create/update/remove above — a validated parse
 // here, a CorrectionRecord queued via writeCorrection, and (per D1) never a
-// direct call into a live Processor/StateManager method — but neither op
-// mints its own id up front the way create does: an observation's id and a
-// confirmed signal's `pending_update` are both minted at DRAIN time (D1's
-// "collection owns id generation" convention, and D2's proposal-write),
-// which only self-drain resolves synchronously. When a live Ei instance is
-// running (`writeCorrection`'s "queued" drainMode), this call's own return
-// value can only honestly report that the write is pending, not its
-// eventual shape — the same asymmetry `ei_quote_create`'s own "queued"
-// branch already has to report.
+// direct call into a live Processor/StateManager method — but Add
+// Observation doesn't mint its own id up front the way create does: an
+// observation's id is minted at DRAIN time (D1's "collection owns id
+// generation" convention), which only self-drain resolves synchronously.
+// Apply Signal (confirm/dismiss) mints nothing at all — it is pure
+// status-transition bookkeeping on an already-existing signal (D1); it
+// never produces or mints any `pending_update` proposal. When a live Ei
+// instance is running (`writeCorrection`'s "queued" drainMode), Add
+// Observation's own return value can only honestly report that the write
+// is pending, not its eventual shape — the same asymmetry `ei_quote_create`'s
+// own "queued" branch already has to report.
 //
 // D10 (Sisyphus's ruling on the caller-attribution needs-ruling issue,
 // `.sisyphus/issues/persona-signal-caller-attribution-needs-ruling.md`):
@@ -420,13 +422,13 @@ function parseObservationAddBody(body: unknown): ObservationAddBodyInput {
   return result.data;
 }
 
-const personaIdentityDeltaSchema = z.strictObject({
-  short_description: z.string(),
-  long_description: z.string(),
-  traits: z.array(personaTraitSchema),
-  topics: z.array(personaTopicSchema),
-});
-
+/** Apply Signal's own wire body (Bolt 003 D1/R1/AT1) — `actor` only.
+ * Never accepts a `delta` (or any of its own member fields at the top
+ * level): D1 narrows `signal.confirm`/`signal.dismiss` to pure
+ * status-transition bookkeeping, so an object carrying any field
+ * outside `actor` is rejected by this `strictObject`'s own unknown-key
+ * check, matching this codebase's existing `unrecognized field(s)
+ * present` convention. */
 const applySignalBodySchema = z.strictObject({
   // D10: self-attested — the caller vouches for who is reviewing this;
   // Ei does not independently verify it (see this section's own header
@@ -434,7 +436,6 @@ const applySignalBodySchema = z.strictObject({
   // independence-tally exclusion that applies to Add-Observation's
   // observer_persona_id.
   actor: z.string().min(1),
-  delta: personaIdentityDeltaSchema.optional(),
 });
 
 type ApplySignalBodyInput = z.infer<typeof applySignalBodySchema>;
@@ -525,14 +526,16 @@ export async function addPersonaObservation(
 }
 
 /**
- * Apply Signal (D2-D5, R2-R7/AT2-AT7). `disposition: "confirm"` accepts an
- * optional Persona-lens identity `delta` (D2/D3) — a delta on
- * `disposition: "dismiss"` is rejected outright (D4: dismiss has no
- * proposal side effect for either lens, so there is nothing for a delta to
- * mean there). Every other refusal (terminal status, Agent-lens delta,
- * `pending_update` collision) is decided at DRAIN time, against whichever
- * state is actually stored then (ADR-029's own timing guarantee) — this
- * function's own synchronous checks are limited to existence, matching the
+ * Apply Signal (Bolt 003 D1/D5, R1/R2/R6/R7, AT1/AT2/AT6/AT7 — narrows
+ * Bolt 008's original D2-D5/R2-R5 delta-accepting shape). Never accepts
+ * or applies an identity delta, for either lens or any caller (D1): the
+ * body schema itself (`applySignalBodySchema`) already rejects a
+ * `delta`/unrecognized field as an `unrecognized field(s) present`
+ * error before this function ever runs, so there is no delta to check
+ * or materialize here. The only refusal left to decide at DRAIN time
+ * (against whichever state is actually stored then, per ADR-029's own
+ * timing guarantee) is terminal status — this function's own
+ * synchronous check is limited to persona existence, matching the
  * `update`/`remove` endpoints' own division of labor between a fast
  * synchronous usage error and the authoritative drain-time decision.
  *
@@ -548,9 +551,6 @@ export async function applyPersonaSignal(
   body: unknown
 ): Promise<{ status: "queued" } | { status: "recorded"; signal: EmergentSignal }> {
   const parsed = parseApplySignalBody(body);
-  if (disposition === "dismiss" && parsed.delta !== undefined) {
-    throw new CorrectionValidationError(`signal.dismiss does not accept a delta`);
-  }
 
   const state = await loadLatestState();
   if (!state) {
@@ -561,24 +561,8 @@ export async function applyPersonaSignal(
   }
 
   const now = new Date().toISOString();
-  // C1 (Stint-level holistic review, Bucket 1): a delta's traits/topics
-  // must pass through the same materializeTraits/materializeTopics
-  // helpers create/update already use, BEFORE the correction is built —
-  // parsed.delta.traits/topics carry an optional `id`/`last_updated`
-  // (personaTraitSchema/personaTopicSchema, exactly like create/update's
-  // own input), and `pending_update` must hold fully materialized
-  // children, not the wire-optional shape a raw cast to
-  // PersonaIdentityDelta would have let through unmaterialized.
-  const delta: PersonaIdentityDelta | undefined = parsed.delta
-    ? {
-        short_description: parsed.delta.short_description,
-        long_description: parsed.delta.long_description,
-        traits: materializeTraits(parsed.delta.traits, now),
-        topics: materializeTopics(parsed.delta.topics, now),
-      }
-    : undefined;
   const correction: CorrectionSignalConfirm | CorrectionSignalDismiss = disposition === "confirm"
-    ? { op: "signal.confirm", entity_type: "persona", id: personaId, signal_id: signalId, actor: parsed.actor, delta, timestamp: now }
+    ? { op: "signal.confirm", entity_type: "persona", id: personaId, signal_id: signalId, actor: parsed.actor, timestamp: now }
     : { op: "signal.dismiss", entity_type: "persona", id: personaId, signal_id: signalId, actor: parsed.actor, timestamp: now };
 
   const { drainMode } = await writeCorrection(correction);
