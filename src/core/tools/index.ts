@@ -160,6 +160,7 @@ export function buildPersonaNoteTools(personaId: string): ToolDefinition[] {
       enabled: true,
       created_at: now,
       max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
     },
     {
       id: `builtin-clear-note-${personaId}`,
@@ -180,6 +181,7 @@ export function buildPersonaNoteTools(personaId: string): ToolDefinition[] {
       enabled: true,
       created_at: now,
       max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
     },
   ];
 }
