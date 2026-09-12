@@ -15,7 +15,7 @@ description: >
   personas would react", "ei-perspective". This is read-only and
   advisory by default — for authoring or editing a persona's actual
   character, use `ei-persona` instead; for a coding-harness agent
-  reflecting on and resolving its own open signals, use `ei-reflect`.
+  resolving its own open signals, use `ei-manage-signals`.
 ---
 
 # Ei Perspective — polling personas from the inside
@@ -39,7 +39,7 @@ finalizes an answer.
 - **Authoring or editing a persona's actual character** (traits, voice,
   retiring a persona) → `ei-persona`. This skill never writes anything
   back to a persona's record.
-- **A coding-harness agent resolving its own open signals** → `ei-reflect`.
+- **A coding-harness agent resolving its own open signals** → `ei-manage-signals`.
   This skill can inject a harness agent's Ei identity into a poll
   alongside other personas, but it never confirms or dismisses a signal —
   it only asks for a perspective.
@@ -65,8 +65,8 @@ signal review only needs personas with real signal data; a question
 about tone/voice patterns might reasonably poll everyone).
 
 List candidates once and read the result yourself — same discipline as
-`ei-reflect`'s own persona-resolution step: don't run several filtered
-queries and compare them.
+`ei-manage-signals`'s own persona-resolution step: don't run several
+filtered queries and compare them.
 
 ```bash
 PERSONAS_JSON=$(mktemp)

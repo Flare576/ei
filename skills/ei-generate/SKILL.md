@@ -24,9 +24,9 @@ description: >
   personas can leak their own traits into a human's record. If the goal
   is instead to fix wrong data in Ei, that's `ei-curate`; to look
   something up without producing a document, that's `ei-search`; to
-  reflect on the calling agent's own identity or operating contract,
-  that's `ei-reflect`; to capture a reuse-tested project pattern for the
-  commons, that's `pod7-pattern-harvester`.
+  resolve the calling agent's own open signals (identity or operating
+  contract), that's `ei-manage-signals`; to capture a reuse-tested
+  project pattern for the commons, that's `pod7-pattern-harvester`.
 ---
 
 # Ei Generate — synthesizing a document from Ei's memory, by hand
@@ -208,9 +208,9 @@ backing this output. Write only after they've told you.
 - **Not this skill's job**: fixing wrong data in Ei (`ei-curate`),
   authoring a persona's character (`ei-persona`), a quick
   mid-conversation lookup with no document to produce (`ei-search`),
-  reflecting on the calling agent's own identity or operating contract
-  (`ei-reflect`), or capturing a reuse-tested project pattern for the
-  commons (`pod7-pattern-harvester`).
+  resolving the calling agent's own open signals — identity or operating
+  contract (`ei-manage-signals`), or capturing a reuse-tested project
+  pattern for the commons (`pod7-pattern-harvester`).
 
 ---
 

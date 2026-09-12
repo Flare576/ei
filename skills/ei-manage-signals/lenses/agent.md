@@ -21,9 +21,14 @@ them has to an actual file.
 
 The only Ei writes this lens performs are asserting a brand-new observation
 (when the conversation surfaces one — see below) and confirming or
-dismissing the signals it addressed; it never touches identity fields.
-Every substantive write goes into a file the **user** owns, as a marked
-delimited region, after they approve the exact text.
+dismissing the signals it addressed; it never touches identity fields. No
+Ei-side mechanism drives a harness-file write for this lens — a Persona
+signal's `confirm` is only ever bookkeeping. This lens's actual write is an
+ordinary act *you* perform with your own file-editing tool, exactly like
+any other edit you'd make to a repo file — nothing about Ei's design needs
+to authorize or route it. Every substantive write goes into a file the
+**user** owns, as a marked delimited region, after they approve the exact
+text.
 
 ---
 
@@ -90,7 +95,7 @@ CLI calls (leave it open vs. `ei dismiss signal`).
 The conversation may produce an operating-contract observation that isn't on
 the Step 2 list — something the user names, or something you notice about
 your own behavior in this session. If it's worth keeping and
-`$LINKED_PERSON_ID` is resolved (`../SKILL.md` Step 1c), assert it with
+`$LINKED_PERSON_ID` is resolved (`../SKILL.md` Step 1b), assert it with
 `"lens": "agent"`:
 
 → `../references/cli.md` → "Assert a brand-new observation"
@@ -244,14 +249,14 @@ Show the literal lines you intend to write, inside the markers, exactly as
 they'll appear. Not a summary of them.
 
 ```
-<!-- ei-reflect:begin persona=ea475c69-2e52-42f2-b3e3-b112df189336 -->
+<!-- ei-manage-signals:begin persona=ea475c69-2e52-42f2-b3e3-b112df189336 -->
 ## Working agreements (Sisyphus)
 
 - Run the full vitest suite before calling a task done — never a narrowed file.
 - vitest needs the repo's pinned Node; bare `node` here is a Bun shim that
   can't run it.
 - Verify a sub-delegate's claim independently before building on it.
-<!-- ei-reflect:end persona=ea475c69-2e52-42f2-b3e3-b112df189336 -->
+<!-- ei-manage-signals:end persona=ea475c69-2e52-42f2-b3e3-b112df189336 -->
 ```
 
 The marker key is `$PERSONA_ID`, never the display name. A display name is
@@ -264,8 +269,9 @@ The *heading inside* the region is where the human-readable name belongs, and
 it is the one place in this protocol a `display_name` appears at all. **Type it
 as literal text you have already read — never through a command line, and never
 before checking that it is a single line free of `<!--`, `-->`, and
-`ei-reflect:`.** A name failing that check can forge an end marker inside your
-own region; drop the name and use the bare heading `## Working agreements`.
+`ei-manage-signals:`.** A name failing that check can forge an end marker
+inside your own region; drop the name and use the bare heading `## Working
+agreements`.
 → **`../references/agent-file-writes.md` → "The heading"**. A valid name that
 goes stale after a rename is harmless — the next run rewrites it.
 
@@ -325,7 +331,7 @@ to confirm/dismiss for it yet.)
 ei confirm signal "$PERSONA_ID" "$SIGNAL_ID" --json '{"actor":"'"$PERSONA_ID"'"}'
 ```
 
-No `delta` — an Agent-lens confirm never carries one; it has exactly one
+No `delta` — an Agent-lens confirm never accepts one; it has exactly one
 effect, the status transition, and the actual content already
 landed in the harness file above. For a signal the user said isn't real or
 isn't worth tracking:
@@ -375,6 +381,6 @@ They may be about to commit it.
   hold them back waiting to see how the rest of the run goes.
 - **A signal's `recurrence_count` is corroboration, not urgency.** A rule
   seen once is still worth writing if it's true and useful; don't wait for a
-count to climb before acting on good evidence the user has already
-confirmed. Corroboration-independence gates *automatic* promotion,
-not your own live-approved judgment.
+  count to climb before acting on good evidence the user has already
+  confirmed. Corroboration-independence gates *automatic* promotion,
+  not your own live-approved judgment.
