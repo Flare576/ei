@@ -52,3 +52,6 @@ npm-debug.log*
 **/*-ideal-response.json
 api/config.php
 local_cache
+
+# Pantheon working folder (local-only, ephemeral spec/planning artifacts)
+.pantheon/
