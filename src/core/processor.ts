@@ -681,6 +681,16 @@ const toolNextSteps = new Set([
               (request.next_step === LLMNextStep.HandleToolContinuation &&
                 request.data.originalNextStep === LLMNextStep.HandleKnowledgeSynthesis);
 
+            // Heartbeat-classified requests never get write-capable tools (add_note/clear_note today;
+            // future native write tools opt in via the same `heartbeat_eligible` field). Also covers
+            // HandleToolContinuation originating from a heartbeat request, including later rounds.
+            const isHeartbeatRequest =
+              request.next_step === LLMNextStep.HandleHeartbeatCheck ||
+              request.next_step === LLMNextStep.HandleEiHeartbeat ||
+              (request.next_step === LLMNextStep.HandleToolContinuation &&
+                (request.data.originalNextStep === LLMNextStep.HandleHeartbeatCheck ||
+                  request.data.originalNextStep === LLMNextStep.HandleEiHeartbeat));
+
             let tools: ToolDefinition[] = [];
             if (isDedupRequest) {
               tools = SYSTEM_TOOLS.filter(t => t.name === "find_memory");
@@ -690,6 +700,9 @@ const toolNextSteps = new Set([
               );
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
               tools = [...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
+              if (isHeartbeatRequest) {
+                tools = tools.filter(t => t.heartbeat_eligible !== false);
+              }
             }
 
             // Auto-inject each handler's dedicated submit tool — infrastructure, not user-visible.
