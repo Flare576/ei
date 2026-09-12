@@ -130,7 +130,7 @@ ask the user to name a record instead of guessing.
 
 ### 0. Confirm the CLI is reachable
 Run `ei --help` (or `bunx ei-tui --help` if `ei` isn't on PATH — same
-fallback `ei-curate`/`ei-persona`/`ei-search`/`ei-reflect` all use). **The
+fallback `ei-curate`/`ei-persona`/`ei-search`/`ei-manage-signals` all use). **The
 live `--help` output is the source of truth** for the exact command surface;
 this skill's examples are a guide, but the CLI evolves. If neither command
 works, stop — do not read, plan, or write anything yet; tell the user the
