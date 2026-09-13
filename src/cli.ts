@@ -102,7 +102,7 @@ function readFlag(args: string[], flag: string): string | undefined {
  * Resolves the JSON body for `ei create`/`ei update` from either
  * `--json '<json>'` (unchanged, argv-exposed) or `--json-file <path>`
  * (r4: a non-argv input mode for the most sensitive write payloads —
- * persona reflection especially, where the body may carry a full persona
+ * `ei update persona` especially, where the body may carry a full persona
  * identity or PersonLog record). Exactly one of the two must be present;
  * passing both, or neither, is a usage error. `--json-file` never writes
  * anything itself — the caller supplies the path (typically a `mktemp`
@@ -228,7 +228,7 @@ Options:
                        patch — only the fields you're changing — for topic/person/persona update); on the
                        quote verbs it merges over the discrete flags
   --json-file <path>  Same body as --json, read from a file instead of argv — prefer this for large or
-                       sensitive payloads (persona reflection especially) so the JSON never appears in
+                       sensitive payloads (\`ei update persona\` especially) so the JSON never appears in
                        process listings/shell history. Exactly one of --json/--json-file is required for
                        create/update; passing both, or neither, is a usage error. create/update only —
                        the quote verbs take --json and ignore this flag.

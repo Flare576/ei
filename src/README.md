@@ -71,7 +71,11 @@ Every 24 hours, the system runs a ceremony to keep knowledge fresh and healthy. 
 
 **Topic Rewrite** (fire-and-forget after Phase 4): Scans bloated Topic records (>750 chars) and splits them into focused sub-topics. Topics created by Person Rewrite are included.
 
-**Reflection** (fire-and-forget alongside Phase 4): Persona-side critic pass on person records.
+Persona identity (traits, topics, descriptions) is not touched by ceremony at all. A persona edits its
+own identity directly via native tools (`get_my_identity`, `edit_trait`, `edit_topic`,
+`update_description`) during a live conversation, or a human/CLI/MCP caller edits it directly via
+`ei update persona` — both write immediately, with no staging step and no ceremony-triggered critic pass
+(the reflection critic and both TUI/Web reflection UIs were retired; see ADR-039).
 
 > **Note**: Expire and Explore phases were removed in the Persona Ceremony Simplification (2026-04-05). Persona topics now only update `exposure_current` during ceremony. See CONTRACTS.md changelog for details.
 
