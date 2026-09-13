@@ -55,7 +55,7 @@ import { ContextStatus as ContextStatusEnum, RoomMode } from "./types.js";
 import { bootstrapTools } from "./bootstrap-tools.js";
 import { seedBuiltinFacts, migrateLearnedOn, migrateMessageIds, migrateSlackToMultiWorkspace, seedSettings } from "./migrations.js";
 import { IntegrationSyncManager } from "./integration-sync-manager.js";
-import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, registerPersonaIdentityExecutors, buildPersonaIdentityTools, registerResolveSignalExecutor, buildResolveSignalTool, SYSTEM_TOOLS } from "./tools/index.js";
+import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, registerPersonaIdentityExecutors, buildPersonaIdentityTools, registerResolveSignalExecutor, buildResolveSignalTool, dedupeToolsByName, SYSTEM_TOOLS } from "./tools/index.js";
 import { createAddNoteExecutor, createClearNoteExecutor } from "./tools/builtin/persona-notes.js";
 import { createGetMyIdentityExecutor, createEditTraitExecutor, createEditTopicExecutor, createUpdateDescriptionExecutor } from "./tools/builtin/persona-identity.js";
 import { createResolveSignalExecutor } from "./tools/builtin/resolve-signal.js";
@@ -711,7 +711,12 @@ const toolNextSteps = new Set([
                 t.name === "find_memory" || t.name === "fetch_memory" || t.name === "fetch_message"
               );
             } else if (toolNextSteps.has(request.next_step) && toolPersonaId) {
-              tools = [...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...buildPersonaIdentityTools(toolPersonaId), ...buildResolveSignalTool(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)];
+              // Native identity/signal tools always precede the persona's persisted custom
+              // tools; dedupeToolsByName collapses any legacy persisted custom tool that
+              // collides with a reserved native name (RESERVED_TOOL_NAMES) down to exactly
+              // one — the native — definition before it is ever sent to the model. The
+              // persisted custom tool record itself is left untouched in StateManager.
+              tools = dedupeToolsByName([...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...buildPersonaIdentityTools(toolPersonaId), ...buildResolveSignalTool(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)]);
               if (isHeartbeatRequest) {
                 tools = tools.filter(t => t.heartbeat_eligible !== false);
               }
