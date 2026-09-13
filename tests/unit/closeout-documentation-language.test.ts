@@ -23,18 +23,31 @@ function readNormalized(path: string): string {
 }
 
 describe("Signal UX close-out: docs describe the surviving native-tool/ei update persona mechanism, not the retired reflection critic", () => {
-  it("src/README.md describes native-tool/live-conversation identity edits and ei update persona, and drops the retired persona-side critic pass", () => {
+  it("src/README.md distinguishes synchronous native identity-tool writes from `ei update persona`'s safe self-drain or queued correction", () => {
     const contents = readNormalized(join(REPO_ROOT, "src", "README.md"));
 
-    // Current mechanism: native identity tools during a live conversation.
+    // Native identity tools write through synchronously during a live conversation.
     expect(contents).toMatch(/get_my_identity/);
     expect(contents).toMatch(/edit_trait/);
     expect(contents).toMatch(/edit_topic/);
     expect(contents).toMatch(/update_description/);
     expect(contents).toMatch(/during a live conversation/);
+    expect(contents).toMatch(
+      /those writes apply immediately and synchronously, with no staging step\./,
+    );
 
-    // Current mechanism: CLI/MCP identity edits via `ei update persona`.
+    // `ei update persona` self-drains only when safe; a live lock (or backup-only/
+    // sync-pending state) queues its correction for the Processor.
     expect(contents).toMatch(/`ei update persona`/);
+    expect(contents).toMatch(
+      /`writeCorrection` self-\s*drains it straight into `state\.json` within that same call when no live instance holds the lock/,
+    );
+    expect(contents).toMatch(
+      /only appends to `corrections\.json` and returns `drainMode: "queued"`/,
+    );
+
+    // Native tools are synchronous; the CLI/MCP correction path is not universally so.
+    expect(contents).not.toMatch(/both write immediately/i);
 
     // Retired: the fire-and-forget persona-side critic pass this replaced.
     expect(contents).not.toMatch(
@@ -42,13 +55,19 @@ describe("Signal UX close-out: docs describe the surviving native-tool/ei update
     );
   });
 
-  it("CONTRACTS.md points the enumerate-all link guidance at the current Observation->Signal consumer, not the retired reflection critic", () => {
+  it("CONTRACTS.md points enumerate-all guidance at live Observation→Signal resolution of every linked Person record, not a PersonLog", () => {
     const contents = readNormalized(join(REPO_ROOT, "CONTRACTS.md"));
 
-    // Current consumer: resolvePersonaLinkedPeople, enumerate-all guidance.
+    // Current consumer: enumerate every linked Person record through the dedicated resolver.
     expect(contents).toMatch(/resolvePersonaLinkedPeople/);
+    expect(contents).toMatch(/Observation→Signal ingestion pipeline's live branch/);
     expect(contents).toMatch(
-      /Observation.Signal ingestion pipeline that reads a persona's linked PersonLog is the current consumer this guards\./,
+      /it enumerates every Person record linked to the subject persona via `resolvePersonaLinkedPeople\(\)`/,
+    );
+
+    // False current-consumer claim from the round-1 correction: no PersonLog is read here.
+    expect(contents).not.toMatch(
+      /Observation→Signal ingestion pipeline that reads a persona's linked PersonLog is the current consumer this guards\./,
     );
 
     // Retired: the reflection-critic example this replaced.
