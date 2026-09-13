@@ -382,15 +382,6 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
       }
     }
 
-    if (matchedPerson && response.request.data.reflection_progress === 1) {
-      const linkedPersonaId = matchedPerson.identifiers
-        ?.find(i => i.type === "Ei Persona")?.value;
-      if (linkedPersonaId) {
-        console.debug(`[handleHumanPersonScan] Skipping update for "${candidate.name}" — scan marked as reflection drain (reflection_progress=1)`);
-        continue;
-      }
-    }
-
     const confidence = typeof candidate.confidence === 'number' ? candidate.confidence : null;
     if (confidence !== null && confidence <= 2 && !matchedPerson) {
       console.debug(`[handleHumanPersonScan] Skipping low-confidence new person "${candidate.name}" (confidence=${confidence}, relationship_type=${candidate.relationship_type ?? 'none'})`);
