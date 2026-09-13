@@ -81,7 +81,6 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   handleCeremonyProgress: vi.fn(),
   prunePersonaMessages: vi.fn(),
   runHumanCeremony: vi.fn(),
-  queueReflectionDrain: vi.fn(),
   queueUserDedupRequest: vi.fn(),
   queueRoomCapture: vi.fn(),
   queuePersonaCapture: vi.fn(),
