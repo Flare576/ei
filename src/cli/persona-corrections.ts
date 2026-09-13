@@ -33,11 +33,8 @@
  * `create` keeps the pre-ADR-029 full-body contract: display_name is
  * required, traits/topics default exactly as before. `update` is RFC
  * 7396 JSON Merge Patch (ADR-029): omitting a
- * field leaves it unchanged, `traits: []` genuinely empties the array,
- * and `pending_update: null` is the only legal way to clear a pending
- * Critic proposal (non-null content is rejected at parse time — Clearable,
- * never settable, per ADR-014's narrow-what-a-caller-may-assert
- * discipline). `tools`/`model`/`heartbeat_delay_ms`/`context_window_ms`/
+ * field leaves it unchanged, `traits: []` genuinely empties the array.
+ * `tools`/`model`/`heartbeat_delay_ms`/`context_window_ms`/
  * `include_message_timestamps`/`context_boundary`/`is_paused`/
  * `pause_until`/`is_archived`/`archived_at`/`group_primary`/
  * `groups_visible` are gone from BOTH create and update entirely
@@ -88,13 +85,6 @@ export { personaCandidateSchema, personaPatchSchema };
  * ROUND_TRIP_FIELDS (id/type/last_updated/linked_quotes) because
  * lookupById's crossFind spreads the FULL PersonaEntity (plus its own
  * `type: "persona"` discriminator) rather than a narrower projection.
- *
- * `pending_update` is deliberately ABSENT from this list (Must-Have 5,
- * corrected from the pre-ADR-029 behavior recorded below) — it is now a
- * legal PATCH member in its own right (see personaPatchSchema above), so
- * silently stripping it here would mean a caller's explicit
- * `pending_update: null` never reaches the schema at all, defeating the
- * one supported way to clear it.
  *
  * Stripping here only controls the INPUT side — a caller can never set
  * these directly. Every one of them is System Visible or System Hidden
@@ -243,13 +233,13 @@ export async function createPersonaEntity(body: unknown): Promise<{ id: string; 
  * `ei update persona` — RFC 7396 JSON Merge Patch (ADR-029). Omitting a
  * field leaves it unchanged (not "resets to its create-time default,"
  * which is GH-82's own named hazard); `traits: []`/`topics: []`
- * genuinely empty those arrays; `pending_update: null` clears a pending
- * Critic proposal; every other field present sets it. A patch's
- * `traits`/`topics` member, when present, is re-materialized (fresh ids
- * for new entries, fresh `last_updated` for every entry in that member)
- * exactly like create — but ONLY when the caller actually sent that
- * member; an absent one is left as the already-materialized stored array,
- * untouched, which is exactly the point of merge-patch semantics.
+ * genuinely empty those arrays; every other field present sets it. A
+ * patch's `traits`/`topics` member, when present, is re-materialized
+ * (fresh ids for new entries, fresh `last_updated` for every entry in
+ * that member) exactly like create — but ONLY when the caller actually
+ * sent that member; an absent one is left as the already-materialized
+ * stored array, untouched, which is exactly the point of merge-patch
+ * semantics.
  */
 export async function updatePersonaEntity(id: string, body: unknown): Promise<ExternalPersonaEntity> {
   const patch = parsePersonaPatch(body);
@@ -343,7 +333,7 @@ export async function removePersonaEntity(id: string): Promise<void> {
 // generation" convention), which only self-drain resolves synchronously.
 // Apply Signal (confirm/dismiss) mints nothing at all — it is pure
 // status-transition bookkeeping on an already-existing signal (D1); it
-// never produces or mints any `pending_update` proposal. When a live Ei
+// never produces or mints any identity-revision proposal. When a live Ei
 // instance is running (`writeCorrection`'s "queued" drainMode), Add
 // Observation's own return value can only honestly report that the write
 // is pending, not its eventual shape — the same asymmetry `ei_quote_create`'s
