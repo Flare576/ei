@@ -427,7 +427,7 @@ An earlier design deliberately allowed a many-to-many graph so a composite perso
 Two consequences for anyone writing against this section today:
 
 - **Links are not user-initiated, and their presence is not evidence a human intended them.** Earlier revisions of this document said the system never auto-links without confirmation. That describes a workflow which no longer exists. A link is now most often created *implicitly*, as a side effect of creating a Persona or updating a Person record; the LLM person-update handler and dedup also create them outright. Explicit user linking is the rare path, not the rule.
-- **Enumerate all linked records regardless — never take the first.** The write-time guard above stops *new* violations; it does not migrate data that was already in the many shape, and it does not change any consumer's own read-side logic. Code that assumes one link will still silently pick an arbitrary record on old data. For the reflection critic, that means clearing the wrong log.
+- **Enumerate all linked records regardless — never take the first.** The write-time guard above stops *new* violations; it does not migrate data that was already in the many shape, and it does not change any consumer's own read-side logic. Code that assumes one link will still silently pick an arbitrary record on old data — always resolve links via an enumerate-all read (`resolvePersonaLinkedPeople`, `src/core/utils/identifier-utils.ts`), never a first-match `.find()`. The Observation→Signal ingestion pipeline that reads a persona's linked PersonLog is the current consumer this guards.
 
 ### Built-in Identifier Types
 
