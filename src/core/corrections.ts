@@ -1239,8 +1239,11 @@ export async function resolvePersonaPatchCandidate(current: PersonaEntity, patch
   // unchanged and get re-persisted on the very next patch -- stripping it
   // here, at the one choke point every persona patch (preview and
   // drain-time persist alike) already passes through, closes that leak
-  // independently of which raw-state read fed `current` in.
-  const { external_reflection_only: _legacyExternalReflectionOnly, ...currentClean } = current as PersonaEntity & { external_reflection_only?: unknown };
+  // independently of which raw-state read fed `current` in. Bolt 004 D1
+  // reuses this exact same choke point/pattern for a second retired
+  // legacy field, the pending reflection-staging proposal, for the
+  // identical reason.
+  const { external_reflection_only: _legacyExternalReflectionOnly, pending_update: _legacyPendingUpdate, ...currentClean } = current as PersonaEntity & { external_reflection_only?: unknown; pending_update?: unknown };
   const merged = applyMergePatch(currentClean as PersonaEntity, patch);
   const candidate: PersonaEntity = { ...merged, id: current.id, last_updated: new Date().toISOString() };
   validateCandidate(candidate, personaBaseShape, personaCandidateSchema, "persona");
