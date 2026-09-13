@@ -161,25 +161,6 @@ ${formatPeopleWithGaps(data.human.people)}`;
 
 **Quality over quantity** - Only reach out if you have something real to say.`;
 
-  const pendingUpdateFragment = data.persona.pending_update ? (() => {
-    const p = data.persona.pending_update!;
-    const descPart = p.long_description || p.short_description
-      ? `### Proposed Description\n${p.long_description || p.short_description}`
-      : "";
-    const traitsPart = p.traits.length > 0
-      ? `### Proposed Traits\n${p.traits.map(t => `- **${t.name}**: ${t.description}`).join("\n")}`
-      : "";
-    const topicsPart = p.topics.length > 0
-      ? `### Proposed Interests\n${p.topics.map(t => `- **${t.name}**: ${t.perspective}`).join("\n")}`
-      : "";
-    const parts = [descPart, traitsPart, topicsPart].filter(Boolean).join("\n\n");
-    return `## Pending Identity Changes
-
-Your human is reviewing proposed updates to your identity. These are waiting for their response — you may want to bring it up, or not. It's yours to decide.
-
-${parts}`;
-  })() : '';
-
   const outputFragment = `## Response Format
 
 Call the \`submit_heartbeat_check\` tool with your decision. If the tool is unavailable, return JSON:
@@ -209,7 +190,6 @@ If you decide NOT to reach out:
     signalsFragment,
     opportunitiesFragment,
     guidelinesFragment,
-    pendingUpdateFragment,
     outputFragment,
   ].filter(Boolean).join('\n\n');
 

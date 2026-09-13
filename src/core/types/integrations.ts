@@ -79,7 +79,6 @@ export interface PersonaSummary {
   avatar_emoji?: string;
   avatar_image?: string;
   preferred_theme?: string;
-  has_pending_update: boolean;
 }
 
 export interface MessageQueryOptions {

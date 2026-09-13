@@ -90,7 +90,6 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   handleCeremonyProgress: vi.fn(),
   prunePersonaMessages: vi.fn(),
   runHumanCeremony: vi.fn(),
-  queueReflectionDrain: vi.fn(),
   queueUserDedupRequest: vi.fn(),
   queueRoomCapture: vi.fn(),
   queuePersonaCapture: vi.fn(),
@@ -897,20 +896,12 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
       long_description: "Original long description",
       description_embedding: [0.1, 0.2, 0.3],
       last_heartbeat: new Date().toISOString(),
-      pending_update: {
-        short_description: "pending short",
-        long_description: "pending long",
-        traits: [],
-        topics: [],
-        critique: "pending critique",
-        created_at: new Date().toISOString(),
-      },
     });
 
-    // Omits aliases/long_description/description_embedding/pending_update/
-    // last_heartbeat entirely (and drops undefined-valued aliases via the
-    // JSON round trip on the live path) -- the same correction record must
-    // mean the same thing on both the self-drain and live-drain paths.
+    // Omits aliases/long_description/description_embedding/last_heartbeat
+    // entirely (and drops undefined-valued aliases via the JSON round trip
+    // on the live path) -- the same correction record must mean the same
+    // thing on both the self-drain and live-drain paths.
     const updatedPersona = makePersonaEntity("persona-parity", {
       display_name: "Updated Name",
       aliases: undefined,
@@ -957,7 +948,6 @@ describe("Processor.drainCorrections() (live-side corrections drain)", () => {
     expect(liveRest.aliases).toBeUndefined();
     expect(liveRest.long_description).toBeUndefined();
     expect(liveRest.description_embedding).toBeUndefined();
-    expect(liveRest.pending_update).toBeUndefined();
     expect(liveRest.last_heartbeat).toBeUndefined();
   });
 

@@ -5,7 +5,6 @@
 
 import type { Fact, PersonaTrait, Topic, Person, Quote, PersonaTopic } from "../../core/types.js";
 import type { ToolDefinition } from "../../core/types.js";
-import type { PersonaEntity } from "../../core/types/entities.js";
 
 export interface TemporalAnchor {
   id: string;
@@ -31,8 +30,6 @@ export interface ResponsePromptData {
     interested_topics: PersonaTopic[];
     /** When true, each message has a timestamp prepended; include a note so the persona doesn't echo them */
     include_message_timestamps?: boolean;
-    /** Proposed identity revision pending human review. Persona carries this as ambient self-awareness — no critique, just the proposed changes. */
-    pending_update?: PersonaEntity["pending_update"];
     notes?: string[];
   };
   human: {

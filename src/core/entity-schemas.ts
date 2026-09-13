@@ -308,16 +308,7 @@ export const personaCreateSchema = z.strictObject(personaBaseShape);
 const { patchSchema: personaPatchSchemaBase, candidateSchema: personaCandidateSchema } = deriveSchemaPair(personaBaseShape);
 export { personaCandidateSchema };
 
-/**
- * `pending_update` (ADR-029 clause 5, ADR-031's Clearable category) is
- * added to the PATCH shape only, after derivation — it was never part of
- * `personaBaseShape` (create never accepts it either; a brand-new persona
- * has no pending Critic proposal to clear). Accepts `null` (clear) or
- * absence (unchanged); any other value — including an attempted full
- * proposal object — is a Zod type mismatch, rejected before this ever
- * reaches `resolvePersonaPatchCandidate`.
- */
-export const personaPatchSchema = z.strictObject({ ...personaPatchSchemaBase.shape, pending_update: z.null().optional() });
+export const personaPatchSchema = z.strictObject(personaPatchSchemaBase.shape);
 
 // ---------------------------------------------------------------------------
 // ADR-031 read-side stripping — System Hidden fields absent from every

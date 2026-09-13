@@ -4,7 +4,6 @@
  */
 
 import type { PersonaTrait, Topic, Person, Message, PersonaTopic, EmergentSignal, SignalDimension } from "../../core/types.js";
-import type { PersonaEntity } from "../../core/types/entities.js";
 import type { TemporalAnchor } from "../response/types.js";
 
 /**
@@ -23,7 +22,6 @@ export interface HeartbeatCheckPromptData {
     name: string;
     traits: PersonaTrait[];
     topics: PersonaTopic[];
-    pending_update?: PersonaEntity["pending_update"];
   };
   human: {
     topics: Topic[];     // Filtered, sorted by engagement gap
@@ -95,17 +93,6 @@ export type EiHeartbeatItem =
       name: string;
       description: string;
       quote?: string;
-    }
-  | {
-      id: string;
-      type: "Persona Reflection Alert";
-      persona_name: string;
-      critique: string;
-    }
-  | {
-      id: string;
-      type: "Self Reflection Alert";
-      critique: string;
     }
   | {
       // bolt-persona-emergence-signals-011, D2: the missing producer for

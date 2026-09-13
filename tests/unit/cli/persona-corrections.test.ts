@@ -62,7 +62,6 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   handleCeremonyProgress: vi.fn(),
   prunePersonaMessages: vi.fn(),
   runHumanCeremony: vi.fn(),
-  queueReflectionDrain: vi.fn(),
   queueUserDedupRequest: vi.fn(),
   queueRoomCapture: vi.fn(),
   queuePersonaCapture: vi.fn(),
@@ -459,6 +458,31 @@ describe("updatePersonaEntity", () => {
     expect(rawPersistedEntity.short_description).toBe("changed");
   });
 
+  // Bolt 004 D1 (Beta's review, S2): mirrors the R6/AT6 external_reflection_only
+  // test immediately above, for the second legacy field this same choke point
+  // strips. A legacy persona still carrying `pending_update` from before
+  // ADR-039's retirement of the reflection-staging model must not survive an
+  // unrelated self-drained patch in EITHER direction. Reads the raw persisted
+  // `state.json` bytes directly (not through loadLatestState(), which now
+  // applies its own strip and would mask a regression in
+  // resolvePersonaPatchCandidate) to prove the field is actually gone from
+  // disk, not just from this call's in-memory response.
+  it("Bolt 004 D1: a legacy pending_update value never survives an unrelated self-drained patch, in either direction", async () => {
+    const existing = makeExistingPersonaEntity(PERSONA_ID) as PersonaEntity & { pending_update?: unknown };
+    existing.pending_update = { summary: "stale identity revision", proposed_changes: {} };
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
+
+    const updated = await updatePersonaEntity(PERSONA_ID, { short_description: "changed" });
+
+    expect(updated).not.toHaveProperty("pending_update");
+    expect(updated.short_description).toBe("changed");
+
+    const rawStateJson = JSON.parse(readFileSync(join(tempDir, "state.json"), "utf-8")) as StorageState;
+    const rawPersistedEntity = rawStateJson.personas[PERSONA_ID].entity as Record<string, unknown>;
+    expect(rawPersistedEntity).not.toHaveProperty("pending_update");
+    expect(rawPersistedEntity.short_description).toBe("changed");
+  });
+
   it("replaces the traits array wholesale when the payload supplies new traits, discarding the old ones entirely", async () => {
     const existing = makeExistingPersonaEntity(PERSONA_ID, {
       traits: [{ id: "old-trait", name: "Old Trait", description: "d", sentiment: 0, last_updated: INITIAL_NOW }],
@@ -511,14 +535,6 @@ describe("updatePersonaEntity", () => {
       tools: undefined,
       is_static: true,
       last_heartbeat: "2026-01-02T00:00:00.000Z",
-      pending_update: {
-        short_description: "Pending short description",
-        long_description: "Pending long description",
-        traits: [],
-        topics: [],
-        critique: "Pending critique",
-        created_at: "2026-01-02T00:00:00.000Z",
-      },
     });
     writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
 
@@ -527,19 +543,18 @@ describe("updatePersonaEntity", () => {
     // (silently stripped), but the ten Hidden/System-Visible fields
     // (model/group_primary/groups_visible/tools/is_paused/pause_until/
     // is_archived/archived_at/heartbeat_delay_ms/context_window_ms/
-    // include_message_timestamps/context_boundary) and `pending_update`'s
-    // own object form must be dropped by the caller first — this is exactly
-    // the behavior change this plan's docs sweep (TODO 7) teaches.
+    // include_message_timestamps/context_boundary) must be dropped by the
+    // caller first — this is exactly the behavior change this plan's docs
+    // sweep (TODO 7) teaches.
     const {
       model, group_primary, groups_visible, tools, is_paused, pause_until,
       is_archived, archived_at, heartbeat_delay_ms, context_window_ms,
-      include_message_timestamps, context_boundary, pending_update,
+      include_message_timestamps, context_boundary,
       ...writablePayload
     } = existing;
     void model; void group_primary; void groups_visible; void tools; void is_paused;
     void pause_until; void is_archived; void archived_at; void heartbeat_delay_ms;
     void context_window_ms; void include_message_timestamps; void context_boundary;
-    void pending_update;
 
     const roundTripPayload = {
       ...writablePayload,
@@ -558,64 +573,12 @@ describe("updatePersonaEntity", () => {
     // `last_heartbeat` is System Hidden (ADR-031) and is gone from the
     // response entirely now -- verified against the persisted record below.
     expect(updated.is_static).toBe(existing.is_static);
-    // `pending_update` is Clearable, not auto-wiped: since this payload
-    // never mentions it (excluded above), merge-patch leaves it exactly as
-    // it was -- the opposite of the old full-record-replace behavior,
-    // which used to drop it on every update regardless of payload. See the
-    // dedicated "clears pending_update only when..." test below for the
-    // explicit-null path.
-    expect(updated.pending_update).toEqual(existing.pending_update);
 
     const persisted = await loadLatestState();
     const reloaded = persisted!.personas[PERSONA_ID].entity;
     expect(reloaded.display_name).toBe(existing.display_name);
     expect(reloaded.is_static).toBe(existing.is_static);
     expect(reloaded.last_heartbeat).toBe(existing.last_heartbeat);
-    expect(reloaded.pending_update).toEqual(existing.pending_update);
-  });
-
-  it("clears pending_update only when the patch explicitly sends null -- never as a side effect of an unrelated field edit (ADR-029 clause 5)", async () => {
-    const pendingUpdate = {
-      short_description: "Pending short description",
-      long_description: "Pending long description",
-      traits: [],
-      topics: [],
-      critique: "Pending critique",
-      created_at: "2026-01-02T00:00:00.000Z",
-    };
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { pending_update: pendingUpdate });
-    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
-
-    // An unrelated edit that never mentions pending_update leaves it in place.
-    const afterUnrelatedEdit = await updatePersonaEntity(PERSONA_ID, { display_name: "New Name" });
-    expect(afterUnrelatedEdit.pending_update).toEqual(pendingUpdate);
-
-    // Explicit null clears it.
-    const afterClear = await updatePersonaEntity(PERSONA_ID, { pending_update: null });
-    expect(afterClear.pending_update).toBeUndefined();
-
-    const persisted = await loadLatestState();
-    expect(persisted!.personas[PERSONA_ID].entity.pending_update).toBeUndefined();
-  });
-
-  it("rejects a non-null pending_update outright, writing nothing (Clearable, not settable)", async () => {
-    const pendingUpdate = {
-      short_description: "Pending short description",
-      long_description: "Pending long description",
-      traits: [],
-      topics: [],
-      critique: "Pending critique",
-      created_at: "2026-01-02T00:00:00.000Z",
-    };
-    const existing = makeExistingPersonaEntity(PERSONA_ID, { pending_update: pendingUpdate });
-    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
-
-    await expect(
-      updatePersonaEntity(PERSONA_ID, { pending_update: { critique: "Forged proposal" } })
-    ).rejects.toThrow(CorrectionValidationError);
-
-    const persisted = await loadLatestState();
-    expect(persisted!.personas[PERSONA_ID].entity.pending_update).toEqual(pendingUpdate);
   });
 
   it("throws 'No persona found with id: X' for an unknown id", async () => {
@@ -896,7 +859,6 @@ describe("Apply Signal — confirm/dismiss reject delta and unrecognized fields 
     expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
     const persisted = await loadLatestState();
     const persona = persisted!.personas[PERSONA_ID].entity;
-    expect(persona.pending_update).toBeUndefined();
     expect(persona).toEqual(existing);
     const persistedSignal = persisted!.personas[PERSONA_ID].signals!.persona.find((s) => s.id === signal.id)!;
     expect(persistedSignal.status).toBe("candidate");
@@ -955,7 +917,6 @@ describe("Apply Signal — confirm/dismiss reject delta and unrecognized fields 
 
     const persisted = await loadLatestState();
     const persona = persisted!.personas[PERSONA_ID].entity;
-    expect(persona.pending_update).toBeUndefined();
     expect(persona).toEqual(existing);
   });
 
