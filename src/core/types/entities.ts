@@ -154,18 +154,6 @@ export interface HumanEntity {
   settings?: HumanSettings;
 }
 
-/** Persona identity fields a caller may propose changing — the shape
- * the Critic's own ceremony reflection proposal lands in `pending_update`
- * through. `signal.confirm` never produces one of these (Bolt 003 D1
- * narrows Bolt 008's original delta-accepting shape) — this type is no
- * longer shared with that operation. */
-export interface PersonaIdentityDelta {
-  short_description: string;
-  long_description: string;
-  traits: PersonaTrait[];
-  topics: PersonaTopic[];
-}
-
 export interface PersonaEntity {
   id: string;                    // UUID (or "ei"/"emmet" for built-in personas)
   display_name: string;          // What shows in UI (user's chosen name)
@@ -191,10 +179,6 @@ export interface PersonaEntity {
   last_heartbeat?: string;
   tools?: string[];              // IDs of ToolDefinitions this persona can use. Empty/absent = no tool access.
   description_embedding?: number[]; // Embedding of long_description (short_description fallback). Excludes traits. See embedding-service.ts:getPersonaDescriptionText.
-  pending_update?: PersonaIdentityDelta & {  // Proposed identity revision from ceremony reflection. Cleared when user accepts or dismisses via /reflect apply.
-    critique: string;              // Analyst's prose — for Ei to use when urgency is high, not surfaced to the persona.
-    created_at: string;            // ISO timestamp of when the Critic ran. Used to name the reflect folder.
-  };
   avatar_emoji?: string;            // Single emoji character used as avatar in place of initials.
   avatar_image?: string;            // Base64-encoded 64×64 image used as avatar (takes priority over avatar_emoji).
   preferred_theme?: string;         // Theme ID (built-in name or ThemeDefinition.id). Applied to chat panel when this persona is active.
