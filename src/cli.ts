@@ -249,7 +249,7 @@ Examples:
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'  # fact: full record, the permanent exception
   ei update topic abc-123 --json '{"category":"Project"}'  # topic/person/persona: merge patch — only the changed field, everything else untouched
   ei update person abc-123 --json '{"validated_date":null}'  # null clears a clearable field (RFC 7396); omitted fields are left alone. Clearable:
-                                                            #   topic.category, person.name/identifiers/validated_date, persona.pending_update —
+                                                            #   topic.category, person.name/identifiers/validated_date —
                                                             #   null on a required or defaulted field (e.g. person.relationship) rejects the write
   ei create quote --message-id "opencode:my-machine:ses_abc:msg_def" --text "you guessed it"  # Attest a quote against its source message
   ei fix quote --quote-id abc-123 --text "you guessed it, again"   # Re-verify corrected text against the quote's existing source

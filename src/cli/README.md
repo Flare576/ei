@@ -214,7 +214,6 @@ Sending `null` removes a field, but only where the record is still valid without
 |------|------------------------|
 | Topic | `category` |
 | Person | `name`, `identifiers`, `validated_date` — but not `name` and `identifiers` together, since a Person needs at least one of them |
-| Persona | `pending_update` (a Critic-proposed identity revision; this is the only way to dismiss it, and a non-null value for it is always rejected) |
 
 Everything else is either required (`name`, `description`, `sentiment`) or carries a default that the merged record must still satisfy (`person.relationship`), so `null` on it comes back as e.g. `Invalid person update: relationship: Required` and nothing is written. To blank such a field, send an empty value rather than `null` — `{"relationship":""}`, not `{"relationship":null}`.
 
@@ -224,7 +223,7 @@ Server-owned or in-app-only fields (`tools`, `model`, `heartbeat_delay_ms`, `con
 
 The rejection is deliberately generic — `Invalid <type> update: unrecognized field(s) present`, or `Invalid <type>: ...` on create, with MCP prefixing `Error: `. It does not name the offending key, because a property name is caller-controlled text and one carrying terminal control bytes must not reach stderr or an MCP response verbatim. The list above is therefore the reference for what to remove from your body.
 
-Read-shape fields are the one exception, stripped rather than rejected so the documented `ei --id` → edit → `ei update` round-trip still parses. For fact/topic/person those are `id`, `type`, `last_updated`, and `linked_quotes`. Persona's list is deliberately wider — `id`, `type`, `entity`, `is_static`, `last_updated`, `last_heartbeat`, `description_embedding` — because `ei --id <persona>` spreads the full record plus its own discriminator rather than a narrower projection. `pending_update` is deliberately NOT stripped, so an explicit `pending_update: null` reaches the schema and actually clears it. On create there is no strip at all — an `id` in a create body is rejected like any other unknown key.
+Read-shape fields are the one exception, stripped rather than rejected so the documented `ei --id` → edit → `ei update` round-trip still parses. For fact/topic/person those are `id`, `type`, `last_updated`, and `linked_quotes`. Persona's list is deliberately wider — `id`, `type`, `entity`, `is_static`, `last_updated`, `last_heartbeat`, `description_embedding` — because `ei --id <persona>` spreads the full record plus its own discriminator rather than a narrower projection. On create there is no strip at all — an `id` in a create body is rejected like any other unknown key.
 
 ```sh
 # fact: still a full replacement — fetch first, then submit the whole thing
