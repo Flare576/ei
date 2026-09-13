@@ -45,8 +45,6 @@ avatar_emoji, avatar_image,
 preferred_theme,
 notes: [ "…" ],                        # capped at 20 entries server-side — a write that
                                         # pushes the array past 20 is rejected
-pending_update,                        # UPDATE ONLY, and only `null` — see "Server-managed,
-                                        # not part of the writable surface" below
 ```
 
 **Everything else `ei --id` shows you is read-only.** `model`, `group_primary`,
@@ -99,12 +97,6 @@ don't invent or hand-edit them:
 - `last_updated` — always stamped to the current time.
 - `description_embedding` — always recomputed from whatever `long_description` results
   from your write; never the old value.
-- `pending_update` — a proposed identity revision from Ei's automatic Critic. **Clearable,
-  not settable**: `update` accepts `pending_update: null` to clear it and rejects any other
-  value for it outright. Omitting it from your payload leaves it exactly as it was — this is
-  the one thing that changed from the old contract, where every update wiped it as an
-  unwanted side effect regardless of your payload. If your write is meant to resolve a
-  pending proposal, you must say so: include `"pending_update": null`.
 - `is_static`, `last_heartbeat` — never writable, never disappear either; irrelevant to
   merge-patch since you never mention them.
 
@@ -145,9 +137,8 @@ ei update persona <id> --json '<json>'
 ```
 
 **`update` is RFC 7396 JSON Merge Patch.** Send only the field(s) you mean to change.
-Everything you omit is left completely unchanged. Send a field's new value to set it; send
-`null` for `pending_update` to clear it (the only field this applies to — every other
-writable field is Full Access, not Clearable). Arrays (`traits[]`, `topics[]`, `aliases`,
+Everything you omit is left completely unchanged. Send a field's new value to set it — every
+writable field is Full Access, and none of them accept `null` to clear. Arrays (`traits[]`, `topics[]`, `aliases`,
 `notes`) still replace **wholesale** when present — this is unchanged from before and is the
 one place "send everything you want to keep" still applies: if you send back a `traits` array
 with 3 of the persona's 4 traits, the 4th is gone. The safe pattern:
