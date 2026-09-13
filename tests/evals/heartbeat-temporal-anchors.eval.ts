@@ -142,23 +142,6 @@ const ANCHOR_PLUS_GAP_DATA: HeartbeatCheckPromptData = {
 const ANCHOR_PLUS_PENDING_DATA: HeartbeatCheckPromptData = {
   persona: {
     ...BASE_PERSONA,
-    pending_update: {
-      short_description: "A slightly softer Lena who has learned to sit with uncertainty.",
-      long_description: "Lena still cares deeply, but has grown more comfortable not having answers.",
-      traits: [
-        {
-          id: "t-new",
-          name: "Sits with Uncertainty",
-          description: "No longer pushes for resolution when things are genuinely open.",
-          sentiment: 0.7,
-          strength: 0.65,
-          last_updated: "2026-04-20T00:00:00Z",
-        },
-      ],
-      topics: [],
-      critique: "Lena is more measured than her identity suggests.",
-      created_at: "2026-04-20T00:00:00Z",
-    },
   },
   human: { topics: [], people: [] },
   recent_history: [
