@@ -861,6 +861,240 @@ describe("CLI --format prompt process behavior — Ei Signals section", () => {
   });
 });
 
+// ── Bolt 007: signal write verbs through the real CLI process ────────────────
+// Every case crosses the CLI transport boundary in a separate child process.
+describe("CLI add observation / confirm signal / dismiss signal process behavior (Bolt 007)", () => {
+  const personaId = "cli-signal-write-persona";
+  const signalId = "cli-signal-write-signal";
+  const actor = "cli-test-actor";
+  const observationBody = {
+    subject_person_id: "cli-signal-write-subject",
+    observer_kind: "subject_self",
+    message_id: "cli-signal-write-message",
+    quote_id: "cli-signal-write-quote",
+    observed_at: "2026-02-03T04:05:06.000Z",
+    dimension: "behavior",
+    direction: "confirms",
+    claim: "Writes falsifiable process-level CLI tests.",
+    extraction_confidence: 0.8,
+    lens: "persona",
+  };
+
+  function makeCliSignal(): EmergentSignal {
+    return {
+      id: signalId,
+      subject_persona_id: personaId,
+      claim: "Writes falsifiable process-level CLI tests.",
+      dimension: "behavior",
+      status: "candidate",
+      evidence_ids: ["existing-observation"],
+      first_observed_at: NOW,
+      last_observed_at: NOW,
+      observer_kinds: ["human"],
+      recurrence_count: 1,
+    };
+  }
+
+  function writeCliSignalState(signal = makeCliSignal()): EmergentSignal {
+    const state: StorageState = {
+      ...makeState(),
+      personas: {
+        [personaId]: {
+          entity: {
+            id: personaId,
+            display_name: "CLI Signal Write Persona",
+            entity: "system",
+            short_description: "Stable short description.",
+            long_description: "Stable long description.",
+            traits: [{ id: "stable-trait", name: "Stable", description: "Must not change.", sentiment: 0, last_updated: NOW }],
+            topics: [],
+            is_paused: false,
+            is_archived: false,
+            is_static: false,
+            last_updated: NOW,
+          },
+          messages: [],
+          observations: [],
+          signals: { persona: [signal], agent: [] },
+        },
+      },
+    };
+    writeFileSync(join(tempDir, "state.json"), JSON.stringify(state));
+    return signal;
+  }
+
+  function readState(): StorageState {
+    return JSON.parse(readFileSync(join(tempDir, "state.json"), "utf-8")) as StorageState;
+  }
+
+  function seedQueuedCorrection(): void {
+    writeFileSync(join(tempDir, "corrections.json"), JSON.stringify([{
+      op: "remove",
+      entity_type: "fact",
+      id: "already-absent-fact",
+      timestamp: NOW,
+    }]));
+  }
+
+  it("self-drains a valid add observation call into exactly one persisted observation and clears pending corrections", () => {
+    writeCliSignalState();
+    seedQueuedCorrection();
+
+    const result = runCli(["add", "observation", personaId, "--json", JSON.stringify(observationBody)]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ status: "recorded" });
+    expect(JSON.parse(readFileSync(join(tempDir, "corrections.json"), "utf-8"))).toEqual([]);
+    const observations = readState().personas[personaId].observations!;
+    expect(observations).toHaveLength(1);
+    expect(observations[0]).toEqual({
+      id: expect.any(String),
+      subject_person_id: observationBody.subject_person_id,
+      subject_persona_id: personaId,
+      observer_kind: "subject_self",
+      message_id: observationBody.message_id,
+      quote_id: observationBody.quote_id,
+      observed_at: observationBody.observed_at,
+      dimension: observationBody.dimension,
+      direction: observationBody.direction,
+      claim: observationBody.claim,
+      extraction_confidence: observationBody.extraction_confidence,
+      direct_write: true,
+    });
+  });
+
+  it.each([
+    ["confirm", "reviewed", "reviewed_by"],
+    ["dismiss", "dismissed", "dismissed_by"],
+  ] as const)("self-drains a valid %s signal call, changing only its status and %s audit field", (verb, status, auditField) => {
+    const originalSignal = writeCliSignalState();
+    seedQueuedCorrection();
+    const originalEntity = readState().personas[personaId].entity;
+
+    const result = runCli([verb, "signal", personaId, signalId, "--json", JSON.stringify({ actor })]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ status: "recorded", signal: { id: signalId, status } });
+    expect(JSON.parse(readFileSync(join(tempDir, "corrections.json"), "utf-8"))).toEqual([]);
+    const persisted = readState().personas[personaId];
+    expect(persisted.entity).toEqual(originalEntity);
+    expect(persisted.signals!.persona).toEqual([{
+      ...originalSignal,
+      status,
+      [auditField]: { actor, timestamp: expect.any(String) },
+    }]);
+  });
+
+  it.each([
+    ["add observation", ["add", "observation"]],
+    ["confirm signal", ["confirm", "signal"]],
+    ["dismiss signal", ["dismiss", "signal"]],
+  ])("rejects a malformed %s invocation before it can mutate state or queue a correction", (_verb, args) => {
+    writeCliSignalState();
+    const statePath = join(tempDir, "state.json");
+    const stateBefore = readFileSync(statePath, "utf-8");
+
+    const result = runCli(args);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Usage:");
+    expect(existsSync(join(tempDir, "corrections.json"))).toBe(false);
+    expect(readFileSync(statePath, "utf-8")).toBe(stateBefore);
+  });
+
+  it("queues a valid add observation correction with its complete same-persona wire shape without changing state.json", () => {
+    writeCliSignalState();
+    const statePath = join(tempDir, "state.json");
+    const stateBefore = readFileSync(statePath, "utf-8");
+    writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+    const result = runCli(["add", "observation", personaId, "--json", JSON.stringify(observationBody)]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ status: "queued" });
+    const corrections = JSON.parse(readFileSync(join(tempDir, "corrections.json"), "utf-8"));
+    expect(corrections).toEqual([{
+      op: "observation.add",
+      entity_type: "persona",
+      id: personaId,
+      lens: "persona",
+      observation: {
+        subject_person_id: observationBody.subject_person_id,
+        observer_kind: "subject_self",
+        message_id: observationBody.message_id,
+        quote_id: observationBody.quote_id,
+        observed_at: observationBody.observed_at,
+        dimension: observationBody.dimension,
+        direction: observationBody.direction,
+        claim: observationBody.claim,
+        extraction_confidence: observationBody.extraction_confidence,
+      },
+      timestamp: expect.any(String),
+    }]);
+    expect(Object.hasOwn(corrections[0].observation, "observer_persona_id")).toBe(false);
+    expect(readFileSync(statePath, "utf-8")).toBe(stateBefore);
+  });
+
+  it.each([
+    ["confirm", "signal.confirm"],
+    ["dismiss", "signal.dismiss"],
+  ] as const)("queues a valid %s signal correction with no delta and without changing state.json", (verb, op) => {
+    writeCliSignalState();
+    const statePath = join(tempDir, "state.json");
+    const stateBefore = readFileSync(statePath, "utf-8");
+    writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+    const result = runCli([verb, "signal", personaId, signalId, "--json", JSON.stringify({ actor })]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ status: "queued" });
+    const corrections = JSON.parse(readFileSync(join(tempDir, "corrections.json"), "utf-8"));
+    expect(corrections).toEqual([{
+      op,
+      entity_type: "persona",
+      id: personaId,
+      signal_id: signalId,
+      actor,
+      timestamp: expect.any(String),
+    }]);
+    expect(Object.hasOwn(corrections[0], "delta")).toBe(false);
+    expect(readFileSync(statePath, "utf-8")).toBe(stateBefore);
+  });
+
+  it.each(["confirm", "dismiss"] as const)("rejects a delta-bearing %s signal call before the queued drain branch", (verb) => {
+    writeCliSignalState();
+    seedQueuedCorrection();
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const stateBefore = readFileSync(statePath, "utf-8");
+    const correctionsBefore = readFileSync(correctionsPath, "utf-8");
+    writeFileSync(join(tempDir, "ei.lock"), JSON.stringify({ pid: process.pid }));
+
+    const result = runCli([verb, "signal", personaId, signalId, "--json", JSON.stringify({ actor, delta: { traits: [] } })]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/Invalid signal disposition|unrecognized field/i);
+    expect(readFileSync(correctionsPath, "utf-8")).toBe(correctionsBefore);
+    expect(readFileSync(statePath, "utf-8")).toBe(stateBefore);
+  });
+
+  it.each(["confirm", "dismiss"] as const)("rejects a delta-bearing %s signal call before the self-drain branch", (verb) => {
+    writeCliSignalState();
+    seedQueuedCorrection();
+    const statePath = join(tempDir, "state.json");
+    const correctionsPath = join(tempDir, "corrections.json");
+    const stateBefore = readFileSync(statePath, "utf-8");
+    const correctionsBefore = readFileSync(correctionsPath, "utf-8");
+
+    const result = runCli([verb, "signal", personaId, signalId, "--json", JSON.stringify({ actor, delta: { traits: [] } })]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/Invalid signal disposition|unrecognized field/i);
+    expect(readFileSync(correctionsPath, "utf-8")).toBe(correctionsBefore);
+    expect(readFileSync(statePath, "utf-8")).toBe(stateBefore);
+  });
+});
+
 // ── T1: successful CLI create/fix quote through a real spawned process ──────
 // (.sisyphus/reviews/quote-attestation-final-implementation.md): only the
 // FAILURE branches of `ei create quote`/`ei fix quote` had permanent
