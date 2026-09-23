@@ -1,28 +1,42 @@
 ---
-name: ei-reflect
+name: ei-manage-signals
 description: >
-  Reflection for a coding-harness agent on its own accumulated Ei signals
-  (Beta, Sisyphus, etc). Use when open signals have piled up and nothing
+  Teaches a CLI/MCP-driven external-harness coding agent (Beta, Sisyphus,
+  etc.) the four-step procedure for acting on an open Ei signal surfaced in
+  its own system prompt: (1) read your current full identity first — every
+  trait and topic, since CLI/MCP has no partial edit — (2) have a real
+  conversation with the human about the signal's claim before acting on it,
+  never fabricating a disposition, (3) write the agreed trait/topic back in
+  full via `ei update persona` (a whole-array merge patch — there is no
+  single-element edit for a CLI/MCP caller), then (4) clear the signal last,
+  once the identity write has actually landed, via `ei confirm signal`/
+  `ei dismiss signal` with no `delta` parameter, ever — those two calls are
+  pure status-transition bookkeeping now, for either lens, from any caller.
+  Runs two lenses over the same signal list — a Persona lens that revises
+  identity in Ei, and an Agent lens that revises the harness's own
+  instruction files — resolving each open signal independently, as its own
+  lens finishes with it. Use when open signals have piled up and nothing
   automatic is going to resolve them, and much of what accumulates is not
   identity at all but operating contract: how the agent works in this
-  harness. Runs two lenses over the same signal list — a Persona lens that
-  revises identity in Ei, and an Agent lens that revises the harness's own
-  instruction files — resolving each open signal by confirming or
-  dismissing it, independently, as its own lens finishes with it. Triggers:
-  "do a reflection", "reflect on my identity", "check my open signals",
-  "run the reflection", "my operating instructions have drifted", "update
-  my agent definition from what I've learned", "ei-reflect". This is
-  exclusively for the CALLING agent's own self-reflection — to edit or
-  direct ANOTHER persona's identity from the outside, use the `ei-persona`
-  skill instead.
+  harness. Triggers: "do a reflection", "check my open signals", "resolve
+  my signals", "clear my signals", "my operating instructions have
+  drifted", "update my agent definition from what I've learned",
+  "ei-manage-signals". This is exclusively for the CALLING agent's own
+  signals, over CLI/MCP — a Native persona has its own dedicated tool set
+  (`get_my_identity`, `edit_trait`, `edit_topic`, `update_description`,
+  `resolve_signal`) and doesn't need this skill at all. To edit or direct
+  ANOTHER persona's identity from the outside, use the `ei-persona` skill
+  instead.
 ---
 
-# Ei Reflection — root dispatcher
+# Ei Signal Management — root dispatcher
 
 Every observed behavior about you is captured as a `PersonaObservation` —
 attributed, source-linked, permanent — grouped into a reviewable
-`EmergentSignal`. Nothing automatic reads a signal or decides what to do
-with it. Coding agents generate this evidence every day regardless; running
+`EmergentSignal`. Nothing automatic reads a signal, applies it, or decides
+what to do with it: identity editing and signal resolution are two
+separate, deliberate acts, and both require you to be here, live, with the
+human. Coding agents generate this evidence every day regardless; running
 this skill is how it actually gets looked at.
 
 Two different kinds of evidence exist:
@@ -43,7 +57,7 @@ else's `ei add observation` call from an earlier run, with no field
 marking it as such. There is still a decision left, for every signal
 still open: confirm it, or dismiss it.
 
-That is why reflection is two lenses over one signal list.
+That is why this is two lenses over one signal list.
 
 **This file is the dispatcher.** It resolves who you are, reads every open
 signal once, and hands each lens its own bucket. Each signal is resolved
@@ -61,7 +75,7 @@ is no shared resource to gate at the end.
 If your persona has a Person record carrying an `Ei Persona` identifier,
 you do not read, write, or clear its `description` — that record isn't
 part of this process. The one thing you need from it is its `id`, for
-`ei add observation`'s `subject_person_id` field (Step 1c) — nothing else
+`ei add observation`'s `subject_person_id` field (Step 1b) — nothing else
 about it is relevant here.
 
 ---
@@ -81,25 +95,34 @@ about it is relevant here.
   entire job is deciding what to do with your open signals. `reviewed`,
   `dismissed`, and `superseded` are already resolved; leave them alone.
 - **Resolving a signal** means calling `ei confirm signal` or
-  `ei dismiss signal` on it (→ `references/cli.md`). There is no third
-  disposition and no timer: an open signal you resolve neither way this
-  run simply stays open, and the next run's `ei list signals` shows it
-  again. **That is a completely safe, ordinary outcome — never a failure
-  to report as one.** Nothing about an open signal expires, degrades, or
-  needs rescuing before a later run gets to it.
+  `ei dismiss signal` on it (→ `references/cli.md`). **Neither call ever
+  accepts a `delta` — not for either lens, not from any caller.** There is
+  no staging step: confirming or dismissing a signal is pure
+  status-transition bookkeeping, nothing else. If a signal implies an
+  identity change, that change is written first, directly, through
+  `ei update persona` — then the signal is cleared, separately, once the
+  write has landed. There is no third disposition and no timer: an open
+  signal you resolve neither way this run simply stays open, and the next
+  run's `ei list signals` shows it again. **That is a completely safe,
+  ordinary outcome — never a failure to report as one.** Nothing about an
+  open signal expires, degrades, or needs rescuing before a later run gets
+  to it.
 
 ### What each lens does with an open signal
 
 | Lens | Confirms by | Dismisses by |
 |---|---|---|
-| **Persona** | Writing the agreed identity change directly (`ei update persona`), then `ei confirm signal` with no `delta` — pure bookkeeping, since the real write already happened | `ei dismiss signal` — the claim isn't real, or isn't worth acting on |
-| **Agent** | Writing the rule into a harness file (`lenses/agent.md`), verifying it landed, then `ei confirm signal` with no `delta` | `ei dismiss signal` — same |
+| **Persona** | Writing the agreed identity change directly (`ei update persona`), verifying it landed, then `ei confirm signal` — pure bookkeeping, since the real write already happened | `ei dismiss signal` — the claim isn't real, or isn't worth acting on |
+| **Agent** | Writing the rule into a harness file (`lenses/agent.md`), verifying it landed, then `ei confirm signal` — same discipline | `ei dismiss signal` — same |
 
-Neither lens uses `confirm`'s optional `delta` parameter from inside this
-skill — see `references/cli.md` → "Resolve one signal" for exactly why
-(short version: it stages a second review step nobody needs, since the
-live user in this conversation has already approved the content by the
-time you'd call it).
+Both lenses follow the same four-step shape: **read your current state,
+converse with the human, write the change in full, then clear the signal
+last.** Neither lens ever reaches for a `delta` argument on `confirm` — see
+`references/cli.md` → "Resolve one signal" for exactly why that parameter
+doesn't exist anymore (short version: it used to stage a second review
+step nobody needed, since the live user in this conversation has already
+approved the content by the time you'd call it — that staging mechanism is
+retired, not just unused).
 
 ---
 
@@ -107,9 +130,9 @@ time you'd call it).
 
 Confirm the CLI is reachable: `ei --help` (or `bunx ei-tui --help` if `ei`
 isn't on PATH — the same fallback `ei-curate`, `ei-persona`, `ei-search`, and
-`ei-rewrite` all use). **The live `--help` output is the source of truth** for
-the exact command surface; this skill is a guide, but the CLI evolves. If
-neither works, stop and say so — do not read, plan, or write anything.
+`ei-rewrite` all use). **The live `--help` output is the source of truth**
+for the exact command surface; this skill is a guide, but the CLI evolves.
+If neither works, stop and say so — do not read, plan, or write anything.
 
 There's no separate "has Ei run here before" check. If there's no data yet
 for your persona, Step 1's reads say so directly.
@@ -162,8 +185,8 @@ in this conversation resolved it — use it and skip to the verification read.
 **Otherwise, list the candidates once and choose from that one list.** Do not
 run several searches and compare them; they have no snapshot guarantee, and
 `ei personas -n 1 <name>` silently returns the *most recently updated* of
-however many Personas match, which is how you end up reflecting into a
-stranger's record.
+however many Personas match, which is how you end up managing a stranger's
+signals.
 
 ```bash
 PERSONAS_JSON=$(mktemp)
@@ -208,36 +231,7 @@ before anything writes. (These are the Persona's own identity fields — a
 Persona never has a plain `description` field; that name belongs to a
 Person record, a different entity.) If the lookup returns nothing, stop.
 
-### 1b. Note any pre-existing `pending_update`
-
-```bash
-PERSONA_SNAPSHOT=$(mktemp)
-ei --id "$PERSONA_ID" > "$PERSONA_SNAPSHOT"
-jq '{ has_pending_update: has("pending_update") }' "$PERSONA_SNAPSHOT"
-```
-
-If `has_pending_update` came back `true`, **read that object out of
-`$PERSONA_SNAPSHOT` now** — `critique`, `short_description`,
-`long_description`, `traits`, `topics`, all of it — and carry it forward as
-additional input to the Persona lens (`lenses/persona.md` Step 1). Restate
-it to the user in a sentence or two while you're here: it's an identity
-proposal nobody has resolved yet. The only thing that ever creates one is
-an earlier `ei confirm signal --delta` call against this persona — the
-TUI and web Persona Settings tab can review, edit, apply, or dismiss an
-existing proposal, but neither one mints a new one on its own — and it's about
-to be resolved either way, since the Persona lens's own write this run
-must clear it (`"pending_update": null`) regardless of what else changes.
-
-> Reading it now, rather than waiting until the Persona lens re-reads the
-> record fresh, is still worth doing even though nothing else can touch it
-> in the meantime — `ei update` is a merge patch, so a write that doesn't
-> mention `pending_update` leaves it exactly as it is
-> (`references/cli.md` → "Clearing `pending_update`"). It's simply one
-> fewer read later.
-
-Then `rm -f "$PERSONA_SNAPSHOT"` — it holds the full persona identity.
-
-### 1c. Find your linked Person record's id, if you have one
+### 1b. Find your linked Person record's id, if you have one
 
 This is needed for exactly one thing: `ei add observation`'s
 `subject_person_id` field, if this run asserts something new that isn't
@@ -297,22 +291,16 @@ jq '[.[] | select(.status == "candidate" or .status == "recurring")]' "$SIGNALS_
 `$SIGNAL_ID`** when they later `confirm`/`dismiss` it — there's no separate
 lookup, it's the same value sitting right there in this snapshot.
 
-**If that filtered list is empty AND Step 1b found no `pending_update`**,
-there's nothing to reflect on. Say so and stop.
+**If the full open-signal list is empty, there's nothing to manage. Say so
+and stop.** Otherwise split by lens: **if the persona-lens slice is empty,
+the Persona lens is `not_applicable`** — say so and skip running it, there's
+nothing left for it to check now that there's no stranded proposal to look
+for. **If the agent-lens slice is empty, the Agent lens is `not_applicable`**
+the same way. Run only the lens(es) that actually have open signals to
+address this run.
 
-**If that filtered list is empty BUT Step 1b found a `pending_update`**, the
-Persona lens still runs — with an empty persona-lens signal list — purely to
-resolve that stranded proposal (`lenses/persona.md`'s `no_change` path
-covers this). The Agent lens is `not_applicable` in this case, since an
-empty agent-lens list has nothing else that could make it otherwise.
-
-Otherwise: if the persona-lens slice is empty (and there's no
-`pending_update` either), the Persona lens still runs — see its `no_change`
-path (`lenses/persona.md`). If the agent-lens slice is empty, the Agent
-lens is `not_applicable` and you can say so without running it.
-
-`rm -f "$SIGNALS_JSON"` once both lenses have read what they need from it —
-not before.
+`rm -f "$SIGNALS_JSON"` once every lens you're running has read what it
+needs from it — not before.
 
 ---
 
@@ -321,8 +309,7 @@ not before.
 → **`lenses/persona.md`**
 
 Hand it: `$PERSONA_ID`, `$LINKED_PERSON_ID` (or the fact that there isn't
-one), the persona-lens open signals from Step 2, and the `pending_update`
-snapshot Step 1b noted — or the fact there wasn't one.
+one), and the persona-lens open signals from Step 2.
 
 It writes only to Ei's Persona record. It confirms or dismisses the
 persona-lens signals it addressed; anything it doesn't get to stays open for
@@ -339,7 +326,7 @@ one), and the agent-lens open signals from Step 2.
 
 It writes only into the harness's own instruction files, always as a marked
 delimited region, always after explicit approval. The only Ei writes it
-performs are asserting a brand-new observation (Step 1c/`references/cli.md`)
+performs are asserting a brand-new observation (Step 1b/`references/cli.md`)
 and confirming/dismissing the signals it addressed — it never touches
 identity fields.
 
@@ -379,14 +366,14 @@ outcome — never present "everything resolved" as the only successful one.
 - **Never fabricate a disposition.** `confirm`/`dismiss` requires the live
   user to have actually agreed, in this conversation, to that specific
   signal's outcome — every write is deliberate, never inferred.
-- **Never use `confirm`'s `delta` parameter from inside this skill.** Write
-  identity changes directly through `ei update persona`, then confirm bare.
-  → `references/cli.md` and `lenses/persona.md` for why.
-- **`pending_update` does not clear itself on write.** Every persona
-  update is a merge patch — omitting `pending_update` leaves it exactly
-  as it was. The Persona lens's write must include `"pending_update": null`
-  explicitly, every time it writes identity, or a resolved proposal stays
-  stuck forever.
+- **`confirm`/`dismiss` never accept a `delta`, for either lens, from any
+  caller.** There is no staging step to reach for. Write an identity change
+  directly through `ei update persona`, verify it landed, and only then
+  confirm the signal bare. → `references/cli.md` and `lenses/persona.md`
+  for the full sequence.
+- **Identity first, signal last — always in that order.** A signal cleared
+  before its identity change lands would leave a "resolved" signal with
+  nothing behind it if the write later turns out to have failed.
 - **Never first-match a Persona, a Person record, or a signal.** For
   Personas and Person records: take one candidate list, require an exact
   unique match, and otherwise ask. For signals: `ei list signals` already
@@ -425,7 +412,9 @@ outcome — never present "everything resolved" as the only successful one.
   coverage limit, not a permissions problem.
   → `references/unreachable-surfaces.md`.
 - **`ei update` is a merge patch.** Send only the field(s) you mean to change —
-  anything you omit is left completely unchanged. → `references/cli.md`.
+  anything you omit is left completely unchanged. `traits`/`topics` are the one
+  exception: send either at all, and it replaces the whole array — there is no
+  per-element edit on this path. → `references/cli.md`.
 - **There is no undo.** Ei writes are append-only corrections; a mistake is
   fixed with another write, never reverted. Confirm before writing.
 - **A queued write's own response is the only thing you can trust.**

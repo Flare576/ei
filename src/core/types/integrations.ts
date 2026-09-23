@@ -42,6 +42,32 @@ export interface ToolDefinition {
   created_at: string;                  // ISO timestamp
   max_calls_per_interaction?: number;  // Max times LLM may call this tool per response turn. Default: 3.
   is_submit?: boolean;                 // If true, calling this tool IS the structured response — terminates the tool loop immediately and its arguments become response.parsed
+  heartbeat_eligible?: boolean;        // Whether heartbeat-classified requests may include this tool. Default: true (eligible) when absent.
+}
+
+// Reserved tool names (Bolt 003 S2; extended Stint holistic close-out round 1
+// S2): the complete set of native tools whose per-request ToolDefinition
+// injects a caller-bound `config` value (e.g. resolve_signal's
+// `config.persona_id`, assembled fresh by buildResolveSignalTool()/
+// buildPersonaIdentityTools() every request, never persisted). A persisted
+// custom ToolDefinition sharing one of these names could otherwise be
+// assigned to a persona and collide with the native definition at
+// tool-assembly time; executeToolCalls's builtin-wins name selection and the
+// pre-request dedupeToolsByName pass (both in src/core/tools/index.ts)
+// already make such a collision harmless, but rejecting the name at
+// creation/rename closes the collision earlier — same reserved-name pattern
+// as RESERVED_PERSONA_NAMES (src/core/types/entities.ts).
+export const RESERVED_TOOL_NAMES = [
+  "resolve_signal",
+  "get_my_identity",
+  "edit_trait",
+  "edit_topic",
+  "update_description",
+] as const;
+export type ReservedToolName = typeof RESERVED_TOOL_NAMES[number];
+
+export function isReservedToolName(name: string): boolean {
+  return (RESERVED_TOOL_NAMES as readonly string[]).includes(name);
 }
 
 // =============================================================================
@@ -60,7 +86,6 @@ export interface PersonaSummary {
   avatar_emoji?: string;
   avatar_image?: string;
   preferred_theme?: string;
-  has_pending_update: boolean;
 }
 
 export interface MessageQueryOptions {

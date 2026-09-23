@@ -28,9 +28,9 @@ prompts: a self-identifying region a tool owns, inside content it does not.
 ## Markers
 
 ```
-<!-- ei-reflect:begin persona=<PERSONA_ID> -->
+<!-- ei-manage-signals:begin persona=<PERSONA_ID> -->
 … content …
-<!-- ei-reflect:end persona=<PERSONA_ID> -->
+<!-- ei-manage-signals:end persona=<PERSONA_ID> -->
 ```
 
 Both markers carry the Persona's **id** — the value `../SKILL.md` Step 1a
@@ -69,6 +69,16 @@ Rules:
   neither foreign nor yours: leave it exactly alone.
 - **Never nest regions**, and never place a region inside a fenced code block.
 - If the file doesn't end with a newline, add one before appending.
+- **A prior region using the retired `ei-reflect:begin`/`ei-reflect:end`
+  marker prefix is still yours.** That prefix belonged to this skill's
+  predecessor, `ei-reflect`, which taught the same delimited-region discipline
+  under a different name. If you find one keyed to a Persona id from your own
+  candidate list, treat it exactly like a prior region under the current
+  prefix — replace it in place with a region using the current
+  `ei-manage-signals:` markers, rather than leaving the stale prefix or
+  appending a second, duplicate region beside it. Tell the user you migrated
+  the marker prefix; it's a one-line note, not a separate approval step, since
+  the content itself still goes through the normal approval flow in Step 5.
 
 ---
 
@@ -88,14 +98,14 @@ that is about to land inside a delimited region.
 So before you type it, look at the name you read. It must be:
 
 - a **single line**, and
-- free of `<!--`, `-->`, and `ei-reflect:`.
+- free of `<!--`, `-->`, and `ei-manage-signals:`.
 
 Almost every name passes. A name that doesn't can close the region early: a
 `display_name` of `X)` followed by a newline and a literal
-`<!-- ei-reflect:end persona=<the id> -->` puts a matching end marker inside
-your heading, *before* the real one. The next run's exact-pair lookup stops
-there, the remainder of the region is stranded as loose text in the user's
-file, and the idempotency guarantee above is gone.
+`<!-- ei-manage-signals:end persona=<the id> -->` puts a matching end marker
+inside your heading, *before* the real one. The next run's exact-pair lookup
+stops there, the remainder of the region is stranded as loose text in the
+user's file, and the idempotency guarantee above is gone.
 
 **If the name fails either check, drop it and use the bare heading
 `## Working agreements`.** The `persona=` id in the markers already identifies
@@ -139,14 +149,14 @@ against that file. Prose costs tokens forever.
   isn't.
 
 ```
-<!-- ei-reflect:begin persona=ea475c69-2e52-42f2-b3e3-b112df189336 -->
+<!-- ei-manage-signals:begin persona=ea475c69-2e52-42f2-b3e3-b112df189336 -->
 ## Working agreements (Sisyphus)
 
 - Run the full vitest suite before calling a task done — never a narrowed file.
 - vitest needs the repo's pinned Node; bare `node` here is a Bun shim that
   can't run it.
 - Verify a sub-delegate's claim independently before building on it.
-<!-- ei-reflect:end persona=ea475c69-2e52-42f2-b3e3-b112df189336 -->
+<!-- ei-manage-signals:end persona=ea475c69-2e52-42f2-b3e3-b112df189336 -->
 ```
 
 ---
@@ -160,9 +170,9 @@ applies directly. Two harnesses have formats where it doesn't.
 
 `.codex/agents/*.toml` and `~/.codex/agents/*.toml` carry instructions in a
 `developer_instructions` string. The region goes **inside that string value**,
-using the same `<!-- ei-reflect:begin … -->` markers — the markers exist for
-*your* idempotency, and inside a prompt string they're inert text the model
-reads past.
+using the same `<!-- ei-manage-signals:begin … -->` markers — the markers
+exist for *your* idempotency, and inside a prompt string they're inert text
+the model reads past.
 
 You must preserve TOML syntax exactly: the quoting style of the existing
 string, its escaping, and every other key in the file. If the value is a

@@ -119,14 +119,6 @@ describe("PersonaState", () => {
       long_description: "A long description with lots of detail",
       description_embedding: [0.1, 0.2, 0.3],
       last_heartbeat: new Date().toISOString(),
-      pending_update: {
-        short_description: "pending short",
-        long_description: "pending long",
-        traits: [],
-        topics: [],
-        critique: "pending critique",
-        created_at: new Date().toISOString(),
-      },
     });
 
     const makeBarePersona = (id: string, overrides: Partial<PersonaEntity> = {}): PersonaEntity => ({
@@ -151,8 +143,8 @@ describe("PersonaState", () => {
       state.add(persona);
 
       // makeBarePersona deliberately omits aliases/long_description/
-      // description_embedding/pending_update/last_heartbeat entirely (not
-      // merely undefined-valued) to prove a genuine full replace, not a merge.
+      // description_embedding/last_heartbeat entirely (not merely
+      // undefined-valued) to prove a genuine full replace, not a merge.
       const result = state.replace("persona-1", makeBarePersona("persona-1"));
       const stored = state.getById("persona-1")!;
 
@@ -161,7 +153,6 @@ describe("PersonaState", () => {
       expect(stored.aliases).toBeUndefined();
       expect(stored.long_description).toBeUndefined();
       expect(stored.description_embedding).toBeUndefined();
-      expect(stored.pending_update).toBeUndefined();
       expect(stored.last_heartbeat).toBeUndefined();
     });
 
@@ -190,7 +181,7 @@ describe("PersonaState", () => {
       state.add(persona);
 
       // Partial<PersonaEntity> update with only display_name set -- update()
-      // must NOT touch aliases/long_description/description_embedding/pending_update.
+      // must NOT touch aliases/long_description/description_embedding.
       state.update("persona-4", { display_name: "Merged Name" });
 
       const stored = state.getById("persona-4")!;
@@ -198,8 +189,6 @@ describe("PersonaState", () => {
       expect(stored.aliases).toEqual(["FullBot", "Full Alias"]);
       expect(stored.long_description).toBe("A long description with lots of detail");
       expect(stored.description_embedding).toEqual([0.1, 0.2, 0.3]);
-      expect(stored.pending_update).toBeDefined();
-      expect(stored.pending_update!.short_description).toBe("pending short");
       expect(stored.last_heartbeat).toBeDefined();
     });
   });
@@ -498,7 +487,7 @@ describe("PersonaState", () => {
     });
   });
 
-  describe("reference isolation — pending_update must not alias entity.traits", () => {
+  describe("reference isolation", () => {
     it("getById returns a live reference into internal state (not a copy)", () => {
       const persona = makePersona("RefBot");
       state.add(persona);
@@ -508,76 +497,6 @@ describe("PersonaState", () => {
 
       // Both calls return the same object identity
       expect(ref1).toBe(ref2);
-    });
-
-    it("updating pending_update.traits does not change entity.traits", () => {
-      const persona: PersonaEntity = {
-        ...makePersona("IsolationBot"),
-        traits: [
-          { id: "t1", name: "Original Trait", description: "The real one", sentiment: 0.5, strength: 0.8, last_updated: "" },
-        ],
-      };
-      state.add(persona);
-
-      // Simulate what handleReflectionCritic does: write pending_update with different traits
-      const pendingTraits = [
-        { id: "p1", name: "Proposed Trait", description: "The proposed one", sentiment: 0.7, strength: 0.9, last_updated: "" },
-      ];
-      state.update(persona.id, {
-        pending_update: {
-          short_description: "Proposed short",
-          long_description: "Proposed long",
-          traits: pendingTraits,
-          topics: [],
-          critique: "Some critique",
-          created_at: new Date().toISOString(),
-        },
-      });
-
-      const stored = state.getById(persona.id)!;
-
-      // entity.traits must be the original — untouched by pending_update write
-      expect(stored.traits).toHaveLength(1);
-      expect(stored.traits[0].name).toBe("Original Trait");
-
-      // pending_update.traits must have the proposed values
-      expect(stored.pending_update).toBeDefined();
-      expect(stored.pending_update!.traits).toHaveLength(1);
-      expect(stored.pending_update!.traits[0].name).toBe("Proposed Trait");
-
-      // The two arrays must NOT be the same reference
-      expect(stored.traits).not.toBe(stored.pending_update!.traits);
-    });
-
-    it("mutating pending_update.traits[0].name after update does not affect entity.traits[0].name", () => {
-      const persona: PersonaEntity = {
-        ...makePersona("MutationBot"),
-        traits: [
-          { id: "t1", name: "Stable Name", description: "desc", sentiment: 0, strength: 0.5, last_updated: "" },
-        ],
-      };
-      state.add(persona);
-
-      const pendingTraits = [
-        { id: "t1", name: "Stable Name", description: "desc", sentiment: 0, strength: 0.5, last_updated: "" },
-      ];
-      state.update(persona.id, {
-        pending_update: {
-          short_description: "",
-          long_description: "",
-          traits: pendingTraits,
-          topics: [],
-          critique: "",
-          created_at: new Date().toISOString(),
-        },
-      });
-
-      // Simulate what the UI does: mutate the returned pending_update object directly
-      const stored = state.getById(persona.id)!;
-      stored.pending_update!.traits[0].name = "MUTATED";
-
-      // entity.traits[0].name must still be the original
-      expect(state.getById(persona.id)!.traits[0].name).toBe("Stable Name");
     });
   });
 
@@ -637,6 +556,31 @@ describe("PersonaState", () => {
         },
       });
       expect(reloadedState.export()).toEqual(firstExport);
+    });
+
+    it("strips a legacy pending_update field from a persisted record on load, and keeps it stripped through an ordinary write/export/reload cycle (Bolt 004 D1)", () => {
+      const persona = makePersona("LegacyPendingBot");
+      // Intentionally old persisted shape: `pending_update` predates ADR-039's
+      // retirement of the reflection-staging model and no longer exists on
+      // PersonaEntity, so the cast stays at this API boundary the same way
+      // the legacy-observations/signals test above does.
+      const legacyPersonas = {
+        [persona.id]: {
+          entity: { ...persona, pending_update: { summary: "stale identity revision" } },
+          messages: [],
+        },
+      } as unknown as Parameters<PersonaState["load"]>[0];
+
+      state.load(legacyPersonas);
+      expect(state.getById(persona.id)).not.toHaveProperty("pending_update");
+
+      state.messages_append(persona.id, makeMessage("ordinary write"));
+      const exported = state.export();
+      expect(exported[persona.id].entity).not.toHaveProperty("pending_update");
+
+      const reloadedState = new PersonaState();
+      reloadedState.load(exported);
+      expect(reloadedState.getById(persona.id)).not.toHaveProperty("pending_update");
     });
   });
 

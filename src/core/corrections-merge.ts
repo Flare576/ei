@@ -30,10 +30,7 @@
  * src/core/types/entities.ts and data-items.ts) have no nested
  * plain-object fields subject to patching: every Full-Access field is
  * either a scalar or an array, and arrays replace wholesale under
- * ADR-029, never element-merge. `pending_update` (persona) is the one
- * object-shaped field this ADR touches, and it is Clearable-only —
- * accepted as `null` (remove) or absent (unchanged), never as a
- * caller-supplied object — so the recursive branch below exists for
+ * ADR-029, never element-merge. The recursive branch below exists for
  * completeness against the general RFC, not because any field currently
  * exercises it.
  */

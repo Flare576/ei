@@ -102,7 +102,7 @@ function readFlag(args: string[], flag: string): string | undefined {
  * Resolves the JSON body for `ei create`/`ei update` from either
  * `--json '<json>'` (unchanged, argv-exposed) or `--json-file <path>`
  * (r4: a non-argv input mode for the most sensitive write payloads —
- * persona reflection especially, where the body may carry a full persona
+ * `ei update persona` especially, where the body may carry a full persona
  * identity or PersonLog record). Exactly one of the two must be present;
  * passing both, or neither, is a usage error. `--json-file` never writes
  * anything itself — the caller supplies the path (typically a `mktemp`
@@ -173,8 +173,7 @@ Usage:
                                  attributed to the caller — routed through the same Match/Update-Reduce
                                  pipeline as an extraction-produced observation (see Persona Signals below)
   ei confirm signal <personaId> <signalId> --json '<json>' | --json-file <path>  Mark a candidate/recurring
-                                 EmergentSignal reviewed; a Persona-lens signal may include an identity
-                                 delta, PROPOSED via pending_update, never applied directly
+                                 EmergentSignal reviewed — a pure status transition, never an identity write
   ei dismiss signal <personaId> <signalId> --json '<json>' | --json-file <path>  Mark a candidate/recurring
                                  EmergentSignal dismissed — no identity write, either lens
   ei list signals <personaId>  List every EmergentSignal recorded for a persona, across both lenses (persona +
@@ -203,14 +202,12 @@ Quotes (source-verified — a quote claims someone really said something):
 
 Persona Signals (EmergentSignal — corroborated testimony about a persona's identity or operating contract):
   ei add observation <personaId> --json '{"subject_person_id":"...","observer_kind":"human","dimension":"behavior","direction":"novel","claim":"...","lens":"persona"}'
-  ei confirm signal <personaId> <signalId> --json '{"actor":"flare576"}'  # status transition only, no delta
-  ei confirm signal <personaId> <signalId> --json '{"actor":"flare576","delta":{"short_description":"...","long_description":"...","traits":[],"topics":[]}}'
+  ei confirm signal <personaId> <signalId> --json '{"actor":"flare576"}'
   ei dismiss signal <personaId> <signalId> --json '{"actor":"flare576"}'
-  'confirm'/'dismiss' refuse (no state change) against a signal already dismissed or reviewed — reopening a
-  dismissed signal is exclusively the evidence-citing path in the automatic promotion pipeline, never this
-  write surface. A Persona-lens 'confirm' with a delta is refused outright if that persona already has a
-  pending_update set; resolve the existing proposal (the TUI/Web apply-UI) first, then retry. An Agent-lens
-  'confirm' never writes PersonaEntity, even if a delta is supplied — it only marks the signal reviewed.
+  'confirm'/'dismiss' accept only {"actor"} — never an identity delta or any other field — and perform a
+  pure status transition, no PersonaEntity write, either lens. They refuse (no state change) against a
+  signal already dismissed or reviewed — reopening a dismissed signal is exclusively the evidence-citing
+  path in the automatic promotion pipeline, never this write surface.
 
 Options:
   --number, -n        Maximum number of results (default: 10)
@@ -231,7 +228,7 @@ Options:
                        patch — only the fields you're changing — for topic/person/persona update); on the
                        quote verbs it merges over the discrete flags
   --json-file <path>  Same body as --json, read from a file instead of argv — prefer this for large or
-                       sensitive payloads (persona reflection especially) so the JSON never appears in
+                       sensitive payloads (\`ei update persona\` especially) so the JSON never appears in
                        process listings/shell history. Exactly one of --json/--json-file is required for
                        create/update; passing both, or neither, is a usage error. create/update only —
                        the quote verbs take --json and ignore this flag.
@@ -252,7 +249,7 @@ Examples:
   ei update fact abc-123 --json '{"name":"Field of Study","description":"Updated","sentiment":0,"validated_date":""}'  # fact: full record, the permanent exception
   ei update topic abc-123 --json '{"category":"Project"}'  # topic/person/persona: merge patch — only the changed field, everything else untouched
   ei update person abc-123 --json '{"validated_date":null}'  # null clears a clearable field (RFC 7396); omitted fields are left alone. Clearable:
-                                                            #   topic.category, person.name/identifiers/validated_date, persona.pending_update —
+                                                            #   topic.category, person.name/identifiers/validated_date —
                                                             #   null on a required or defaulted field (e.g. person.relationship) rejects the write
   ei create quote --message-id "opencode:my-machine:ses_abc:msg_def" --text "you guessed it"  # Attest a quote against its source message
   ei fix quote --quote-id abc-123 --text "you guessed it, again"   # Re-verify corrected text against the quote's existing source

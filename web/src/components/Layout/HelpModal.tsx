@@ -145,24 +145,6 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
               Click it (or press Enter) to reveal the responses and advance the conversation.
             </p>
           </section>
-
-          <section className="ei-help-section">
-            <h3>Reflections</h3>
-            <p className="ei-help-text">
-              After enough conversations, Ei notices patterns — things a persona consistently cares about,
-              ways they've grown, traits that have shifted. When that happens, Ei generates a <strong>reflection</strong>:
-              a proposed update to the persona's identity (description, traits, topics).
-            </p>
-            <p className="ei-help-text">
-              A badge (✦) appears on the persona pill in the left panel when a reflection is pending.
-              Click it to open the Reflection Review — you'll see the current identity side-by-side with
-              the proposed changes, a chat window to discuss it with the persona, and the option to
-              apply, edit, or dismiss.
-            </p>
-            <p className="ei-help-text">
-              Nothing changes automatically. You're always in the driver's seat.
-            </p>
-          </section>
         </div>
 
         <div className="ei-help-modal__footer">

@@ -3,8 +3,7 @@
 **Target:** Ei's own Persona record.
 **Question:** *Who is this agent, and how does it relate?*
 **Receives from `../SKILL.md`:** `$PERSONA_ID`, `$LINKED_PERSON_ID` (or the
-fact there isn't one), the persona-lens open signals from Step 2, and the
-`pending_update` snapshot from Step 1b (or the fact there wasn't one).
+fact there isn't one), and the persona-lens open signals from Step 2.
 **Returns to `../SKILL.md`:** `no_change` · `approved_and_applied` · `blocked`
 
 This lens handles identity: reading open persona-lens signals, discussing
@@ -29,34 +28,17 @@ storage. → `../references/cli.md`.
 ## 1. Fetch your current identity
 
 `../SKILL.md` Step 1 already resolved and verified `$PERSONA_ID`. The search
-result it used is abbreviated; fetch the full record:
+result it used is abbreviated; fetch the full record — every trait, every
+topic, both descriptions. CLI/MCP has no partial identity read, and this
+same full array is what you must resend, complete, in Step 3 if you touch
+`traits` or `topics` at all:
 
 ```bash
 ei --id "$PERSONA_ID"
 ```
 
 This is your current Persona Identity for the reflection: `short_description`,
-`long_description`, `traits`, `topics`, and — if it survived — `pending_update`.
-
-**`pending_update` is a proposed identity revision nobody has resolved yet.**
-The only thing that ever creates one is an earlier `ei confirm signal
---delta` call against this persona — the TUI and web Persona Settings tab
-can review, edit, apply, or dismiss an existing proposal, but neither one
-mints a new one on its own. Read its critique: it becomes additional
-input to your reflection, not a replacement for it. It does not clear
-itself as a side effect of writing — your Step 3 patch below must include
-`"pending_update": null` explicitly, every time, even when nothing else
-changed.
-
-**Where you get it is not the read above.** `../SKILL.md` Step 1b captures it
-during preflight, before anything writes, and that capture is your source:
-
-- Step 1b reported a pending proposal **and handed you the snapshot** → use
-  the snapshot.
-- Step 1b reported no pending proposal → there wasn't one. Nothing to fold in.
-- Step 1b reported one and you don't have its contents → **stop and say so.**
-  Don't proceed as though there was never one, and don't go looking for it:
-  the record cannot give it back.
+`long_description`, `traits`, and `topics`.
 
 ---
 
@@ -130,7 +112,7 @@ The conversation itself will sometimes produce evidence that isn't on the
 Step 2 list at all — the user tells you something about yourself, or you
 notice something true about your own behavior that nobody has attributed
 yet. If it's worth keeping and you have a `$LINKED_PERSON_ID`
-(`../SKILL.md` Step 1c), assert it:
+(`../SKILL.md` Step 1b), assert it:
 
 → `../references/cli.md` → "Assert a brand-new observation"
 
@@ -209,16 +191,20 @@ Once you and the user are aligned, write the agreed identity through Ei's
 `persona` corrections path as an RFC 7396 JSON Merge Patch: **read the
 current record for context, build a small patch containing ONLY the
 field(s) you mean to change, send just that** — anything you omit is left
-completely unchanged, you never resend the whole record.
+completely unchanged, you never resend the whole record. The one exception
+is `traits`/`topics` themselves: CLI/MCP has no per-element edit, so if you
+touch either array at all, you send the complete, corrected array — every
+entry, not just the one you changed — or you silently delete every entry
+you left out.
 
-**Write the identity change directly. Do not route it through
-`ei confirm signal --delta`.** That parameter exists in the CLI, but it
-stages a `pending_update` that then needs a *separate* review pass — useful
-when nobody is live to approve content on the spot, which is never true
-here. You already have the user's live approval; writing directly is the
-same amount of work and skips manufacturing a review step nobody will ever
-look at. → `../references/cli.md` → "Resolve one signal" for the full
-reasoning.
+**Write the identity change directly, then clear the signal — in that
+order, never the other way.** `ei confirm signal`/`ei dismiss signal` never
+accept or apply an identity delta, for either lens, from any caller: there
+is no `delta` parameter to reach for and no staged proposal it could
+create. Confirming a signal is pure bookkeeping — a status transition, an
+audit-trail actor, nothing else — so it only means something once the real
+identity write has already landed. → `../references/cli.md` → "Writing
+identity" and "Resolve one signal" for the full reasoning.
 
 ### Re-read first
 
@@ -249,11 +235,9 @@ Build a patch containing **only** the fields you and the user agreed on:
 
 - `short_description`
 - `long_description`
-- `traits` — the agreed new array, or the merged result of the specific
-  adds/removes you discussed
+- `traits` — the complete agreed array, every entry, not just the one that
+  changed
 - `topics` — same
-- `pending_update: null` — see below; almost every write from this lens
-  needs this too, even when none of the four fields above changed
 
 Every field you leave OUT of the patch is left completely unchanged on the
 stored record — including `avatar_emoji`, `preferred_theme`, and `notes`.
@@ -261,15 +245,11 @@ Do not send `traits`/`topics` unless you're actually changing them; sending
 either means "these are ALL the entries now," so a partial array would
 delete every entry you didn't include.
 
-**Write this even if none of the four content fields changed.** If the
-reflection concludes the identity already matches reality — a legitimate
-outcome, not a failure, and the `no_change` state — still send a write when
-there's a `pending_update` to clear, or open signals to bookkeep. A write
-that omits `pending_update` LEAVES IT IN PLACE. So a `no_change` write's
-patch is `{"pending_update": null}` — possibly the ONLY field in it —
-whenever one exists. If there's no `pending_update` AND no content
-changed, there may be nothing to write to `ei update persona` at all; you
-still resolve the signals themselves (below) either way.
+**If the reflection concludes the identity already matches reality**, that's
+a legitimate outcome — not a failure, and the `no_change` state below — and
+there may be nothing to send to `ei update persona` at all. You still
+resolve the signals themselves (below) either way: "already accurate" is a
+real disposition, not a reason to leave a signal open.
 
 Self-check against step 2's guidance before writing — the backend does
 **not** enforce these, by design, so a single incremental edit is never
@@ -281,8 +261,8 @@ blocked, but that means you're the only guardrail:
   within 0..1
 
 If a trait or topic is brand new, omit `id` and the server assigns a fresh
-one. If you're editing an existing trait/topic, keep its `id` so it updates in
-place rather than duplicating.
+one. If you're editing an existing trait/topic, keep its `id` so it updates
+in place rather than duplicating.
 
 ### Write it back
 
@@ -297,15 +277,20 @@ ei --id "$PERSONA_ID"
 ```
 
 Confirm `short_description`, `long_description`, and the `traits`/`topics`
-arrays (count and content) match what you intended, and that the response
-has **no** `pending_update` key (if your patch cleared one). **A mismatch
-here is inconclusive, not proof the write failed** — `ei update persona`
-exposes no drain-mode signal, so there's no reliable way to distinguish
-"still queued, hasn't drained yet" from "genuinely wrong" by re-reading.
-Don't wait-and-retry into `blocked` on a mismatch alone. Reserve `blocked`
-for an explicit failure — `ei update` exiting non-zero, or a CLI error —
-and report a mismatch with no such error as unconfirmed, not failed
+arrays (count and content) match what you intended. **A mismatch here is
+inconclusive, not proof the write failed** — `ei update persona` exposes no
+drain-mode signal, so there's no reliable way to distinguish "still queued,
+hasn't drained yet" from "genuinely wrong" by re-reading. Don't wait-and-
+retry into `blocked` on a mismatch alone. Reserve `blocked` for an explicit
+failure — `ei update` exiting non-zero, or a CLI error — and report a
+mismatch with no such error as unconfirmed, not failed
 (→ `../references/cli.md` → "There is no undo").
+
+**Only once the identity write has landed — or you've confirmed there was
+nothing to write — do you clear the signal.** This ordering is the whole
+point of the four-step procedure: a signal cleared before its identity
+change lands would leave nothing to show for a "resolved" signal if the
+write later turns out to have failed.
 
 ### Resolve every signal this lens addressed
 
@@ -318,16 +303,17 @@ ei confirm signal "$PERSONA_ID" "$SIGNAL_ID" --json '{"actor":"'"$PERSONA_ID"'"}
 ei dismiss signal "$PERSONA_ID" "$SIGNAL_ID" --json '{"actor":"'"$PERSONA_ID"'"}'
 ```
 
-No `delta` — the identity write already happened above, if there was one.
-`confirm` here is pure bookkeeping: it records that this signal was reviewed
-and by whom. **`ei list signals` keeps returning it regardless** — it's an
-all-status audit surface, not a to-do list that shrinks — but its `status`
-is now `reviewed`, so it no longer counts as *open*, and neither `confirm`
-nor `dismiss` can be called on it again (both are refused once a signal
-leaves `candidate`/`recurring` — get the disposition right the first time).
-A signal that only confirmed an already-accurate trait, with no identity
-edit at all, still gets `confirm` — it was reviewed, the conclusion was
-"no change needed here," that's a real disposition.
+No `delta` — there is no such parameter to pass; the identity write already
+happened above, if there was one. `confirm` here is pure bookkeeping: it
+records that this signal was reviewed and by whom. **`ei list signals` keeps
+returning it regardless** — it's an all-status audit surface, not a to-do
+list that shrinks — but its `status` is now `reviewed`, so it no longer
+counts as *open*, and neither `confirm` nor `dismiss` can be called on it
+again (both are refused once a signal leaves `candidate`/`recurring` — get
+the disposition right the first time). A signal that only confirmed an
+already-accurate trait, with no identity edit at all, still gets `confirm`
+— it was reviewed, the conclusion was "no change needed here," that's a
+real disposition.
 
 **Leave anything you didn't get to.** A signal you and the user didn't
 discuss, or discussed but didn't reach a conclusion on, is neither confirmed
@@ -368,10 +354,10 @@ later write in the same run failed.
 - **Writes are picked up live.** If Ei is running, the update reaches it via
   the corrections queue almost immediately; if it isn't, the write is already
   saved and will be there next time it starts. No restart, no manual reload.
-- **`pending_update` does not clear itself.** Your identity write's patch
-  must explicitly include `"pending_update": null` whenever one exists.
-  There's no separate "dismiss the proposal" command distinct from this
-  write — this write IS the dismissal.
+- **Identity first, signal last — always in that order.** The four-step
+  procedure exists specifically so a cleared signal always corresponds to a
+  landed identity change (or a deliberate decision that none was needed) —
+  never the reverse.
 - **New observations keep arriving.** The session that runs this skill will
   itself generate new ones, from ordinary conversation. That's expected —
   reflecting today doesn't pause tomorrow's evidence.

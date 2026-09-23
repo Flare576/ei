@@ -22,7 +22,6 @@ export {
   shouldStartCeremony, 
   startCeremony,
   handleCeremonyProgress,
-  queueReflectionDrain,
   prunePersonaMessages,
   runHumanCeremony,
   } from "./ceremony.js";

@@ -1,4 +1,4 @@
-import type { PersonaEntity, Message, ContextStatus, PersonaObservation, PersonaSignalCollections, EmergentSignal, SignalDimension, PersonaIdentityDelta } from "../types.js";
+import type { PersonaEntity, Message, ContextStatus, PersonaObservation, PersonaSignalCollections, EmergentSignal, SignalDimension } from "../types.js";
 import { levenshtein, normalizeForMatch } from "../utils/levenshtein.js";
 
 /** A persisted persona record as it may exist on disk — `observations`/
@@ -115,17 +115,21 @@ export class PersonaState {
    * failure or missing-data error (D4).
    *
    * A record still carrying `external_reflection_only` from before
-   * ADR-007's sunset (ADR-038, Bolt 002 D2) is silently dropped here —
-   * not a named migration with logging, just the hydration rule itself:
-   * the schema no longer declares the field, nothing replaces what it
-   * did, and there is no error and no warning for a value that predates
-   * this. */
+   * ADR-007's sunset (ADR-038, Bolt 002 D2), or `pending_update` from
+   * before ADR-039's retirement of the reflection-staging model (Bolt
+   * 004 D1), is silently dropped here — not a named migration with
+   * logging, just the hydration rule itself: the schema no longer
+   * declares either field, nothing replaces what they did, and there is
+   * no error and no warning for a value that predates this. */
   load(personas: Record<string, PersistedPersonaRecord>): void {
     this.personas = new Map(
       Object.entries(personas).map(([id, data]) => {
-        const entity = data.entity as PersonaEntity & { external_reflection_only?: unknown };
+        const entity = data.entity as PersonaEntity & { external_reflection_only?: unknown; pending_update?: unknown };
         if ("external_reflection_only" in entity) {
           delete entity.external_reflection_only;
+        }
+        if ("pending_update" in entity) {
+          delete entity.pending_update;
         }
         return [
           id,
@@ -678,29 +682,26 @@ export class PersonaState {
   }
 
   /**
-   * Apply Signal — confirm (Bolt 008 D2/D3/D5, Spec §4.12). Sets
-   * `status: "reviewed"` + `reviewed_by` on `signalId`, found by id
-   * across BOTH lens buckets (a signal's own id is unique regardless of
-   * which bucket it lives in). Throws — never a silent no-op or a
-   * partial mutation — when: `personaId` doesn't resolve; `signalId`
-   * doesn't resolve on that persona in either lens; the signal is
-   * already terminal (`dismissed`/`reviewed`, D5); or `delta` is
-   * supplied for a Persona-lens signal whose `PersonaEntity` already has
-   * a `pending_update` set (D3's collision policy — the caller must
-   * resolve the existing proposal first, via the existing apply/dismiss
-   * UI, before retrying). Every check above runs BEFORE any mutation, so
-   * a thrown rejection never leaves the signal half-transitioned.
+   * Apply Signal — confirm (Bolt 003 D1/D5, Spec §4.12, narrows Bolt
+   * 008's original D2/D3 delta-accepting shape). Sets `status:
+   * "reviewed"` + `reviewed_by` on `signalId`, found by id across BOTH
+   * lens buckets (a signal's own id is unique regardless of which
+   * bucket it lives in). Throws — never a silent no-op or a partial
+   * mutation — when `personaId` doesn't resolve, `signalId` doesn't
+   * resolve on that persona in either lens, or the signal is already
+   * terminal (`dismissed`/`reviewed`, D5). Every check runs BEFORE any
+   * mutation, so a thrown rejection never leaves the signal
+   * half-transitioned.
    *
-   * An Agent-lens signal's `delta` (if any) is silently ignored — D2:
-   * "no PersonaEntity write of any kind, for any Agent-lens confirm
-   * regardless of any delta the caller supplies." For a Persona-lens
-   * signal with a delta and no collision, the same atomic step also
-   * writes a `pending_update` PROPOSAL (never applies the delta
-   * directly — `Processor.finalizeReflection` remains the only path
-   * that ever writes identity fields onto `PersonaEntity`, unchanged by
-   * this Bolt).
+   * Never accepts or applies an identity delta, for either lens (Bolt
+   * 003 D1) — pure status-transition bookkeeping only. This is a
+   * behavior change from Bolt 008: confirm no longer stages an
+   * identity-revision proposal on the persona itself. Every caller
+   * (native `resolve_signal`, CLI, MCP) rejects a `delta`-bearing call
+   * outright before it ever reaches this method (R1/AT1), so there is
+   * no longer a `delta` parameter to accept here.
    */
-  signal_confirm(personaId: string, signalId: string, actor: string, timestamp: string, delta?: PersonaIdentityDelta): EmergentSignal {
+  signal_confirm(personaId: string, signalId: string, actor: string, timestamp: string): EmergentSignal {
     const data = this.personas.get(personaId);
     if (!data) throw new Error(`Cannot confirm signal ${signalId}: persona ${personaId} not found`);
     let found: { lens: "persona" | "agent"; signal: EmergentSignal } | undefined;
@@ -709,30 +710,13 @@ export class PersonaState {
       if (signal) { found = { lens, signal }; break; }
     }
     if (!found) throw new Error(`Cannot confirm signal ${signalId}: not found on persona ${personaId}`);
-    const { lens, signal } = found;
+    const { signal } = found;
     if (signal.status !== "candidate" && signal.status !== "recurring") {
       throw new Error(`Cannot confirm signal ${signalId}: already "${signal.status}" (terminal)`);
-    }
-    if (lens === "persona" && delta && data.entity.pending_update) {
-      throw new Error(`Cannot confirm signal ${signalId} with a delta: persona ${personaId} already has a pending_update — resolve it first`);
     }
 
     signal.status = "reviewed";
     signal.reviewed_by = { actor, timestamp };
-    if (lens === "persona" && delta) {
-      data.entity = {
-        ...data.entity,
-        pending_update: {
-          short_description: delta.short_description,
-          long_description: delta.long_description,
-          traits: delta.traits,
-          topics: delta.topics,
-          critique: `Confirmed via CLI/MCP from signal ${signal.id}: ${signal.claim}`,
-          created_at: timestamp,
-        },
-        last_updated: timestamp,
-      };
-    }
     return structuredClone(signal);
   }
 

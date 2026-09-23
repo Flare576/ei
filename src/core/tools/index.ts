@@ -160,6 +160,7 @@ export function buildPersonaNoteTools(personaId: string): ToolDefinition[] {
       enabled: true,
       created_at: now,
       max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
     },
     {
       id: `builtin-clear-note-${personaId}`,
@@ -180,6 +181,170 @@ export function buildPersonaNoteTools(personaId: string): ToolDefinition[] {
       enabled: true,
       created_at: now,
       max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
+    },
+  ];
+}
+
+export function registerPersonaIdentityExecutors(
+  getMyIdentity: ToolExecutor,
+  editTrait: ToolExecutor,
+  editTopic: ToolExecutor,
+  updateDescription: ToolExecutor
+): void {
+  executorRegistry.set(getMyIdentity.name, getMyIdentity);
+  executorRegistry.set(editTrait.name, editTrait);
+  executorRegistry.set(editTopic.name, editTopic);
+  executorRegistry.set(updateDescription.name, updateDescription);
+}
+
+/**
+ * Build per-request ToolDefinition objects for the four native identity tools, injecting the
+ * current personaId via config so the shared executors know which persona to read/write.
+ * get_my_identity is read-only and left at heartbeat_eligible's default (true); the three
+ * write tools are each explicitly heartbeat_eligible: false (D1).
+ */
+export function buildPersonaIdentityTools(personaId: string): ToolDefinition[] {
+  const now = new Date(0).toISOString();
+  return [
+    {
+      id: `builtin-get-my-identity-${personaId}`,
+      provider_id: "ei",
+      name: "get_my_identity",
+      display_name: "Get My Identity",
+      description: "Retrieve your own complete identity: every current trait and topic, each carrying a stable id, plus your short and long description. Use this before edit_trait/edit_topic to look up the id of the item you want to change, or just to see your full current self-model.",
+      input_schema: {
+        type: "object",
+        properties: {},
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+    },
+    {
+      id: `builtin-edit-trait-${personaId}`,
+      provider_id: "ei",
+      name: "edit_trait",
+      display_name: "Edit Trait",
+      description: "Add, remove, or update one of your own traits. action: \"add\" requires name, description, and sentiment (-1 to 1; strength 0-1 is optional) and mints a fresh id. action: \"remove\" requires the id of an existing trait and deletes exactly that one. action: \"update\" requires the id of an existing trait plus one or more fields to change (name, description, sentiment, strength) — only the supplied fields are changed. Look up ids via get_my_identity first.",
+      input_schema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["add", "remove", "update"], description: "Which operation to perform." },
+          id: { type: "string", description: "Existing trait id — required for remove/update." },
+          name: { type: "string", description: "Trait name — required for add." },
+          description: { type: "string", description: "Trait description — required for add." },
+          sentiment: { type: "number", description: "Sentiment from -1 to 1 — required for add." },
+          strength: { type: "number", description: "Optional strength from 0 to 1." },
+        },
+        required: ["action"],
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
+    },
+    {
+      id: `builtin-edit-topic-${personaId}`,
+      provider_id: "ei",
+      name: "edit_topic",
+      display_name: "Edit Topic",
+      description: "Add, remove, or update one of your own topics. action: \"add\" requires name, perspective, approach, personal_stake, sentiment (-1 to 1), exposure_current (0-1), and exposure_desired (0-1), and mints a fresh id. action: \"remove\" requires the id of an existing topic and deletes exactly that one. action: \"update\" requires the id of an existing topic plus one or more fields to change — only the supplied fields are changed. Look up ids via get_my_identity first.",
+      input_schema: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["add", "remove", "update"], description: "Which operation to perform." },
+          id: { type: "string", description: "Existing topic id — required for remove/update." },
+          name: { type: "string", description: "Topic name — required for add." },
+          perspective: { type: "string", description: "Your view/opinion on this topic — required for add." },
+          approach: { type: "string", description: "How you prefer to engage with this topic — required for add." },
+          personal_stake: { type: "string", description: "Why this topic matters to you personally — required for add." },
+          sentiment: { type: "number", description: "Sentiment from -1 to 1 — required for add." },
+          exposure_current: { type: "number", description: "How recently discussed, 0 to 1 — required for add." },
+          exposure_desired: { type: "number", description: "How much you want to discuss it, 0 to 1 — required for add." },
+        },
+        required: ["action"],
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
+    },
+    {
+      id: `builtin-update-description-${personaId}`,
+      provider_id: "ei",
+      name: "update_description",
+      display_name: "Update Description",
+      description: "Update your own short and/or long description. Supply short_description and/or long_description — only the supplied field(s) change, the other is left untouched. Changing long_description recomputes your description embedding.",
+      input_schema: {
+        type: "object",
+        properties: {
+          short_description: { type: "string", description: "New short description. Omit to leave unchanged." },
+          long_description: { type: "string", description: "New long description. Omit to leave unchanged." },
+        },
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
+    },
+  ];
+}
+
+/** Register the `resolve_signal` executor — called by Processor once at
+ * startup (Bolt 003 D2), same shared-registry pattern as
+ * registerPersonaNoteExecutors above. Not persona-specific itself: the
+ * executor resolves which persona it's bound to per-call, from the
+ * `config.persona_id` a per-request ToolDefinition (built by
+ * buildResolveSignalTool below) injects. */
+export function registerResolveSignalExecutor(executor: ToolExecutor): void {
+  executorRegistry.set(executor.name, executor);
+}
+
+/**
+ * Build the per-request ToolDefinition for `resolve_signal` (Bolt 003
+ * D2/D4), injecting the current personaId via config so the shared
+ * executor knows which persona's own signals it may resolve — same
+ * per-request injection pattern as buildPersonaNoteTools above.
+ * `heartbeat_eligible: false` (D2): a write-capable tool, never
+ * reachable from a heartbeat-classified request.
+ */
+export function buildResolveSignalTool(personaId: string): ToolDefinition[] {
+  const now = new Date(0).toISOString();
+  return [
+    {
+      id: `builtin-resolve-signal-${personaId}`,
+      provider_id: "ei",
+      name: "resolve_signal",
+      display_name: "Resolve Signal",
+      description: "Confirm or dismiss one of your own EmergentSignals — a candidate or recurring pattern Ei has noticed about you (identity, voice, behavior) or the human you're talking with is testifying to. Confirming marks it reviewed (agreed, worth keeping as evidence); dismissing marks it dismissed (not accurate, or not worth tracking). This ONLY transitions the signal's own status — it never changes your traits/topics/description directly, and it cannot affect a signal belonging to any other persona. Use ei_signal_list (if you have MCP access) or your own system prompt's signal surfacing to find a signal's id first.",
+      input_schema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "The id of the EmergentSignal to resolve (yours only)." },
+          action: { type: "string", enum: ["confirm", "dismiss"], description: "\"confirm\" marks the signal reviewed; \"dismiss\" marks it dismissed." },
+        },
+        required: ["id", "action"],
+      },
+      config: { persona_id: personaId },
+      runtime: "any",
+      builtin: true,
+      enabled: true,
+      created_at: now,
+      max_calls_per_interaction: 5,
+      heartbeat_eligible: false,
     },
   ];
 }
@@ -240,6 +405,30 @@ export function findSubmitToolCall(
 // =============================================================================
 
 /**
+ * Collapse a tool list to one definition per name, builtin wins (Bolt 003 S2;
+ * extended Stint holistic close-out round 1 S2). A builtin/native tool
+ * definition -- e.g. resolve_signal's or edit_trait's per-request
+ * config.persona_id, injected fresh by buildResolveSignalTool()/
+ * buildPersonaIdentityTools() every call and never persisted -- must never
+ * be shadowed by a persisted custom tool sharing its name, regardless of
+ * assembly order. Only a later non-builtin definition may replace an
+ * earlier non-builtin one of the same name; a builtin definition, once set,
+ * always wins. Processor calls this before building the model request so a
+ * legacy persisted collision contributes exactly one native definition to
+ * the LLM call; executeToolCalls applies it again at execution dispatch as
+ * defense in depth. Never mutates the input definitions or any stored
+ * StateManager record -- purely a per-request assembly filter.
+ */
+export function dedupeToolsByName(tools: ToolDefinition[]): ToolDefinition[] {
+  const toolsByName = new Map<string, ToolDefinition>();
+  for (const t of tools) {
+    if (toolsByName.get(t.name)?.builtin && !t.builtin) continue;
+    toolsByName.set(t.name, t);
+  }
+  return [...toolsByName.values()];
+}
+
+/**
  * Execute a batch of tool calls.
  * - Tracks call counts; tools that have hit their limit are skipped.
  * - Catastrophic failures (throws) → error=true; tool is marked for removal.
@@ -254,7 +443,7 @@ export async function executeToolCalls(
 ): Promise<{ results: ToolResult[]; exhaustedToolNames: Set<string> }> {
   const results: ToolResult[] = [];
   const exhaustedToolNames = new Set<string>();
-  const toolsByName = new Map(tools.map(t => [t.name, t]));
+  const toolsByName = new Map(dedupeToolsByName(tools).map(t => [t.name, t]));
 
   for (const call of calls) {
     const isSystemTool = SYSTEM_TOOLS.some(t => t.name === call.name);

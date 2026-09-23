@@ -20,7 +20,6 @@ import type {
   PersonaObservation,
   EmergentSignal,
   PersonaSignalCollections,
-  PersonaIdentityDelta,
 } from "./types.js";
 import { RoomMode, RESERVED_PERSONA_IDS, ContextStatus } from "./types.js";
 import { BUILT_IN_FACT_NAMES } from './constants/built-in-facts.js';
@@ -1095,14 +1094,15 @@ export class StateManager {
     return merged;
   }
 
-  /** Apply Signal — confirm (Bolt 008 D2/D3/D5). Delegates to
-   * `PersonaState.signal_confirm`, which throws on any refusal (not
-   * found, terminal status, or a Persona-lens delta colliding with an
-   * existing `pending_update`) — this wrapper only adds the drain-time
-   * timestamp and the `scheduleSave()` a successful write needs; a
-   * thrown rejection never reaches `scheduleSave()`. */
-  signal_confirm(personaId: string, signalId: string, actor: string, delta?: PersonaIdentityDelta): EmergentSignal {
-    const result = this.personaState.signal_confirm(personaId, signalId, actor, new Date().toISOString(), delta);
+  /** Apply Signal — confirm (Bolt 003 D1/D5, narrows Bolt 008's original
+   * D2/D3 delta-accepting shape). Delegates to `PersonaState.signal_confirm`,
+   * which throws on any refusal (not found, or terminal status) — this
+   * wrapper only adds the drain-time timestamp and the `scheduleSave()`
+   * a successful write needs; a thrown rejection never reaches
+   * `scheduleSave()`. Never accepts a delta (Bolt 003 D1) — every
+   * caller already rejects one outright before reaching here. */
+  signal_confirm(personaId: string, signalId: string, actor: string): EmergentSignal {
+    const result = this.personaState.signal_confirm(personaId, signalId, actor, new Date().toISOString());
     this.scheduleSave();
     return result;
   }

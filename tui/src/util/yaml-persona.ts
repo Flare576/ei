@@ -223,7 +223,7 @@ export interface PersonaYAMLResult {
  * Deterministic content fingerprint of exactly the PersonaEntity fields the
  * YAML editor can change — the same set `personaFromYAML()` below writes into
  * its `updates` object. Everything else on PersonaEntity (last_heartbeat,
- * description_embedding, pending_update, is_archived, last_updated itself,
+ * description_embedding, is_archived, last_updated itself,
  * ...) is deliberately excluded — a concurrent write that only touches those
  * is not a collision with anything the user could be editing.
  *

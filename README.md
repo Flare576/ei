@@ -37,7 +37,7 @@ Ei can import sessions from your coding tools and extract what you've been worki
 
 Supported tools: OpenCode, Claude Code, Cursor, Codex, and Pi/OMP. Full setup in the [TUI README → Coding Tool Integrations](./tui/README.md#coding-tool-integrations).
 
-Agents aren't read-only anymore. Run `bunx ei-tui` — the onboarding wizard walks you through setup and installs Ei's skills for your detected coding tools, plus two hooks per tool: one that injects relevant memory before each prompt, and one that tells the agent which Ei persona it *is* at session start. Four of the skills write, each walking the agent through explicit confirmation before every write: `ei-curate` corrects bad extracted data, splits merged records, and repoints mis-attributed quotes; `ei-persona` creates or directs a persona's identity (display name, traits, topics); `ei-rewrite` slims a Person or Topic record that's grown into a catch-all, redistributing the overflow instead of discarding it; and `ei-reflect` lets an agent reflect on its own accumulated record. Two are read-only: `ei-search` for deliberate mid-conversation lookups, and `ei-generate` for turning what Ei knows about a subject into a document you can hand to someone. All of it without hand-editing JSON — full table in the [CLI README → Shipped Skills](./src/cli/README.md#shipped-skills). Re-run the wizard anytime with `/onboarding`.
+Agents aren't read-only anymore. Run `bunx ei-tui` — the onboarding wizard walks you through setup and installs Ei's skills for your detected coding tools, plus two hooks per tool: one that injects relevant memory before each prompt, and one that tells the agent which Ei persona it *is* at session start. Four of the skills write, each walking the agent through explicit confirmation before every write: `ei-curate` corrects bad extracted data, splits merged records, and repoints mis-attributed quotes; `ei-persona` creates or directs a persona's identity (display name, traits, topics); `ei-rewrite` slims a Person or Topic record that's grown into a catch-all, redistributing the overflow instead of discarding it; and `ei-manage-signals` walks a coding agent through resolving its own open signals — read your current identity, talk it through with the human, write the agreed change in full, then clear the signal.
 
 The same corrections are also available as MCP tools (`ei_create`, `ei_update`, `ei_remove`) alongside the existing search/lookup tools, but MCP is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](./src/cli/README.md#mcp-server) for manual MCP setup.
 
@@ -96,6 +96,10 @@ Personas can use tools. Not just read-from-memory tools — *actual* tools. Web 
 | `find_memory` | Semantic search of your personal memory — facts, traits, topics, people, quotes. Personas call this automatically when the conversation touches something they might know about you. Supports the `persona` filter to scope results to what a specific persona has learned. |
 | `fetch_memory` | Full-record lookup for a specific human entity (Fact, Topic, Person, or Quote) by ID. Use after `find_memory` to retrieve complete details. |
 | `fetch_message` | Retrieve a specific message by fully-qualified ID with optional surrounding context. Searches Ei conversations and supported external coding-session stores. |
+| `get_my_identity` | See your persona's full self-model: every trait and topic (each with a stable id) plus its short and long description. *(read-only, heartbeat-eligible)* |
+| `edit_trait` | Add, remove, or update one of your own traits. *(heartbeat-ineligible)* |
+| `edit_topic` | Add, remove, or update one of your own topics. *(heartbeat-ineligible)* |
+| `update_description` | Update your own short and/or long description. *(heartbeat-ineligible)* |
 | `file_read` | Read a file from your local filesystem *(TUI only)* |
 | `list_directory` | Explore folder structure *(TUI only)* |
 | `directory_tree` | Recursive directory tree *(TUI only)* |

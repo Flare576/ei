@@ -26,20 +26,20 @@ ei list signals <personaId>         # every EmergentSignal on this persona, both
 
 `ei --id` on a **persona** returns the `PersonaEntity` shape only —
 `display_name`, `short_description`, `long_description`, `traits`,
-`topics`, `pending_update`. It does **not** include `observations` or
-`signals` — those live in a separate collection this lookup never
-projects. `ei list signals <personaId>` is the only CLI read path for
-signals; **there is no CLI read path for raw observations at all**, even
-though they exist independently in storage as soon as `ei add observation`
-records one — Match hasn't necessarily created or attached a signal citing
-it yet (→ "Assert a brand-new observation" below). Once Match does run, the
-resulting signal's `evidence_ids` references it, and that's the only way
-this skill ever sees it again — not because it exists solely as evidence,
-but because a signal's `evidence_ids` is the only surfaced pointer to it.
+`topics`. It does **not** include `observations` or `signals` — those live
+in a separate collection this lookup never projects. `ei list signals
+<personaId>` is the only CLI read path for signals; **there is no CLI read
+path for raw observations at all**, even though they exist independently in
+storage as soon as `ei add observation` records one — Match hasn't
+necessarily created or attached a signal citing it yet (→ "Assert a
+brand-new observation" below). Once Match does run, the resulting signal's
+`evidence_ids` references it, and that's the only way this skill ever sees
+it again — not because it exists solely as evidence, but because a signal's
+`evidence_ids` is the only surfaced pointer to it.
 `ei --id` on a **person**
 also returns `linked_quotes`; this skill has no reason to read a linked
 Person record at all except to find its `id` for `ei add observation`'s
-`subject_person_id` field (`../SKILL.md` Step 1c) — see that step for why.
+`subject_person_id` field (`../SKILL.md` Step 1b) — see that step for why.
 
 **The CLI does support a name query — and this skill never uses it.** Two
 independent reasons, either one sufficient:
@@ -64,7 +64,7 @@ hold — never by a command you construct out of one.
 
 ## Enumerating every linked Person record
 
-`../SKILL.md` Step 1c needs the Person record's id for `ei add observation`'s
+`../SKILL.md` Step 1b needs the Person record's id for `ei add observation`'s
 `subject_person_id` field. Enumerate every match rather than trusting a
 first one: a wrong id here misattributes a brand-new observation to the
 wrong person, permanently.
@@ -163,15 +163,17 @@ exception to it: a display name is unvalidated, user-controlled text that
 can contain quotes or shell metacharacters, and this skill never puts one
 on a command line in any form, `--json` included.
 
-**Neither call ever needs `--json '{"delta": ...}'` from inside this
-skill.** `confirm` accepts an optional `delta` that atomically creates a
-`pending_update` proposal — but that proposal still needs a *separate*
-review pass to actually land on the persona's identity fields (only the
-TUI/Web pending-update UI applies one), and the human is *already here,
-live, having already approved the content* by the time you'd call this.
-Sending a `delta` here would just manufacture a review step nobody needs.
-Write the identity change directly instead (below), then confirm bare —
-see `../lenses/persona.md` for the full sequence.
+**Neither call accepts a `delta` — not as an argument, not for either
+lens, not from any caller.** There is no staging step anymore: an earlier
+design let `confirm` accept an optional `delta` that created a
+`pending_update` proposal a *separate* review pass then had to apply.
+That mechanism is retired outright, not merely unused. `signal.confirm`/
+`signal.dismiss` are pure status-transition bookkeeping now — `status`,
+`reviewed_by`/`dismissed_by`, nothing else — for both the Persona lens and
+the Agent lens alike. If the signal implies an identity change, make that
+change first, directly, through `ei update persona` (below) — then call
+`confirm` bare, exactly as shown above. Supplying a `delta`-shaped field
+here is rejected outright, the same way any other unrecognized field is.
 
 `confirm`/`dismiss` only accept `candidate` or `recurring` signals — calling
 either on one already `reviewed`, `dismissed`, or `superseded` is refused,
@@ -186,7 +188,7 @@ you have to engineer.
 ### Assert a brand-new observation
 
 Only when the conversation surfaces something not already covered by an
-open signal, and only when Step 1c found exactly one `$LINKED_PERSON_ID`:
+open signal, and only when Step 1b found exactly one `$LINKED_PERSON_ID`:
 
 ```bash
 ei add observation "$PERSONA_ID" --json '{
@@ -231,11 +233,11 @@ goes through, not something this CLI call resolves inline. Concretely:
 - If Ei is running live, that Match request joins its normal processing
   queue and resolves on the live Processor's own timing — seconds to
   minutes later, not before this script's next line runs.
-- If Ei is NOT running live (the common case for a by-hand CLI reflection
-  — see `../SKILL.md` Step 0), the observation self-drains into
-  `state.json`, but the Match request it queued has nobody to process it
-  until an Ei instance actually launches and its queue-processor runs.
-  There is no signal to find at all until then.
+- If Ei is NOT running live (the common case for a by-hand CLI run — see
+  `../SKILL.md` Step 0), the observation self-drains into `state.json`,
+  but the Match request it queued has nobody to process it until an Ei
+  instance actually launches and its queue-processor runs. There is no
+  signal to find at all until then.
 
 **So: tell the user what you did, and that its disposition is a future
 run's job.** Report the outcome exactly as the response said it —
@@ -252,7 +254,7 @@ or dismissed the same way.
 
 ---
 
-## Writing identity — a merge patch, plus one field you must set explicitly
+## Writing identity — a merge patch
 
 ```bash
 ei update persona <persona-id> --json-file <path>
@@ -260,12 +262,17 @@ ei update persona <persona-id> --json-file <path>
 
 This skill never writes a Person record — the linked Person's `description`
 is not part of this process (`../SKILL.md` → "Your linked Person record"),
-and every other Person field is out of scope for a self-reflection.
+and every other Person field is out of scope for managing your own signals.
 `ei update person` still exists as a general CLI command; it just has no
 use inside this skill.
 
 **`update` is RFC 7396 JSON Merge Patch.** Send only the field(s) you
-mean to change. Anything you omit is left completely unchanged.
+mean to change. Anything you omit is left completely unchanged. The one
+exception is `traits`/`topics`: if you send either array at all, it
+replaces the array wholesale — there is no per-element edit on this path
+for a CLI/MCP caller (that capability exists only for a Native persona's
+own dedicated tool set, `edit_trait`/`edit_topic`, which this skill's
+audience does not use).
 
 1. `ei --id <id>` → read the current record, for context and for the
    diff-check below — not because you need to resend it.
@@ -282,29 +289,9 @@ patch and a concurrent edit to the *same* field can still race.
 
 Ei recomputes the embedding automatically on every update.
 
-### Clearing `pending_update`
-
-Your patch must explicitly include `"pending_update": null` to clear a
-proposal — omitting `pending_update` from a write leaves it exactly where
-it was, even if every other field in your patch is exactly what you meant
-to change. That is the only value this field accepts (a non-null value is
-always rejected; this field is Clearable, not settable). See
-`../lenses/persona.md` for exactly when this applies.
-
-**`ei confirm signal --delta` is the only thing that ever creates a
-`pending_update`** (not used by this skill's own writes; see above). This
-skill's own direct write always sets `"pending_update": null` (it never
-leaves one), but a `--delta` confirm — from this persona or a prior run,
-by this skill or a human via TUI/Web — can leave one sitting there before
-this skill even starts; the TUI and web Persona Settings tab can review,
-edit, apply, or dismiss an existing proposal, but neither one mints a new
-one independently. `../SKILL.md` Step 1b checks for that and, if found,
-means the Persona lens's identity write this run must also clear it.
-
 ### Server-managed fields
 
-Every field NOT in the edited set, and not explicitly `null`ed, survives an
-update untouched — including `pending_update` (see above). Genuinely
+Every field NOT in the edited set survives an update untouched. Genuinely
 system-owned fields (`id`, `last_updated`, `description_embedding`,
 `is_static`, `last_heartbeat`, `observations`, `signals`) are never yours
 to set directly; sending them back (e.g. echoed from an `ei --id` read) is
@@ -323,7 +310,7 @@ may require `$EDITOR`.
 ```bash
 EDIT_JSON=$(mktemp)
 # write ONLY the changed field(s) — e.g. {"traits":[...]} or
-# {"pending_update":null} — to "$EDIT_JSON" with your own file-writing tool
+# {"short_description":"..."} — to "$EDIT_JSON" with your own file-writing tool
 ei update persona "$PERSONA_ID" --json-file "$EDIT_JSON"
 rm -f "$EDIT_JSON"
 ```
@@ -344,7 +331,7 @@ hand-retype JSON from memory.
 Every write is an append-only correction. A mistake is fixed with *another*
 write where one exists — but not every write has one. An observation, once
 added, is permanent — there is no "un-add." **A signal's `confirm`/
-`dismiss` has no correction path either**: `signal_confirm`/`signal_dismiss`
+`dismiss` has no correction path either**: `signal.confirm`/`signal.dismiss`
 only accept a `candidate`/`recurring` signal — calling either again on the
 `reviewed`/`dismissed` result is refused, no state change (→ "Resolve one
 signal" above). Get the disposition right before you call it; there is
@@ -388,4 +375,4 @@ all expose the same thing:**
   which from here — never assert it failed on the strength of a mismatch
   alone.
 
-You never need to stop Ei to run a reflection.
+You never need to stop Ei to run this skill.

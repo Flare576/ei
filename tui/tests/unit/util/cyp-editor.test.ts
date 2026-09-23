@@ -21,7 +21,6 @@ function makePersona(id: string, display_name: string): PersonaSummary {
     is_paused: false,
     is_archived: false,
     unread_count: 0,
-    has_pending_update: false,
   };
 }
 

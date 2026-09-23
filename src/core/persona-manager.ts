@@ -23,7 +23,6 @@ export async function getPersonaList(sm: StateManager): Promise<PersonaSummary[]
     avatar_emoji: entity.avatar_emoji,
     avatar_image: entity.avatar_image,
     preferred_theme: entity.preferred_theme,
-    has_pending_update: !!entity.pending_update,
   }));
 }
 

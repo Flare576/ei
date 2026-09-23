@@ -159,13 +159,6 @@ describe("persona schema pair", () => {
     expect(result.topics).toBeUndefined();
   });
 
-  it("patch: accepts pending_update: null (Clearable) and rejects any other value for it", () => {
-    expect(() => personaPatchSchema.parse({ pending_update: null })).not.toThrow();
-    expect(() =>
-      personaPatchSchema.parse({ pending_update: { critique: "forged" } })
-    ).toThrow();
-  });
-
   it("patch: rejects every ADR-031 Hidden/System-Visible field as unrecognized (they are simply absent from the shape)", () => {
     for (const field of [
       "tools", "model", "heartbeat_delay_ms", "context_window_ms",

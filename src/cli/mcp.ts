@@ -52,6 +52,36 @@ const QUOTE_CREATE_FIELDS = ["message_id", "text", "start", "end"] as const;
 const QUOTE_FIX_FIELDS = ["quote_id", "text", "start", "end"] as const;
 const QUOTE_RELINK_FIELDS = ["id", "data_item_ids"] as const;
 
+/**
+ * Allow-lists for ei_signal_confirm/ei_signal_dismiss's raw MCP
+ * arguments (Bolt 003 D3/R3/AT3) — same rationale as
+ * rejectUnknownQuoteFields above: these two tools register a
+ * `.passthrough()` object schema instance, not a flat raw shape, for
+ * the identical reason — a raw shape gets rebuilt by the MCP SDK into a
+ * non-strict `z.object()` that silently STRIPS any key outside the
+ * declared shape (including a caller-forged `delta`, or one of its own
+ * member fields at the top level) before the handler ever sees it.
+ * `.passthrough()` keeps every key long enough for this function to see
+ * and reject it, with the same fixed, generic message quote's own
+ * helper uses — never echoing the caller's own key name back, for the
+ * identical injection-safety reason.
+ */
+function rejectUnknownSignalFields(
+  args: Record<string, unknown>,
+  allowed: readonly string[],
+  label: string
+): { content: { type: "text"; text: string }[]; isError: true } | null {
+  const hasUnknown = Object.keys(args).some((key) => !allowed.includes(key));
+  if (!hasUnknown) return null;
+  return {
+    content: [{ type: "text" as const, text: `Error: Invalid signal (${label}): unrecognized field(s) present` }],
+    isError: true,
+  };
+}
+
+const SIGNAL_CONFIRM_FIELDS = ["persona_id", "signal_id", "actor"] as const;
+const SIGNAL_DISMISS_FIELDS = ["persona_id", "signal_id", "actor"] as const;
+
 // Exported so tests can inject their own transport
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -359,7 +389,7 @@ export function createMcpServer(): McpServer {
     "ei_update",
     {
       description:
-        "Update an existing fact, topic, person, or persona by ID. For topic/person/persona this is an RFC 7396 JSON Merge Patch, NOT a full replacement: `data` should contain ONLY the fields you're actually changing. A field you omit is left completely unchanged — do not round-trip the whole ei_lookup record back in, that used to be required and is now unnecessary (and, for a hidden/server-owned field, actively rejected, see below). Send a field's new value to set it; send `null` for a field to clear it (this is the only way to clear `pending_update` — a Critic-proposed identity revision — non-null content for it is always rejected). Arrays (traits[], topics[], aliases, notes, identifiers) replace wholesale when present: sending `traits` means \"these are ALL the traits now,\" so include every trait you want to keep, not just the new one. `fact` is the one permanent exception (ADR-029): it stays a full-record replacement exactly like before, since it has no defaults and nothing to merge onto. Neither topic/person/persona nor fact accept `tools`/`model`/`heartbeat_delay_ms`/`context_window_ms`/`include_message_timestamps`/`context_boundary`/`is_paused`/`pause_until`/`is_archived`/`archived_at`/`group_primary`/`groups_visible`/`exposure_current`/`exposure_desired`/`last_ei_asked`/`embedding`/`learned_by`/`last_changed_by`/`sources`/`interested_personas`/`persona_groups` at all — these are server-owned or in-app-only settings and are rejected as unrecognized fields, not silently ignored. Use to fix bad extracted data (e.g. correcting a person record where two people were wrongly merged into one) or author a persona's character (rewriting display_name/traits[]/topics[]). Renaming a persona to a reserved name (\"new\", \"clone\") is rejected. Built-in reserved personas (\"ei\", \"emmet\") CANNOT be archived through this tool anymore — `is_archived` left the external contract entirely; use the TUI's `/archive` command instead. NOT usable for quotes: entity_type \"quote\" is still accepted by the schema but ALWAYS rejects, because a full-record replacement could assert text, a speaker, or a timestamp that nobody verified. Use ei_quote_fix to correct a quote's text, ei_quote_relink to change which facts/topics/people it links to, or ei_remove to delete it.",
+        "Update an existing fact, topic, person, or persona by ID. For topic/person/persona this is an RFC 7396 JSON Merge Patch, NOT a full replacement: `data` should contain ONLY the fields you're actually changing. A field you omit is left completely unchanged — do not round-trip the whole ei_lookup record back in, that used to be required and is now unnecessary (and, for a hidden/server-owned field, actively rejected, see below). Send a field's new value to set it; send `null` for a field to clear it. Arrays (traits[], topics[], aliases, notes, identifiers) replace wholesale when present: sending `traits` means \"these are ALL the traits now,\" so include every trait you want to keep, not just the new one. `fact` is the one permanent exception (ADR-029): it stays a full-record replacement exactly like before, since it has no defaults and nothing to merge onto. Neither topic/person/persona nor fact accept `tools`/`model`/`heartbeat_delay_ms`/`context_window_ms`/`include_message_timestamps`/`context_boundary`/`is_paused`/`pause_until`/`is_archived`/`archived_at`/`group_primary`/`groups_visible`/`exposure_current`/`exposure_desired`/`last_ei_asked`/`embedding`/`learned_by`/`last_changed_by`/`sources`/`interested_personas`/`persona_groups` at all — these are server-owned or in-app-only settings and are rejected as unrecognized fields, not silently ignored. Use to fix bad extracted data (e.g. correcting a person record where two people were wrongly merged into one) or author a persona's character (rewriting display_name/traits[]/topics[]). Renaming a persona to a reserved name (\"new\", \"clone\") is rejected. Built-in reserved personas (\"ei\", \"emmet\") CANNOT be archived through this tool anymore — `is_archived` left the external contract entirely; use the TUI's `/archive` command instead. NOT usable for quotes: entity_type \"quote\" is still accepted by the schema but ALWAYS rejects, because a full-record replacement could assert text, a speaker, or a timestamp that nobody verified. Use ei_quote_fix to correct a quote's text, ei_quote_relink to change which facts/topics/people it links to, or ei_remove to delete it.",
       inputSchema: {
         entity_type: z.enum(["fact", "topic", "person", "quote", "persona"]).describe("The type of entity to update."),
         id: z.string().describe("The ID of the entity to replace, from ei_lookup or ei_search."),
@@ -524,25 +554,19 @@ export function createMcpServer(): McpServer {
     "ei_signal_confirm",
     {
       description:
-        "Mark a candidate/recurring EmergentSignal reviewed — Apply Signal (confirm), Bolt 008. Refused (no state change) if the signal is already dismissed or reviewed. For a Persona-lens signal you may additionally supply `delta` (a proposed identity revision derived from the signal's claim) — this PROPOSES the change via the same pending_update mechanism the Critic's own reflection uses, it never applies it directly; the existing TUI/Web apply-UI remains the only path that writes identity fields. A delta-bearing confirm is refused outright if that persona already has an unresolved pending_update — resolve it first, then retry. For an Agent-lens signal, `delta` is silently ignored: confirm never writes PersonaEntity for that lens, no matter what.",
-      inputSchema: {
+        "Mark a candidate/recurring EmergentSignal reviewed — Apply Signal (confirm), Bolt 008/003. Refused (no state change) if the signal is already dismissed or reviewed. Never accepts or applies an identity delta, for either lens (Bolt 003 D1) — pure status-transition bookkeeping only. Any field outside persona_id/signal_id/actor — including `delta` or any of its own member fields (short_description/long_description/traits/topics) — is rejected outright with isError: true, with no correction queued and no state change.",
+      inputSchema: z.object({
         persona_id: z.string().describe("The id of the persona that owns the signal, from ei_search/ei_lookup."),
         signal_id: z.string().describe("The id of the EmergentSignal to confirm."),
         actor: z.string().min(1).describe("Who is confirming this (your name/handle) — recorded on the signal's reviewed_by audit field. SELF-ATTESTED (Bolt 008 D10) — unverified by Ei, pure audit metadata; unaffected by D11's independence-tally exclusion, which applies only to Add-Observation's observer_persona_id."),
-        delta: z
-          .object({
-            short_description: z.string(),
-            long_description: z.string(),
-            traits: z.array(z.unknown()),
-            topics: z.array(z.unknown()),
-          })
-          .optional()
-          .describe("Persona-lens only. A proposed identity revision derived from the signal's claim — traits/topics use the same shape as ei_create/ei_update persona. Ignored entirely for an Agent-lens signal."),
-      },
+      }).passthrough(),
     },
-    async ({ persona_id, signal_id, actor, delta }) => {
+    async (args) => {
+      const rejection = rejectUnknownSignalFields(args, SIGNAL_CONFIRM_FIELDS, "confirm");
+      if (rejection) return rejection;
+      const { persona_id, signal_id, actor } = args;
       try {
-        const result = await applyPersonaSignal(persona_id, signal_id, "confirm", { actor, delta });
+        const result = await applyPersonaSignal(persona_id, signal_id, "confirm", { actor });
         return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
       } catch (e) {
         const message = e instanceof CorrectionValidationError ? e.message : (e as Error).message;
@@ -555,14 +579,17 @@ export function createMcpServer(): McpServer {
     "ei_signal_dismiss",
     {
       description:
-        "Mark a candidate/recurring EmergentSignal dismissed — Apply Signal (dismiss), Bolt 008. Refused (no state change) if the signal is already dismissed or reviewed. Never writes PersonaEntity, for either lens — dismiss has no proposal side effect, unlike confirm. Reopening a dismissed signal is exclusively the automatic promotion pipeline's own evidence-citing path, never this tool.",
-      inputSchema: {
+        "Mark a candidate/recurring EmergentSignal dismissed — Apply Signal (dismiss), Bolt 008/003. Refused (no state change) if the signal is already dismissed or reviewed. Never writes PersonaEntity, for either lens — dismiss has no proposal side effect. Reopening a dismissed signal is exclusively the automatic promotion pipeline's own evidence-citing path, never this tool. Any field outside persona_id/signal_id/actor — including `delta` — is rejected outright with isError: true, with no correction queued and no state change.",
+      inputSchema: z.object({
         persona_id: z.string().describe("The id of the persona that owns the signal, from ei_search/ei_lookup."),
         signal_id: z.string().describe("The id of the EmergentSignal to dismiss."),
         actor: z.string().min(1).describe("Who is dismissing this (your name/handle) — recorded on the signal's dismissed_by audit field. SELF-ATTESTED (Bolt 008 D10) — unverified by Ei, pure audit metadata; unaffected by D11's independence-tally exclusion, which applies only to Add-Observation's observer_persona_id."),
-      },
+      }).passthrough(),
     },
-    async ({ persona_id, signal_id, actor }) => {
+    async (args) => {
+      const rejection = rejectUnknownSignalFields(args, SIGNAL_DISMISS_FIELDS, "dismiss");
+      if (rejection) return rejection;
+      const { persona_id, signal_id, actor } = args;
       try {
         const result = await applyPersonaSignal(persona_id, signal_id, "dismiss", { actor });
         return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };

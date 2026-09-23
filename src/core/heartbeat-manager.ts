@@ -268,28 +268,6 @@ export async function queueEiHeartbeat(
     });
   }
 
-  // Ei's own pending reflection — separate item type so she can introspect on herself
-  const eiPersona = personas.find((p) => p.id === "ei");
-  if (eiPersona?.pending_update?.critique) {
-    items.push({
-      id: eiPersona.id,
-      type: "Self Reflection Alert",
-      critique: eiPersona.pending_update.critique,
-    });
-  }
-
-  const personasWithPendingUpdate = personas.filter(
-    (p) => !p.is_archived && !p.is_paused && !p.is_static && p.id !== "ei" && p.pending_update?.critique
-  );
-  for (const p of personasWithPendingUpdate) {
-    items.push({
-      id: p.id,
-      type: "Persona Reflection Alert",
-      persona_name: p.display_name,
-      critique: p.pending_update!.critique,
-    });
-  }
-
   // bolt-persona-emergence-signals-011, D1/D3: the missing producer for
   // Bolt 006's crossFind/handleEiHeartbeat signal-choice consumer. Calls
   // Bolt 005's own shared assembly function once per persona -- the exact
@@ -408,7 +386,6 @@ export async function queueHeartbeatCheck(sm: StateManager, personaId: string, i
       name: persona.display_name,
       traits: persona.traits,
       topics: persona.topics,
-      pending_update: persona.pending_update,
     },
     human: {
       topics: sortByEngagementGap(filteredHuman.topics).slice(0, 5),
