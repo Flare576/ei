@@ -414,6 +414,9 @@ function App() {
             } else if (currentPersonaId) {
               setMessages([]);
               processorRef.current?.getMessages(currentPersonaId).then(setMessages);
+              processorRef.current?.getPersona(currentPersonaId).then((entity) => {
+                if (activePersonaIdRef.current === currentPersonaId) setActivePersonaEntity(entity);
+              });
             }
           }
         });
@@ -758,6 +761,25 @@ function App() {
     }
     processor.getPersonaList().then(setPersonas);
   }, [processor, editingPersonaId, activePersonaId]);
+
+  // Each toggle reads the stored value inside a serialized step, so rapid clicks flip it once each
+  // instead of all deriving the next value from the same rendered snapshot.
+  const thinkingToggleChainRef = useRef<Promise<void>>(Promise.resolve());
+  const handleToggleThinking = useCallback(() => {
+    if (!processor || !activePersonaId) return;
+    const personaId = activePersonaId;
+    const step = thinkingToggleChainRef.current.then(async () => {
+      const current = await processor.getPersona(personaId);
+      if (!current) return;
+      await processor.updatePersona(personaId, { show_thinking: !(current.show_thinking ?? true) });
+      const updated = await processor.getPersona(personaId);
+      if (!updated) return;
+      if (activePersonaIdRef.current === personaId) setActivePersonaEntity(updated);
+      setEditingPersona((editing) => (editing?.id === personaId ? updated : editing));
+    });
+    thinkingToggleChainRef.current = step.catch(() => {});
+    return step;
+  }, [processor, activePersonaId]);
 
   const handlePersonaTraitSave = useCallback(async (trait: PersonaTrait) => {
     if (!processor || !editingPersonaId) return;
@@ -1317,6 +1339,8 @@ function App() {
                setCaptureMessage(message);
              }}
              onToolCallsClick={setToolCallsMessage}
+             showThinking={activePersonaEntity?.show_thinking ?? true}
+             onToggleThinking={handleToggleThinking}
              onImageGenerate={handleImageGenerate}
              messageImages={messageImages}
              generatingImageFor={generatingImageFor}
