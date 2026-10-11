@@ -8,6 +8,7 @@
  */
 import type { ToolDefinition } from "../types.js";
 import type { ToolCall, ToolResult, ToolExecutor } from "./types.js";
+import { dedupeToolsByName } from "./dedupe.js";
 import { tavilyWebSearchExecutor, tavilyNewsSearchExecutor } from "./builtin/web-search.js";
 import { currentlyPlayingExecutor } from "./builtin/currently-playing.js";
 import { likedSongsExecutor } from "./builtin/spotify-liked-songs.js";
@@ -413,30 +414,6 @@ export function findSubmitToolCall(
 // =============================================================================
 // Tool call execution
 // =============================================================================
-
-/**
- * Collapse a tool list to one definition per name, builtin wins (Bolt 003 S2;
- * extended Stint holistic close-out round 1 S2). A builtin/native tool
- * definition -- e.g. resolve_signal's or edit_trait's per-request
- * config.persona_id, injected fresh by buildResolveSignalTool()/
- * buildPersonaIdentityTools() every call and never persisted -- must never
- * be shadowed by a persisted custom tool sharing its name, regardless of
- * assembly order. Only a later non-builtin definition may replace an
- * earlier non-builtin one of the same name; a builtin definition, once set,
- * always wins. Processor calls this before building the model request so a
- * legacy persisted collision contributes exactly one native definition to
- * the LLM call; executeToolCalls applies it again at execution dispatch as
- * defense in depth. Never mutates the input definitions or any stored
- * StateManager record -- purely a per-request assembly filter.
- */
-export function dedupeToolsByName(tools: ToolDefinition[]): ToolDefinition[] {
-  const toolsByName = new Map<string, ToolDefinition>();
-  for (const t of tools) {
-    if (toolsByName.get(t.name)?.builtin && !t.builtin) continue;
-    toolsByName.set(t.name, t);
-  }
-  return [...toolsByName.values()];
-}
 
 /**
  * Execute a batch of tool calls.

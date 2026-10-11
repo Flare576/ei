@@ -54,8 +54,10 @@ export interface ToolDefinition {
 // buildPersonaIdentityTools() every request, never persisted). A persisted
 // custom ToolDefinition sharing one of these names could otherwise be
 // assigned to a persona and collide with the native definition at
-// tool-assembly time; executeToolCalls's builtin-wins name selection and the
-// pre-request dedupeToolsByName pass (both in src/core/tools/index.ts)
+// tool-assembly time; the shared dedupeToolsByName definition
+// (src/core/tools/dedupe.ts), its pre-request pass in src/core/processor.ts
+// (the `tools = dedupeToolsByName([...` call), and executeToolCalls's use of
+// it in src/core/tools/index.ts (builtin-wins name selection)
 // already make such a collision harmless, but rejecting the name at
 // creation/rename closes the collision earlier — same reserved-name pattern
 // as RESERVED_PERSONA_NAMES (src/core/types/entities.ts).
