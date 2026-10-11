@@ -69,6 +69,10 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
     onChange("include_message_timestamps", e.target.checked);
   };
 
+  const handleShowThinkingToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange("show_thinking", e.target.checked);
+  };
+
 
 
   return (
@@ -130,6 +134,19 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
             <span>Show Timestamps to Persona</span>
           </label>
           <small className="ei-form-hint">Prepend date/time to each message so the persona can recognize patterns and time gaps</small>
+        </div>
+
+        <div className="ei-form-group">
+          <label className="ei-checkbox-label">
+            <input
+              type="checkbox"
+              className="ei-checkbox"
+              checked={persona.show_thinking ?? true}
+              onChange={handleShowThinkingToggle}
+            />
+            <span>Show Thinking</span>
+          </label>
+          <small className="ei-form-hint">Show the model's reasoning above each reply in the chat when it provides any</small>
         </div>
       </section>
 
