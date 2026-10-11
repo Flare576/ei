@@ -182,6 +182,7 @@ export interface PersonaEntity {
   avatar_emoji?: string;            // Single emoji character used as avatar in place of initials.
   avatar_image?: string;            // Base64-encoded 64×64 image used as avatar (takes priority over avatar_emoji).
   preferred_theme?: string;         // Theme ID (built-in name or ThemeDefinition.id). Applied to chat panel when this persona is active.
+  show_thinking?: boolean;          // Per-persona display setting: show the model's thinking inline in the 1:1 chat. Absent means true (always show); an explicit false is a real value. System Hidden (ADR-031): never in the external CLI/MCP projection, in either direction.
   notes?: string[];                 // Private scratchpad — up to 20 short-term notes visible in the system prompt. Oldest evicted when full.
 }
 
