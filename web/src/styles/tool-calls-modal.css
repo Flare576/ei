@@ -1,0 +1,117 @@
+/* ============================================
+   TOOL CALLS MODAL
+   App-level dialog listing one message's tool calls
+   ============================================ */
+
+.ei-tool-calls-modal {
+  background: var(--ei-bg-primary);
+  color: var(--ei-text-primary);
+  border-radius: var(--ei-radius-lg);
+  max-width: 640px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--ei-shadow-lg);
+  animation: modal-in 0.2s ease;
+}
+
+.ei-tool-calls-modal:focus {
+  outline: none;
+}
+
+.ei-tool-calls-modal__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  background: var(--ei-bg-primary);
+  border-bottom: 1px solid var(--ei-border);
+}
+
+.ei-tool-calls-modal__title {
+  margin: 0;
+  font-size: var(--ei-font-size-lg);
+  font-weight: 600;
+}
+
+.ei-tool-calls-modal__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ei-text-muted);
+  font-size: var(--ei-font-size-base);
+  padding: var(--ei-spacing-xs);
+  border-radius: var(--ei-radius-sm);
+  line-height: 1;
+}
+
+.ei-tool-calls-modal__close:hover {
+  color: var(--ei-text-primary);
+  background: var(--ei-bg-tertiary);
+}
+
+.ei-tool-calls-modal__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--ei-spacing-md) var(--ei-spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ei-spacing-md);
+}
+
+.ei-tool-call {
+  padding: var(--ei-spacing-sm) var(--ei-spacing-md);
+  border: 1px solid var(--ei-border);
+  border-radius: var(--ei-radius-md);
+  background: var(--ei-bg-secondary);
+}
+
+.ei-tool-call__name {
+  margin: 0 0 var(--ei-spacing-xs) 0;
+  font-family: var(--ei-font-mono);
+  font-size: var(--ei-font-size-base);
+}
+
+.ei-tool-call__action,
+.ei-tool-call__error {
+  font-family: var(--ei-font-mono);
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-secondary);
+}
+
+.ei-tool-call__label {
+  margin-top: var(--ei-spacing-sm);
+  font-size: var(--ei-font-size-sm);
+  font-weight: 600;
+  color: var(--ei-text-secondary);
+}
+
+.ei-tool-call__empty {
+  color: var(--ei-text-muted);
+  font-size: var(--ei-font-size-sm);
+}
+
+.ei-tool-call__arguments {
+  margin: 0;
+}
+
+.ei-tool-call__argument dt {
+  font-family: var(--ei-font-mono);
+  font-size: var(--ei-font-size-sm);
+  color: var(--ei-text-secondary);
+}
+
+.ei-tool-call__argument dd {
+  margin: 0 0 var(--ei-spacing-xs) 0;
+}
+
+.ei-tool-call pre {
+  margin: 0;
+  font-family: var(--ei-font-mono);
+  font-size: var(--ei-font-size-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
