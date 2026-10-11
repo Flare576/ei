@@ -2,7 +2,13 @@ import type { Page } from "@playwright/test";
 import { expect, seedCheckpoint, selectEiPersona, test, type CheckpointMessage } from "./fixtures.js";
 
 const MESSAGE_COUNT = 80;
-const SAMPLE_TIMES_MS = [150, 600, 1500, 3000];
+// Observation of a toggle: the requested change must be visible and the geometry must agree over this
+// many consecutive looks, spaced this far apart, before anything is compared with the pre-click position.
+const SETTLE_CONSECUTIVE_LOOKS = 12;
+const SETTLE_INTERVAL_MS = 100;
+const SETTLE_EPSILON_PX = 1;
+const SETTLE_TIMEOUT_MS = 20_000;
+const LATE_RECHECK_MS = 600;
 // Pixels of slack for sub-pixel layout and borders when comparing a row to the scroller's box.
 const TOLERANCE_PX = 2;
 // How far the clicked reply may move on screen where the list has room to keep it exactly in place.
@@ -89,6 +95,50 @@ async function waitForStableScroll(page: Page): Promise<void> {
       { intervals: [300], timeout: 10_000 },
     )
     .toBe(true);
+}
+
+interface ToggleObservation {
+  thinkingBlocks: number;
+  scrollTop: number;
+  scrollHeight: number;
+  reply: ReplyBox | null;
+}
+
+async function observeToggle(page: Page, messageId: string): Promise<ToggleObservation> {
+  const reply = await replyBox(page, messageId);
+  const rest = await scroller(page).evaluate((el, id) => ({
+    thinkingBlocks: el.querySelectorAll(`[data-message-id="${id}"] .ei-message__thinking`).length,
+    scrollTop: el.scrollTop,
+    scrollHeight: el.scrollHeight,
+  }), messageId);
+  return { ...rest, reply };
+}
+
+/**
+ * Resolves with the reply's position once the thinking block is present (or absent) as requested and
+ * the reply, scroll position and scroll extent have agreed with each other over several consecutive
+ * looks. Fails if that has not happened within a generous bound.
+ */
+async function waitForSettledToggle(page: Page, messageId: string, thinkingShown: boolean): Promise<ReplyBox> {
+  const deadline = Date.now() + SETTLE_TIMEOUT_MS;
+  let run: ToggleObservation[] = [];
+  let last: ToggleObservation | null = null;
+  while (Date.now() < deadline) {
+    const now = await observeToggle(page, messageId);
+    last = now;
+    const asRequested = now.thinkingBlocks === (thinkingShown ? 1 : 0) && now.reply !== null;
+    const first = run[0];
+    const agrees =
+      asRequested &&
+      (first === undefined ||
+        (Math.abs(now.scrollTop - first.scrollTop) <= SETTLE_EPSILON_PX &&
+          Math.abs(now.scrollHeight - first.scrollHeight) <= SETTLE_EPSILON_PX &&
+          Math.abs(now.reply!.top - first.reply!.top) <= SETTLE_EPSILON_PX));
+    run = agrees ? [...run, now] : asRequested ? [now] : [];
+    if (run.length >= SETTLE_CONSECUTIVE_LOOKS) return run[run.length - 1].reply!;
+    await page.waitForTimeout(SETTLE_INTERVAL_MS);
+  }
+  throw new Error(`the list did not settle with thinking ${thinkingShown ? "shown" : "hidden"} within ${SETTLE_TIMEOUT_MS} ms; last look: ${JSON.stringify(last)}`);
 }
 
 /** Scrolls up from the bottom with real wheel input, the way a reader moves through the chat. */
@@ -221,34 +271,25 @@ for (const fixture of FIXTURES) {
 
           await thinkingIcon(page, messageId).click();
 
-          const samples: ReplyBox[] = [];
-          let elapsed = 0;
-          for (const sampleTime of SAMPLE_TIMES_MS) {
-            await page.waitForTimeout(sampleTime - elapsed);
-            elapsed = sampleTime;
-            const box = await replyBox(page, messageId);
-            expectInside(box, `${sampleTime} ms after the click`);
-            samples.push(box);
-          }
+          // Wait for the requested change and for the list to stop moving; the time that takes depends on
+          // the machine, so it is observed rather than assumed.
+          const settled = await waitForSettledToggle(page, messageId, mode === "show");
 
-          // Once the list has settled the reply must not keep drifting.
-          const settled = samples[0];
-          for (const [index, box] of samples.entries()) {
-            expect(
-              Math.abs(box.top - settled.top),
-              `reply moved ${box.top - settled.top}px between ${SAMPLE_TIMES_MS[0]} ms and ${SAMPLE_TIMES_MS[index]} ms`,
-            ).toBeLessThanOrEqual(TOLERANCE_PX);
-          }
+          // Everything below compares against where the reply was before the click.
+          expectInside(settled, "after the list settled");
 
           // With room above and below the list can hold the reply exactly where it was.
           // Hiding at the very end of the list cannot: the list gets shorter than the reader's offset.
           if (position === "middle" || mode === "show") {
-            const shift = samples[samples.length - 1].top - before.top;
+            const shift = settled.top - before.top;
             expect(Math.abs(shift), `reply shifted ${shift}px on screen`).toBeLessThanOrEqual(HELD_IN_PLACE_PX);
           }
 
-          const thinkingAfter = await page.locator(`[data-message-id="${messageId}"] .ei-message__thinking`).count();
-          expect(thinkingAfter).toBe(mode === "show" ? 1 : 0);
+          // A later look must find the reply where it settled.
+          await page.waitForTimeout(LATE_RECHECK_MS);
+          const later = await replyBox(page, messageId);
+          expectInside(later, `${LATE_RECHECK_MS} ms after the list settled`);
+          expect(Math.abs(later.top - settled.top), `reply moved ${later.top - settled.top}px after settling`).toBeLessThanOrEqual(TOLERANCE_PX);
         });
       }
     }
