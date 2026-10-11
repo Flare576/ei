@@ -1,7 +1,8 @@
-import { LLMRequest, LLMResponse, LLMRequestType, LLMNextStep, ProviderAccount, ChatMessage, Message, ToolDefinition } from "./types.js";
+import { LLMRequest, LLMResponse, LLMRequestType, LLMNextStep, ProviderAccount, ChatMessage, Message, ToolDefinition, TurnCapture } from "./types.js";
 import { callLLMRaw, parseJSONResponse, cleanResponseContent } from "./llm-client.js";
 import { hydratePromptPlaceholders } from "../prompts/message-utils.js";
 import { toOpenAITools, executeToolCalls, parseToolCalls, findSubmitToolCall } from "./tools/index.js";
+import { accumulateRound, buildToolCallRecords, readTurnCapture } from "./turn-capture.js";
 
 type QueueProcessorState = "idle" | "busy";
 type ResponseCallback = (response: LLMResponse) => Promise<void>;
@@ -205,6 +206,7 @@ export class QueueProcessor {
       );
 
       console.log(`[QueueProcessor] HandleToolContinuation LLM call complete, finish_reason="${finishReason}"${thinking ? ` (thinking: ${thinking.length} chars)` : ""}`);
+      const turnSoFar = accumulateRound(readTurnCapture(request.data), { thinking });
       // TODO(#13): Surface thinking to TUI as 'Beta is thinking...' when streaming is available.
 
       // If the LLM wants to call more tools, accumulate history and re-enqueue.
@@ -226,6 +228,7 @@ export class QueueProcessor {
               content: JSON.stringify(args),
               parsed: args,
               finish_reason: "stop",
+              ...this.captureFields(turnSoFar),
             };
           }
 
@@ -243,6 +246,9 @@ export class QueueProcessor {
               name: result.name,
             });
           }
+          const turnCapture = accumulateRound(turnSoFar, {
+            tool_calls: buildToolCallRecords(toolCalls, results, activeTools),
+          });
 
           const mergedExhausted = new Set([...priorExhausted, ...exhaustedToolNames]);
           const newHistory = [...(rawHistory ?? []), ...appendedHistory];
@@ -259,6 +265,7 @@ export class QueueProcessor {
               data: {
                 ...request.data,
                 toolHistory: newHistory,
+                turnCapture,
                 toolCallCounts: [...callCounts.entries()],
                 totalCallCount: totalCalls.count,
                 exhaustedToolNames: [...mergedExhausted],
@@ -284,9 +291,9 @@ export class QueueProcessor {
       if (!firstAttempt.success && content) {
         console.log(`[QueueProcessor] HandleToolContinuation: JSON parse failed — attempting reformat pass`);
         const reformatResult = await this.attemptReformat(request, messages, content);
-        if (reformatResult) return reformatResult;
+        if (reformatResult) return { ...reformatResult, ...this.captureFields(turnSoFar) };
       }
-      return firstAttempt;
+      return { ...firstAttempt, ...this.captureFields(turnSoFar) };
     }
 
     // =========================================================================
@@ -313,6 +320,7 @@ export class QueueProcessor {
     if (thinking) {
       console.debug(`[QueueProcessor] Extended thinking on ${request.next_step} (${thinking.length} chars) — TODO(#13): stream to TUI`);
     }
+    const turnSoFar = accumulateRound({ tool_calls: [] }, { thinking });
 
     // =========================================================================
     // Tool call path: execute tools, enqueue HandleToolContinuation, done.
@@ -324,7 +332,7 @@ export class QueueProcessor {
       if (toolCalls.length === 0) {
         // Malformed tool_calls — treat as stop.
         console.warn("[QueueProcessor] finish_reason=tool_calls but no valid calls parsed — treating as stop");
-        return this.handleResponseType(request, content ?? "", finishReason);
+        return { ...(await this.handleResponseType(request, content ?? "", finishReason)), ...this.captureFields(turnSoFar) };
       }
 
       // Submit tool intercept: if the LLM called submit_response (or any is_submit tool),
@@ -342,6 +350,7 @@ export class QueueProcessor {
           content: JSON.stringify(args),
           parsed: args,
           finish_reason: "stop",
+          ...this.captureFields(turnSoFar),
         };
       }
 
@@ -354,6 +363,9 @@ export class QueueProcessor {
       const callCounts = new Map<string, number>();
       const totalCalls = { count: 0 };
       const { results } = await executeToolCalls(toolCalls, activeTools, callCounts, totalCalls, this.currentOnProviderConfigUpdate);
+      const turnCapture = accumulateRound(turnSoFar, {
+        tool_calls: buildToolCallRecords(toolCalls, results, activeTools),
+      });
 
       for (const result of results) {
         toolHistory.push({
@@ -377,6 +389,7 @@ export class QueueProcessor {
           data: {
             ...request.data,
             toolHistory,
+            turnCapture,
             toolCallCounts: [...callCounts.entries()],
             totalCallCount: totalCalls.count,
             originalNextStep: request.next_step,
@@ -413,7 +426,12 @@ export class QueueProcessor {
     // Normal stop path
     // =========================================================================
     console.debug(`[QueueProcessor] finish_reason="${finishReason}" — normal stop`);
-    return this.handleResponseType(request, content ?? "", finishReason);
+    return { ...(await this.handleResponseType(request, content ?? "", finishReason)), ...this.captureFields(turnSoFar) };
+  }
+
+  /** Spread-ready `turn_capture` for a response that ends a turn; nothing when the turn captured nothing. */
+  private captureFields(capture: TurnCapture): { turn_capture?: TurnCapture } {
+    return capture.tool_calls.length > 0 || capture.thinking ? { turn_capture: capture } : {};
   }
 
   private async handleResponseType(
@@ -478,6 +496,8 @@ export class QueueProcessor {
    *
    * Returns null if the reformat attempt also fails — caller falls through to normal
    * failure path (backoff retry).
+   *
+   * Reasoning from this repair call is intentionally not part of the captured turn thinking.
    */
   private async attemptReformat(
     request: LLMRequest,
@@ -541,6 +561,8 @@ export class QueueProcessor {
    *
    * Returns null if the reformat attempt also fails — caller falls through to normal
    * failure path (backoff retry).
+   *
+   * Reasoning from this repair call is intentionally not part of the captured turn thinking.
    */
   private async attemptJSONReformat(
     request: LLMRequest,
