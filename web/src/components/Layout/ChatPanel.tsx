@@ -12,6 +12,35 @@ function getContent(msg: { content?: string }): string {
   return msg.content ?? '';
 }
 
+/** Where a clicked message sat in the scroller, so its reply can be put back after rows change height. */
+interface ToggleAnchor {
+  index: number;
+  messageId: string;
+  /** Row top and reply top, in pixels below the top of the scroller. */
+  rowOffset: number;
+  replyOffset: number;
+}
+
+/** The reply is the last thing in the bubble; any thinking block comes before it. */
+function replyElementOf(row: HTMLElement): Element {
+  return row.querySelector(".ei-message__bubble")?.lastElementChild ?? row;
+}
+
+const USER_SCROLL_EVENTS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+
+/** Calls back once on the next input that can scroll the chat; returns a function that stops listening. */
+function onNextUserScroll(callback: () => void): () => void {
+  const stop = () => {
+    for (const type of USER_SCROLL_EVENTS) window.removeEventListener(type, handle);
+  };
+  const handle = () => {
+    stop();
+    callback();
+  };
+  for (const type of USER_SCROLL_EVENTS) window.addEventListener(type, handle, { passive: true });
+  return stop;
+}
+
 function getToolCallsButton(message: Message): { icon: string; label: string } | null {
   const toolCalls = message.tool_calls;
   if (!toolCalls || toolCalls.length === 0) return null;
@@ -100,7 +129,8 @@ interface ChatPanelProps {
   onScissorsClick?: (message: Message) => void;
   onToolCallsClick?: (message: Message) => void;
   showThinking?: boolean;
-  onToggleThinking?: () => void;
+  /** Persists the flipped setting; resolves true once it has been applied, false if it could not be. */
+  onToggleThinking?: () => Promise<boolean>;
   onImageGenerate?: (message: Message) => void;
   messageImages?: Record<string, {blobUrl: string, result: GenerationResult}>;
   generatingImageFor?: string | null;
@@ -148,7 +178,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom({
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom, stopScroll } = useStickToBottom({
     initial: 'instant',
     resize: 'instant',
     targetScrollTop: (_, { scrollElement }) => scrollElement.scrollHeight - scrollElement.clientHeight,
@@ -225,13 +255,21 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
     const charsPerLine = containerWidth > 0 ? Math.floor(containerWidth / 7.5) : 70;
     return messages.map(msg => {
       const text = getContent(msg);
-      if (!text) return 60;
-      const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
-      let height = lines * 20 + 40;
-      if (text.includes('```')) height += 120;
+      let height = 60;
+      if (text) {
+        const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
+        height = lines * 20 + 40;
+        if (text.includes('```')) height += 120;
+      }
+      if (showThinking && msg.thinking) {
+        const thinkingLines = msg.thinking
+          .split("\n")
+          .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / charsPerLine)), 0);
+        height += thinkingLines * 20 + 8;
+      }
       return height;
     });
-  }, [messages, containerWidth]);
+  }, [messages, containerWidth, showThinking]);
 
   const boundaryMessageIndex = useMemo(() => {
     if (!contextBoundary) return -1;
@@ -253,6 +291,105 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
       return Math.max(0, totalHeight - scrollRef.current.clientHeight + 32);
     },
   });
+
+  // The thinking toggle changes the height of every row that has thinking at once. The virtualizer
+  // caches the size it measured for each row, so drop that cache when the setting flips. When the
+  // flip was caused by clicking a message's icon, keep that message's reply where it was on screen.
+  const thinkingToggleAnchorRef = useRef<{ anchor: ToggleAnchor; release: () => void } | null>(null);
+  const pendingAnchorRestoreRef = useRef<ToggleAnchor | null>(null);
+  const stopAnchorCorrectionRef = useRef<(() => void) | null>(null);
+  const previousShowThinkingRef = useRef(showThinking);
+
+  const dropThinkingToggleAnchor = () => {
+    thinkingToggleAnchorRef.current?.release();
+    thinkingToggleAnchorRef.current = null;
+  };
+
+  // The anchor belongs to the one toggle the click started: it is dropped if that toggle fails or the
+  // reader scrolls first, so a later change to the setting (editor, import) never reuses it.
+  const armThinkingToggleAnchor = (icon: HTMLElement, index: number, messageId: string) => {
+    dropThinkingToggleAnchor();
+    const scroller = scrollRef.current;
+    const row = icon.closest<HTMLElement>("[data-index]");
+    if (!scroller || !row) return null;
+    const scrollerTop = scroller.getBoundingClientRect().top;
+    const armed = {
+      anchor: {
+        index,
+        messageId,
+        rowOffset: row.getBoundingClientRect().top - scrollerTop,
+        replyOffset: replyElementOf(row).getBoundingClientRect().top - scrollerTop,
+      },
+      release: onNextUserScroll(() => {
+        if (thinkingToggleAnchorRef.current === armed) thinkingToggleAnchorRef.current = null;
+      }),
+    };
+    thinkingToggleAnchorRef.current = armed;
+    return armed;
+  };
+
+  useLayoutEffect(() => {
+    if (previousShowThinkingRef.current === showThinking) return;
+    previousShowThinkingRef.current = showThinking;
+    pendingAnchorRestoreRef.current = thinkingToggleAnchorRef.current?.anchor ?? null;
+    dropThinkingToggleAnchor();
+    rowVirtualizer.measure();
+  }, [showThinking]);
+
+  // Scrolling is only reliable once the list has re-rendered at its new total height, otherwise the
+  // browser clamps the target to the old, shorter content. Rows keep being measured for a few frames
+  // after that (and the virtualizer shifts the scroll position to compensate), so the reply is nudged
+  // back to its recorded position until it stops moving, unless the reader scrolls first.
+  useLayoutEffect(() => {
+    const anchor = pendingAnchorRestoreRef.current;
+    if (!anchor) return;
+    if (parseFloat(contentRef.current?.style.height ?? "") !== rowVirtualizer.getTotalSize()) return;
+    pendingAnchorRestoreRef.current = null;
+    const scroller = scrollRef.current;
+    if (!scroller || messages[anchor.index]?.id !== anchor.messageId) return;
+
+    stopAnchorCorrectionRef.current?.();
+    // Hold the clicked row in place even when the list was pinned to the bottom.
+    stopScroll();
+    let frameId = 0;
+    let stopWatching = () => {};
+    const finish = () => {
+      cancelAnimationFrame(frameId);
+      stopWatching();
+      if (stopAnchorCorrectionRef.current === finish) stopAnchorCorrectionRef.current = null;
+    };
+    stopWatching = onNextUserScroll(finish);
+    stopAnchorCorrectionRef.current = finish;
+
+    let frames = 0;
+    let calmFrames = 0;
+    const correct = () => {
+      const row = scroller.querySelector<HTMLElement>(`[data-index="${anchor.index}"]`);
+      let delta = 0;
+      if (row) {
+        delta = replyElementOf(row).getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchor.replyOffset;
+      } else {
+        const start = rowVirtualizer.getOffsetForIndex(anchor.index, "start")?.[0];
+        if (start !== undefined) delta = start - anchor.rowOffset - scroller.scrollTop;
+      }
+      const before = scroller.scrollTop;
+      if (Math.abs(delta) > 1) rowVirtualizer.scrollToOffset(Math.max(0, before + delta));
+      // Settled: on target, or at a scroll limit where the target cannot be reached.
+      calmFrames = Math.abs(delta) <= 1 || scroller.scrollTop === before ? calmFrames + 1 : 0;
+      frames += 1;
+      if (calmFrames >= 10 || frames >= 120) finish();
+      else frameId = requestAnimationFrame(correct);
+    };
+    correct();
+  });
+
+  useEffect(
+    () => () => {
+      stopAnchorCorrectionRef.current?.();
+      thinkingToggleAnchorRef.current?.release();
+    },
+    [],
+  );
 
   useImperativeHandle(ref, () => ({
     focusInput: () => {
@@ -433,7 +570,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
         ) : (
           <div
             ref={contentRef}
-            style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
+            style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative", flexShrink: 0 }}
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const msg = messages[virtualRow.index];
@@ -475,7 +612,10 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                     className="ei-message__thinking-toggle"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onToggleThinking();
+                      const armed = armThinkingToggleAnchor(e.currentTarget, virtualRow.index, msg.id);
+                      void onToggleThinking().then((applied) => {
+                        if (!applied && armed && thinkingToggleAnchorRef.current === armed) dropThinkingToggleAnchor();
+                      });
                     }}
                   >
                     💭

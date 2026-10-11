@@ -37,7 +37,7 @@ function Display({ messages, showThinking = true }: { messages: Message[]; showT
         inputValue=""
         onInputChange={() => {}}
         onSendMessage={() => {}}
-        onToggleThinking={() => {}}
+        onToggleThinking={async () => true}
         showThinking={showThinking}
         onToolCallsClick={setSelectedMessage}
       />

@@ -24,7 +24,7 @@ function reply(id: string, extra: Partial<Message> = {}): Message {
   };
 }
 
-function renderPanel(messages: Message[], props: { showThinking?: boolean; onToggleThinking?: () => void } = {}) {
+function renderPanel(messages: Message[], props: { showThinking?: boolean; onToggleThinking?: () => Promise<boolean> } = {}) {
   return render(
     <ChatPanel
       activePersonaId="persona-1"
@@ -58,7 +58,7 @@ describe("ChatPanel thinking", () => {
 
   it("renders the thinking icon whether the setting is on or off, but the thinking text only when on", () => {
     const messages = [reply("p", { thinking: "deep thought" })];
-    const { rerender } = renderPanel(messages, { showThinking: true, onToggleThinking: () => {} });
+    const { rerender } = renderPanel(messages, { showThinking: true, onToggleThinking: async () => true });
 
     expect(within(row("p")).getByRole("button", { name: "💭" })).toBeInTheDocument();
     expect(within(row("p")).getByText("deep thought")).toBeInTheDocument();
@@ -72,7 +72,7 @@ describe("ChatPanel thinking", () => {
         onInputChange={() => {}}
         onSendMessage={() => {}}
         showThinking={false}
-        onToggleThinking={() => {}}
+        onToggleThinking={async () => true}
       />,
     );
 
@@ -83,7 +83,7 @@ describe("ChatPanel thinking", () => {
 
   it("defaults to showing thinking when the setting is not supplied, and omits the icon for a message with no thinking", () => {
     renderPanel([reply("p", { thinking: "deep thought" }), reply("q"), reply("s", { thinking: "" })], {
-      onToggleThinking: () => {},
+      onToggleThinking: async () => true,
     });
 
     expect(within(row("p")).getByText("deep thought")).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe("ChatPanel thinking", () => {
   });
 
   it("calls the toggle callback once per icon click", () => {
-    const onToggleThinking = vi.fn();
+    const onToggleThinking = vi.fn(async () => true);
     renderPanel([reply("p", { thinking: "deep thought" })], { onToggleThinking });
 
     fireEvent.click(within(row("p")).getByRole("button", { name: "💭" }));
@@ -100,7 +100,7 @@ describe("ChatPanel thinking", () => {
   });
 
   it("renders thinking above the reply inside the same message", () => {
-    renderPanel([reply("p", { thinking: "deep thought" })], { onToggleThinking: () => {} });
+    renderPanel([reply("p", { thinking: "deep thought" })], { onToggleThinking: async () => true });
 
     const thinking = within(row("p")).getByText("deep thought");
     const content = within(row("p")).getByText("reply p");
