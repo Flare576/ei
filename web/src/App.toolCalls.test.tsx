@@ -6,7 +6,7 @@ import { render, screen, fireEvent, act, waitFor } from "@testing-library/react"
 import App from "./App";
 import { Processor } from "../../src/core/processor";
 import { IndexedDBStorage } from "../../src/storage/indexed";
-import type { HumanEntity, Message, PersonaSummary, QueueStatus, StorageState } from "../../src/core/types";
+import { ContextStatus, type HumanEntity, type Message, type PersonaSummary, type QueueStatus, type StorageState } from "../../src/core/types";
 import { installVirtualListStubs } from "./test/virtualListStubs";
 
 const WRITE_ICON_NAME = "Show tool calls (includes write)";
@@ -26,7 +26,7 @@ const reply: Message = {
   content: "I updated your traits.",
   timestamp: "2026-01-01T10:00:00.000Z",
   read: true,
-  context_status: "default",
+  context_status: ContextStatus.Default,
   tool_calls: [
     {
       name: "edit_trait",
@@ -36,9 +36,9 @@ const reply: Message = {
       kind: "write",
     },
   ],
-} as Message;
+};
 
-const human = {
+const human: HumanEntity = {
   entity: "human",
   facts: [],
   topics: [],
@@ -46,9 +46,17 @@ const human = {
   quotes: [],
   last_updated: "2026-01-01T00:00:00.000Z",
   settings: {},
-} as unknown as HumanEntity;
+};
 
-const storedState = { version: 1, timestamp: "t", human, personas: {}, queue: [], providers: [], tools: [] } as unknown as StorageState;
+const storedState: StorageState = {
+  version: 1,
+  timestamp: "t",
+  human,
+  personas: {},
+  queue: [],
+  providers: [],
+  tools: [],
+};
 
 async function settle() {
   await act(async () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, within, fireEvent } from "@testing-library/react";
 import { ChatPanel } from "./ChatPanel";
-import { TOOLS_RAN_NO_REPLY_SILENCE_REASON, type Message, type ToolCallRecord } from "../../../../src/core/types";
+import { ContextStatus, TOOLS_RAN_NO_REPLY_SILENCE_REASON, type Message, type ToolCallRecord } from "../../../../src/core/types";
 import { installVirtualListStubs } from "../../test/virtualListStubs";
 
 const call: ToolCallRecord = {
@@ -19,9 +19,9 @@ function reply(id: string, extra: Partial<Message> = {}): Message {
     content: `reply ${id}`,
     timestamp: "2026-01-01T10:00:00.000Z",
     read: true,
-    context_status: "default",
+    context_status: ContextStatus.Default,
     ...extra,
-  } as Message;
+  };
 }
 
 function renderPanel(messages: Message[], props: { showThinking?: boolean; onToggleThinking?: () => void } = {}) {

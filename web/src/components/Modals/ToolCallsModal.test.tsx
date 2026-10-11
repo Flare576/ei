@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import { ToolCallsModal } from "./ToolCallsModal";
-import type { Message, ToolCallRecord } from "../../../../src/core/types";
+import { ContextStatus, type Message, type ToolCallRecord } from "../../../../src/core/types";
 
 const RAW_OUTPUT = "0123456789".repeat(20);
 const PERSISTED_OUTPUT = `${RAW_OUTPUT.slice(0, 150)}... (truncated)`;
@@ -37,9 +37,9 @@ function message(toolCalls: ToolCallRecord[]): Message {
     content: "done",
     timestamp: "2026-01-01T10:00:00.000Z",
     read: true,
-    context_status: "default",
+    context_status: ContextStatus.Default,
     tool_calls: toolCalls,
-  } as Message;
+  };
 }
 
 function callSection(index: number): HTMLElement {

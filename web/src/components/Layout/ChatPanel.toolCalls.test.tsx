@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within, fireEvent } from "@testing-library/react";
 import { ChatPanel } from "./ChatPanel";
-import type { Message, ToolCallRecord } from "../../../../src/core/types";
+import { ContextStatus, type Message, type ToolCallRecord } from "../../../../src/core/types";
 import { installVirtualListStubs } from "../../test/virtualListStubs";
 
 const READ_NAME = "Show tool calls (read only)";
@@ -30,9 +30,9 @@ function personaReply(id: string, extra: Partial<Message> = {}): Message {
     content: `reply ${id}`,
     timestamp: "2026-01-01T10:00:00.000Z",
     read: true,
-    context_status: "default",
+    context_status: ContextStatus.Default,
     ...extra,
-  } as Message;
+  };
 }
 
 function renderPanel(messages: Message[], onToolCallsClick = vi.fn()) {

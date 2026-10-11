@@ -7,23 +7,33 @@ import { vi } from "vitest";
 const WIDTH = 800;
 const HEIGHT = 600;
 
+function boxRect(): DOMRect {
+  return {
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: WIDTH,
+    bottom: HEIGHT,
+    width: WIDTH,
+    height: HEIGHT,
+    toJSON: () => ({}),
+  };
+}
+
 export function installVirtualListStubs(): () => void {
-  class StubResizeObserver {
+  class StubResizeObserver implements ResizeObserver {
     constructor(private readonly callback: ResizeObserverCallback) {}
     observe(target: Element) {
-      const contentRect = {
-        x: 0,
-        y: 0,
-        top: 0,
-        left: 0,
-        right: WIDTH,
-        bottom: HEIGHT,
-        width: WIDTH,
-        height: HEIGHT,
-        toJSON: () => ({}),
-      } as DOMRectReadOnly;
-      const entry = { target, contentRect } as ResizeObserverEntry;
-      this.callback([entry], this as unknown as ResizeObserver);
+      const size: ResizeObserverSize = { inlineSize: WIDTH, blockSize: HEIGHT };
+      const entry: ResizeObserverEntry = {
+        target,
+        contentRect: boxRect(),
+        borderBoxSize: [size],
+        contentBoxSize: [size],
+        devicePixelContentBoxSize: [size],
+      };
+      this.callback([entry], this);
     }
     unobserve() {}
     disconnect() {}
@@ -37,18 +47,7 @@ export function installVirtualListStubs(): () => void {
 
   Object.defineProperty(HTMLElement.prototype, "offsetHeight", { configurable: true, get: () => HEIGHT });
   Object.defineProperty(HTMLElement.prototype, "offsetWidth", { configurable: true, get: () => WIDTH });
-  Element.prototype.getBoundingClientRect = () =>
-    ({
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      right: WIDTH,
-      bottom: HEIGHT,
-      width: WIDTH,
-      height: HEIGHT,
-      toJSON: () => ({}),
-    }) as DOMRect;
+  Element.prototype.getBoundingClientRect = boxRect;
 
   return () => {
     vi.unstubAllGlobals();
