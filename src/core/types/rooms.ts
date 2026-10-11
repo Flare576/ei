@@ -4,6 +4,7 @@
  */
 
 import type { RoomMode, ContextStatus } from "./enums.js";
+import type { ToolCallRecord } from "./llm.js";
 
 export interface RoomMessage {
   id: string;
@@ -21,6 +22,10 @@ export interface RoomMessage {
   p?: boolean;
   e?: boolean;
   persona_extracted?: Record<string, true>; // Per-persona topic scan tracking. Key = personaId.slice(0, 8)
+
+  // Display-only capture of the turn that produced this message. Never sent to the LLM.
+  tool_calls?: ToolCallRecord[];  // Omitted entirely when the turn made no tool calls; never an empty array
+  thinking?: string;              // Reasoning text; consumers render only when non-empty
 }
 
 export interface RoomEntity {

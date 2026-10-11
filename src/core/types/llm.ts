@@ -5,6 +5,18 @@
 
 import type { LLMRequestType, LLMPriority, LLMNextStep } from "./enums.js";
 
+/**
+ * One persisted tool call: a lossless tuple, display-only (never replayed into
+ * a later LLM request). Carried as `tool_calls` by both Message and RoomMessage.
+ */
+export interface ToolCallRecord {
+  name: string;                          // snake_case tool name
+  arguments: Record<string, unknown>;    // Call arguments in full, never truncated
+  result: string;                        // Persisted (possibly truncated) result; any truncation marker is inside the string
+  error: boolean;                        // Raw tool-execution error flag, forwarded as-is
+  kind: "read" | "write";                // ToolDefinition.kind classification
+}
+
 export interface Message {
   id: string;
   role: "human" | "system";
@@ -26,6 +38,10 @@ export interface Message {
   speaker_name?: string;       // Display name of actual speaker; set on room messages for clean hydration
 
   external?: boolean;          // Set by integration importers (OpenCode, Cursor, Claude Code, Codex); invisible to LLM context
+
+  // Display-only capture of the turn that produced this message. Never sent to the LLM.
+  tool_calls?: ToolCallRecord[];  // Omitted entirely when the turn made no tool calls; never an empty array
+  thinking?: string;              // Reasoning text; consumers render only when non-empty
 
 }
 
