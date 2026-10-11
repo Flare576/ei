@@ -12,6 +12,16 @@ function getContent(msg: { content?: string }): string {
   return msg.content ?? '';
 }
 
+function getToolCallsButton(message: Message): { icon: string; label: string } | null {
+  const toolCalls = message.tool_calls;
+  if (!toolCalls || toolCalls.length === 0) return null;
+  // A call that is not positively classified read-only is treated as a write.
+  if (toolCalls.some(call => call.kind !== "read")) {
+    return { icon: "🧧", label: "Show tool calls (includes write)" };
+  }
+  return { icon: "🔧", label: "Show tool calls (read only)" };
+}
+
 function buildMessageDisplayText(message: Message): string {
   if (message.silence_reason !== undefined) return "";
   return getContent(message);
@@ -80,6 +90,7 @@ interface ChatPanelProps {
   onSetContextBoundary?: (timestamp: string | null) => void;
   onQuoteClick?: (quote: Quote) => void;
   onScissorsClick?: (message: Message) => void;
+  onToolCallsClick?: (message: Message) => void;
   onImageGenerate?: (message: Message) => void;
   messageImages?: Record<string, {blobUrl: string, result: GenerationResult}>;
   generatingImageFor?: string | null;
@@ -112,6 +123,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   onSetContextBoundary,
   onQuoteClick,
   onScissorsClick,
+  onToolCallsClick,
   onImageGenerate,
   messageImages = {},
   generatingImageFor,
@@ -443,6 +455,23 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                 return "Generate image from this message";
               };
               
+              const toolCallsButtonSpec = onToolCallsClick ? getToolCallsButton(msg) : null;
+              const toolCallsButton = toolCallsButtonSpec && (
+                <Tooltip text={toolCallsButtonSpec.label}>
+                  <button
+                    type="button"
+                    className="ei-message__tool-calls"
+                    aria-label={toolCallsButtonSpec.label}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToolCallsClick?.(msg);
+                    }}
+                  >
+                    {toolCallsButtonSpec.icon}
+                  </button>
+                </Tooltip>
+              );
+
               const imageButton = onImageGenerate && (
                 <Tooltip text={getImageButtonTitle(msg.id)} disabled={generatingImageFor === msg.id}>
                   <button 
@@ -527,6 +556,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                         <>
                           {scissorsButton}
                           {imageButton}
+                          {toolCallsButton}
                         </>
                       )}
                       <div className="ei-message__time">

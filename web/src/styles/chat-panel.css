@@ -126,7 +126,8 @@
   background-color: rgba(255, 200, 100, 0.5);
 }
 
-.ei-message__scissors {
+.ei-message__scissors,
+.ei-message__tool-calls {
   background: none;
   border: none;
   cursor: pointer;
@@ -139,7 +140,9 @@
   margin-top: var(--ei-spacing-xs);
 }
 
-.ei-message__scissors:hover {
+.ei-message__scissors:hover,
+.ei-message__tool-calls:hover,
+.ei-message__tool-calls:focus-visible {
   opacity: 1;
 }
 
