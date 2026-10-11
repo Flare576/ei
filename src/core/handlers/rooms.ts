@@ -10,6 +10,7 @@ import type { RoomJudgeResult } from "../../prompts/room/index.js";
 import { buildRoomResponsePromptData } from "../prompt-context-builder.js";
 import { cleanResponseContent } from "../llm-client.js";
 import { qualifyEiMessage } from "../utils/message-id.js";
+import { turnCaptureFields } from "../turn-capture.js";
 
 export function handleRoomResponse(response: LLMResponse, state: StateManager): void {
   const roomId = response.request.data.roomId as string;
@@ -40,6 +41,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
         timestamp: now,
         read: false,
         context_status: ContextStatus.Default,
+        ...turnCaptureFields(response),
       };
       state.appendRoomMessage(roomId, msg);
     } else {
@@ -52,6 +54,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
         timestamp: now,
         read: false,
         context_status: ContextStatus.Default,
+        ...turnCaptureFields(response),
       };
       state.appendRoomMessage(roomId, msg);
       console.log(`[handleRoomResponse] Appended Markdown response from ${personaDisplayName} to room ${roomId}`);
@@ -75,6 +78,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
           timestamp: now,
           read: false,
           context_status: ContextStatus.Default,
+          ...turnCaptureFields(response),
         };
         state.appendRoomMessage(roomId, msg);
       }
@@ -97,6 +101,7 @@ export function handleRoomResponse(response: LLMResponse, state: StateManager): 
       timestamp: now,
       read: false,
       context_status: ContextStatus.Default,
+      ...turnCaptureFields(response),
     };
     state.appendRoomMessage(roomId, msg);
     console.log(`[handleRoomResponse] Appended structured response from ${personaDisplayName} to room ${roomId}`);

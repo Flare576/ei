@@ -1,6 +1,7 @@
 import {
   ContextStatus,
   LLMNextStep,
+  TOOLS_RAN_NO_REPLY_SILENCE_REASON,
   type LLMResponse,
   type Message,
 } from "../types.js";
@@ -9,6 +10,7 @@ import type { PersonaResponseResult } from "../../prompts/response/index.js";
 import { handlers } from "./index.js";
 import { cleanResponseContent } from "../llm-client.js";
 import { qualifyEiMessage } from "../utils/message-id.js";
+import { turnCaptureFields } from "../turn-capture.js";
 
 export type ResponseHandler = (response: LLMResponse, state: StateManager) => void | Promise<void>;
 
@@ -37,6 +39,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
         timestamp: new Date().toISOString(),
         read: false,
         context_status: ContextStatus.Default,
+        ...turnCaptureFields(response),
       };
       state.messages_append(personaId, silentMessage);
     } else {
@@ -47,6 +50,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
         timestamp: new Date().toISOString(),
         read: false,
         context_status: ContextStatus.Default,
+        ...turnCaptureFields(response),
       };
       state.messages_append(personaId, message);
       console.log(`[handlePersonaResponse] Appended Markdown response to ${personaDisplayName}`);
@@ -68,6 +72,7 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
           timestamp: new Date().toISOString(),
           read: false,
           context_status: ContextStatus.Default,
+          ...turnCaptureFields(response),
         };
         state.messages_append(personaId, silentMessage);
       } else {
@@ -90,9 +95,28 @@ export function handlePersonaResponse(response: LLMResponse, state: StateManager
       timestamp: new Date().toISOString(),
       read: false,
       context_status: ContextStatus.Default,
+      ...turnCaptureFields(response),
     };
     state.messages_append(personaId, message);
     console.log(`[handlePersonaResponse] Appended structured response to ${personaDisplayName}`);
+    return;
+  }
+
+  // A turn that ran tools and then ended with no reply and no NoResponse sentinel still
+  // gets a row, so the turn's captured tool calls have somewhere to attach.
+  const capture = turnCaptureFields(response);
+  if (capture.tool_calls) {
+    console.log(`[silence] ${personaDisplayName}: tools ran but no reply was produced`);
+    const fallbackMessage: Message = {
+      id: qualifyEiMessage(crypto.randomUUID()),
+      role: "system",
+      silence_reason: TOOLS_RAN_NO_REPLY_SILENCE_REASON,
+      timestamp: new Date().toISOString(),
+      read: false,
+      context_status: ContextStatus.Default,
+      ...capture,
+    };
+    state.messages_append(personaId, fallbackMessage);
     return;
   }
 

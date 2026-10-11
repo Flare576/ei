@@ -17,6 +17,17 @@ export interface ToolCallRecord {
   kind: "read" | "write";                // ToolDefinition.kind classification
 }
 
+/**
+ * Whole-turn display capture assembled by the QueueProcessor across every
+ * chained tool-continuation round. Carried on the final LLMResponse and across
+ * continuations in `request.data.turnCapture`. Tool results here are complete;
+ * the 150-character cap is applied only when a handler writes the final row.
+ */
+export interface TurnCapture {
+  tool_calls: ToolCallRecord[];          // Every executed call so far, in request order
+  thinking?: string;                     // Non-empty round thinking joined by "\n\n"; omitted when no round had any
+}
+
 export interface Message {
   id: string;
   role: "human" | "system";
@@ -80,4 +91,5 @@ export interface LLMResponse {
   parsed?: unknown;
   error?: string;
   finish_reason?: string;
+  turn_capture?: TurnCapture;            // Optional; present only when the turn captured tool calls or thinking. Read by the handlers that write the turn's final row
 }
