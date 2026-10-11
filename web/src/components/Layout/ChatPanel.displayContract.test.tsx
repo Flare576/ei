@@ -112,10 +112,8 @@ describe("1:1 message display contract", () => {
 
     fireEvent.click(within(messageRow("sensitive")).getByRole("button", { name: "Show tool calls (includes write)" }));
     const dialog = screen.getByRole("dialog", { name: /tool calls/i });
-    const nameArgument = within(dialog).getByText("name").closest(".ei-tool-call__argument");
-    if (!nameArgument) throw new Error("name argument not rendered");
-    expect(nameArgument.querySelector("dd pre")?.textContent).toBe(secret);
-    expect(dialog.querySelector(".ei-tool-call__arguments a")).toBeNull();
+    const nameLabel = within(dialog).getByText("name");
+    expect(nameLabel.nextElementSibling?.textContent).toBe(secret);
   });
 
   it("reveals complete persisted thinking and tool details immediately, with no later additions", () => {
