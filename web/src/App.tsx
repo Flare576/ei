@@ -65,6 +65,7 @@ import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
 import { TargetedCaptureModal } from "./components/Modals/TargetedCaptureModal";
 import { KnowledgeSearchModal } from "./components/Modals/KnowledgeSearchModal";
+import { ToolCallsModal } from "./components/Modals/ToolCallsModal";
 import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
 import { Onboarding } from "./components/Onboarding";
 import { QueuePanel } from "./components/Queue/QueuePanel";
@@ -201,6 +202,7 @@ function App() {
    const [toolProviders, setToolProviders] = useState<ToolProvider[]>([]);
    const [toolDefinitions, setToolDefinitions] = useState<ToolDefinition[]>([]);
    const [captureMessage, setCaptureMessage] = useState<Message | null>(null);
+   const [toolCallsMessage, setToolCallsMessage] = useState<Message | null>(null);
    const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
    const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
    const [showCaptureModal, setShowCaptureModal] = useState(false);
@@ -1314,6 +1316,7 @@ function App() {
                setShowPersonaEditor(false);
                setCaptureMessage(message);
              }}
+             onToolCallsClick={setToolCallsMessage}
              onImageGenerate={handleImageGenerate}
              messageImages={messageImages}
              generatingImageFor={generatingImageFor}
@@ -1513,6 +1516,11 @@ function App() {
        onUnarchive={handleUnarchivePersona}
        onDelete={handleDeleteArchivedPersona}
      />
+
+     <ToolCallsModal
+        message={toolCallsMessage}
+        onClose={() => setToolCallsMessage(null)}
+      />
 
      <QuoteCaptureModal
         isOpen={captureMessage !== null}
