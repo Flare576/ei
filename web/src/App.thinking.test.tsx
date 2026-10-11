@@ -354,4 +354,39 @@ describe("thinking display in the real App", () => {
     expect(screen.getByText("Bea reply")).toBeInTheDocument();
     expect(screen.queryByText("Ada reply one")).toBeNull();
   });
+
+  it("ignores a late context-boundary refresh for a persona that is no longer selected", async () => {
+    await openChat("Ada");
+    await screen.findByText("Ada thinks one");
+    vi.spyOn(StateManager.prototype, "persona_setContextBoundary").mockImplementation(() => {});
+
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(Processor.prototype.getPersona).mockImplementation(async (id: string) => {
+      if (id === "ada") await gate;
+      const record = store.get(id);
+      return record ? structuredClone(record) : null;
+    });
+    vi.mocked(Processor.prototype.getMessages).mockImplementation(async (id: string) => {
+      if (id === "ada") await gate;
+      return messagesByPersona.get(id) ?? [];
+    });
+
+    // Ada's boundary refresh is in flight (held behind the gate) while the user switches to Bea.
+    await act(async () => {
+      await startedProcessor!.setContextBoundary("ada", "2026-01-01T09:00:00.000Z");
+    });
+    fireEvent.click(pillName("Bea"));
+    await screen.findByText("Chat with Bea");
+    expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+
+    release();
+    await settle();
+
+    expect(screen.getByText("Bea thinks")).toBeInTheDocument();
+    expect(screen.getByText("Bea reply")).toBeInTheDocument();
+    expect(screen.queryByText("Ada reply one")).toBeNull();
+  });
 });

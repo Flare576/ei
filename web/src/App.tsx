@@ -426,8 +426,12 @@ function App() {
       },
       onContextBoundaryChanged: (personaId) => {
         if (personaId === activePersonaIdRef.current) {
-          processorRef.current?.getPersona(personaId).then(setActivePersonaEntity);
-          processorRef.current?.getMessages(personaId).then(setMessages);
+          processorRef.current?.getPersona(personaId).then((entity) => {
+            if (activePersonaIdRef.current === personaId) setActivePersonaEntity(entity);
+          });
+          processorRef.current?.getMessages(personaId).then((loaded) => {
+            if (activePersonaIdRef.current === personaId) setMessages(loaded);
+          });
         }
       },
       onStateConflict: (data: StateConflictData) => {
@@ -771,22 +775,24 @@ function App() {
   // Each toggle reads the stored value inside a serialized step, so rapid clicks flip it once each
   // instead of all deriving the next value from the same rendered snapshot.
   const thinkingToggleChainRef = useRef<Promise<void>>(Promise.resolve());
-  const handleToggleThinking = useCallback(() => {
-    if (!processor || !activePersonaId) return;
+  const handleToggleThinking = useCallback(async (): Promise<boolean> => {
+    if (!processor || !activePersonaId) return false;
     const personaId = activePersonaId;
-    const step = thinkingToggleChainRef.current.then(async () => {
+    const step = thinkingToggleChainRef.current.then(async (): Promise<boolean> => {
       const current = await processor.getPersona(personaId);
-      if (!current) return;
+      if (!current) return false;
       await processor.updatePersona(personaId, { show_thinking: !(current.show_thinking ?? true) });
       const updated = await processor.getPersona(personaId);
-      if (!updated) return;
+      if (!updated) return false;
       if (activePersonaIdRef.current === personaId) setActivePersonaEntity(updated);
       setEditingPersona((editing) => (editing?.id === personaId ? updated : editing));
+      return true;
     });
     const settled = step.catch((error) => {
       console.error("[EI Error] Failed to toggle persona thinking display:", error);
+      return false;
     });
-    thinkingToggleChainRef.current = settled;
+    thinkingToggleChainRef.current = settled.then(() => undefined);
     return settled;
   }, [processor, activePersonaId]);
 
