@@ -371,9 +371,9 @@ export function stripHiddenDataItemFields(record: Fact | Topic | Person): Extern
  * Persona is absent, never merely `undefined` — `tools`, `model`,
  * `heartbeat_delay_ms`, `context_window_ms`, `include_message_timestamps`,
  * `context_boundary`, `is_paused`, `pause_until`, `is_archived`,
- * `archived_at`, `last_heartbeat`, `description_embedding`.
+ * `archived_at`, `last_heartbeat`, `description_embedding`, `show_thinking`.
  */
-export type ExternalPersonaEntity = Omit<PersonaEntity, "tools" | "model" | "heartbeat_delay_ms" | "context_window_ms" | "include_message_timestamps" | "context_boundary" | "is_paused" | "pause_until" | "is_archived" | "archived_at" | "last_heartbeat" | "description_embedding">;
+export type ExternalPersonaEntity = Omit<PersonaEntity, "tools" | "model" | "heartbeat_delay_ms" | "context_window_ms" | "include_message_timestamps" | "context_boundary" | "is_paused" | "pause_until" | "is_archived" | "archived_at" | "last_heartbeat" | "description_embedding" | "show_thinking">;
 
 /**
  * `tools` is the field that removes the dual-representation problem from
@@ -396,5 +396,6 @@ export function stripHiddenPersonaFields(entity: PersonaEntity): ExternalPersona
   delete clone.archived_at;
   delete clone.last_heartbeat;
   delete clone.description_embedding;
+  delete clone.show_thinking;
   return clone as ExternalPersonaEntity;
 }

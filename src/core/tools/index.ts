@@ -47,6 +47,7 @@ export const SYSTEM_TOOLS: ToolDefinition[] = [
     enabled: true,
     created_at: new Date(0).toISOString(),
     max_calls_per_interaction: 3,
+    kind: "read",
   },
   {
     id: "builtin-fetch-memory",
@@ -66,6 +67,7 @@ export const SYSTEM_TOOLS: ToolDefinition[] = [
     enabled: true,
     created_at: new Date(0).toISOString(),
     max_calls_per_interaction: 10,
+    kind: "read",
   },
   {
     id: "builtin-fetch-message",
@@ -87,6 +89,7 @@ export const SYSTEM_TOOLS: ToolDefinition[] = [
     enabled: true,
     created_at: new Date(0).toISOString(),
     max_calls_per_interaction: 5,
+    kind: "read",
   },
 ];
 
@@ -161,6 +164,7 @@ export function buildPersonaNoteTools(personaId: string): ToolDefinition[] {
       created_at: now,
       max_calls_per_interaction: 5,
       heartbeat_eligible: false,
+      kind: "write",
     },
     {
       id: `builtin-clear-note-${personaId}`,
@@ -182,6 +186,7 @@ export function buildPersonaNoteTools(personaId: string): ToolDefinition[] {
       created_at: now,
       max_calls_per_interaction: 5,
       heartbeat_eligible: false,
+      kind: "write",
     },
   ];
 }
@@ -223,6 +228,7 @@ export function buildPersonaIdentityTools(personaId: string): ToolDefinition[] {
       enabled: true,
       created_at: now,
       max_calls_per_interaction: 5,
+      kind: "read",
     },
     {
       id: `builtin-edit-trait-${personaId}`,
@@ -249,6 +255,7 @@ export function buildPersonaIdentityTools(personaId: string): ToolDefinition[] {
       created_at: now,
       max_calls_per_interaction: 5,
       heartbeat_eligible: false,
+      kind: "write",
     },
     {
       id: `builtin-edit-topic-${personaId}`,
@@ -278,6 +285,7 @@ export function buildPersonaIdentityTools(personaId: string): ToolDefinition[] {
       created_at: now,
       max_calls_per_interaction: 5,
       heartbeat_eligible: false,
+      kind: "write",
     },
     {
       id: `builtin-update-description-${personaId}`,
@@ -299,6 +307,7 @@ export function buildPersonaIdentityTools(personaId: string): ToolDefinition[] {
       created_at: now,
       max_calls_per_interaction: 5,
       heartbeat_eligible: false,
+      kind: "write",
     },
   ];
 }
@@ -345,6 +354,7 @@ export function buildResolveSignalTool(personaId: string): ToolDefinition[] {
       created_at: now,
       max_calls_per_interaction: 5,
       heartbeat_eligible: false,
+      kind: "write",
     },
   ];
 }

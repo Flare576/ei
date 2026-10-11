@@ -71,7 +71,7 @@ vi.mock("../../../src/core/orchestrators/index.js", () => ({
   queuePersonaSignalValidate: vi.fn(),
 }));
 
-import { loadLatestState } from "../../../src/cli/retrieval.js";
+import { loadLatestState, lookupById } from "../../../src/cli/retrieval.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity, addPersonaObservation, applyPersonaSignal } from "../../../src/cli/persona-corrections.js";
 import { CorrectionValidationError } from "../../../src/cli/corrections-endpoints.js";
 import { NOTES_MAX } from "../../../src/core/tools/builtin/persona-notes.js";
@@ -514,6 +514,7 @@ describe("updatePersonaEntity", () => {
       ["context_window_ms", 9999],
       ["include_message_timestamps", false],
       ["context_boundary", "2027-01-01T00:00:00.000Z"],
+      ["show_thinking", false],
     ];
 
     for (const [field, value] of hiddenFields) {
@@ -527,6 +528,26 @@ describe("updatePersonaEntity", () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
     tempDir = undefined as never;
+  });
+
+  it("AT13: a persona saved with show_thinking:false lacks the flag in the external lookup, a lookup-derived update (group fields removed) is accepted, and the flag survives on disk", async () => {
+    const existing = makeExistingPersonaEntity(PERSONA_ID, { show_thinking: false });
+    writeState(makeState({ [PERSONA_ID]: { entity: existing, messages: [] } }));
+
+    const looked = await lookupById(PERSONA_ID);
+    expect(looked).not.toBeNull();
+    expect("show_thinking" in looked!).toBe(false);
+
+    // Remove only the keys the patch schema has never accepted for any persona (ADR-031 System Visible).
+    const { group_primary, groups_visible, ...roundTrip } = looked!;
+    void group_primary; void groups_visible;
+
+    await updatePersonaEntity(PERSONA_ID, { ...roundTrip, display_name: "Renamed via lookup round trip" });
+
+    const raw = JSON.parse(readFileSync(join(tempDir, "state.json"), "utf-8")) as StorageState;
+    const persisted = raw.personas[PERSONA_ID].entity;
+    expect(persisted.display_name).toBe("Renamed via lookup round trip");
+    expect(persisted.show_thinking).toBe(false);
   });
 
   it("strips the four structural round-trip fields (id/type/entity/last_updated) before validation so a lookupById-style read doesn't fail strictObject, once every Hidden/System-Visible field is also dropped by the caller", async () => {

@@ -31,7 +31,8 @@ vi.mock("zod", async (importOriginal) => {
   };
 });
 
-import { deriveSchemaPair } from "../../../src/core/entity-schemas.js";
+import { deriveSchemaPair, stripHiddenPersonaFields } from "../../../src/core/entity-schemas.js";
+import type { PersonaEntity } from "../../../src/core/types/entities.js";
 import {
   topicPatchSchema,
   topicCandidateSchema,
@@ -164,9 +165,28 @@ describe("persona schema pair", () => {
       "tools", "model", "heartbeat_delay_ms", "context_window_ms",
       "include_message_timestamps", "context_boundary", "is_paused",
       "pause_until", "is_archived", "archived_at", "group_primary",
-      "groups_visible",
+      "groups_visible", "show_thinking",
     ]) {
       expect(() => personaPatchSchema.parse({ [field]: true })).toThrow(/Unrecognized key/);
+    }
+  });
+
+  it("stripHiddenPersonaFields removes show_thinking (a key absent, not merely undefined) whether the stored value is false or true", () => {
+    const persona: PersonaEntity = {
+      id: "p1",
+      display_name: "Nova",
+      entity: "system",
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: "2026-01-01T00:00:00.000Z",
+    };
+    for (const value of [false, true]) {
+      const result = stripHiddenPersonaFields({ ...persona, show_thinking: value });
+      expect("show_thinking" in result).toBe(false);
+      expect(result.display_name).toBe("Nova");
     }
   });
 
