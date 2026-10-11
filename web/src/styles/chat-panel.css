@@ -127,7 +127,8 @@
 }
 
 .ei-message__scissors,
-.ei-message__tool-calls {
+.ei-message__tool-calls,
+.ei-message__thinking-toggle {
   background: none;
   border: none;
   cursor: pointer;
@@ -142,8 +143,18 @@
 
 .ei-message__scissors:hover,
 .ei-message__tool-calls:hover,
-.ei-message__tool-calls:focus-visible {
+.ei-message__tool-calls:focus-visible,
+.ei-message__thinking-toggle:hover {
   opacity: 1;
+}
+
+/* The persona's reasoning, shown above its reply; plain text so it is never reformatted */
+.ei-message__thinking {
+  color: var(--ei-text-muted);
+  font-style: italic;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-bottom: var(--ei-spacing-sm);
 }
 
 .ei-quote-badge {

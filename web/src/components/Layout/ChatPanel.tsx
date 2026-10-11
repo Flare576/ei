@@ -1,7 +1,7 @@
 import { useRef, useEffect, useLayoutEffect, useCallback, useState, useMemo, forwardRef, useImperativeHandle } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStickToBottom } from "use-stick-to-bottom";
-import type { Message, Quote } from "../../../../src/core/types";
+import { TOOLS_RAN_NO_REPLY_SILENCE_REASON, type Message, type Quote } from "../../../../src/core/types";
 import type { ThemeDefinition } from "../../../../src/core/types/entities.js";
 import type { GenerationResult } from "../../comfyui";
 import { MarkdownContent } from "../Chat";
@@ -35,6 +35,14 @@ function renderMessageContent(
   // Silence-reason messages get muted rendering
   if (message.silence_reason !== undefined) {
     const label = message.role === "human" ? "You" : (activePersonaDisplayName ?? "Persona");
+    // A turn that ran tools and produced no text is not a choice to stay silent.
+    if (message.silence_reason === TOOLS_RAN_NO_REPLY_SILENCE_REASON) {
+      return (
+        <span className="silence-reason">
+          [{label} ran tools but sent no reply]
+        </span>
+      );
+    }
     return (
       <span className="silence-reason">
         [{label} chose not to respond because: {message.silence_reason}]
@@ -91,6 +99,8 @@ interface ChatPanelProps {
   onQuoteClick?: (quote: Quote) => void;
   onScissorsClick?: (message: Message) => void;
   onToolCallsClick?: (message: Message) => void;
+  showThinking?: boolean;
+  onToggleThinking?: () => void;
   onImageGenerate?: (message: Message) => void;
   messageImages?: Record<string, {blobUrl: string, result: GenerationResult}>;
   generatingImageFor?: string | null;
@@ -124,6 +134,8 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   onQuoteClick,
   onScissorsClick,
   onToolCallsClick,
+  showThinking = true,
+  onToggleThinking,
   onImageGenerate,
   messageImages = {},
   generatingImageFor,
@@ -455,6 +467,22 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                 return "Generate image from this message";
               };
               
+              const hasThinking = typeof msg.thinking === "string" && msg.thinking.length > 0;
+              const thinkingButton = onToggleThinking && hasThinking && (
+                <Tooltip text={showThinking ? "Hide thinking" : "Show thinking"}>
+                  <button
+                    type="button"
+                    className="ei-message__thinking-toggle"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleThinking();
+                    }}
+                  >
+                    💭
+                  </button>
+                </Tooltip>
+              );
+
               const toolCallsButtonSpec = onToolCallsClick ? getToolCallsButton(msg) : null;
               const toolCallsButton = toolCallsButtonSpec && (
                 <Tooltip text={toolCallsButtonSpec.label}>
@@ -520,6 +548,9 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                         </>
                       )}
                       <div className="ei-message__bubble" onClick={handleBubbleClick}>
+                        {hasThinking && showThinking && (
+                          <div className="ei-message__thinking">{msg.thinking}</div>
+                        )}
                         {msg._synthesis ? (
                           <div 
                             className="silence-reason" 
@@ -557,6 +588,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
                           {scissorsButton}
                           {imageButton}
                           {toolCallsButton}
+                          {thinkingButton}
                         </>
                       )}
                       <div className="ei-message__time">
