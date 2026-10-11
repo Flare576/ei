@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { ToolCallRecord } from "../../src/core/types/llm.js";
+import type { Processor } from "../../src/core/processor.js";
 import { expect, seedCheckpoint, selectEiPersona, test, type CheckpointMessage } from "./fixtures.js";
 
 const MESSAGE_COUNT = 60;
@@ -30,14 +31,16 @@ type QueueProbe = {
   abort: number;
   pendingStatusReads: Promise<unknown>[];
 };
-type ProbeWindow = Window & {
-  __processor: {
-    resumeQueue: (...args: unknown[]) => Promise<unknown>;
-    abortCurrentOperation: (...args: unknown[]) => Promise<unknown>;
-    getQueueStatus: (...args: unknown[]) => Promise<unknown>;
-  };
-  __queueProbe: QueueProbe;
-};
+
+// `__processor` is declared by other specs with their own member lists; redeclaring it here would
+// conflict, so only the probe this spec installs is declared and the processor is narrowed below.
+declare global {
+  interface Window {
+    __queueProbe?: QueueProbe;
+  }
+}
+
+type ObservedProcessor = Pick<Processor, "resumeQueue" | "abortCurrentOperation" | "getQueueStatus">;
 
 async function openChat(page: Page, mockServerUrl: string): Promise<void> {
   await seedCheckpoint(page, mockServerUrl, seedMessages());
@@ -63,9 +66,16 @@ async function tabToIcon(page: Page): Promise<void> {
  */
 async function observeQueue(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const w = window as unknown as ProbeWindow;
+    const candidate: unknown = Reflect.get(window, "__processor");
+    const isObserved = (value: unknown): value is ObservedProcessor =>
+      typeof value === "object" &&
+      value !== null &&
+      typeof Reflect.get(value, "resumeQueue") === "function" &&
+      typeof Reflect.get(value, "abortCurrentOperation") === "function" &&
+      typeof Reflect.get(value, "getQueueStatus") === "function";
+    if (!isObserved(candidate)) throw new Error("window.__processor is not exposed by the running app");
+    const processor = candidate;
     const probe: QueueProbe = { resume: 0, abort: 0, pendingStatusReads: [] };
-    const processor = w.__processor;
     const resumeQueue = processor.resumeQueue.bind(processor);
     const abortCurrentOperation = processor.abortCurrentOperation.bind(processor);
     const getQueueStatus = processor.getQueueStatus.bind(processor);
@@ -82,13 +92,14 @@ async function observeQueue(page: Page): Promise<void> {
       probe.pendingStatusReads.push(read);
       return read;
     };
-    w.__queueProbe = probe;
+    window.__queueProbe = probe;
   });
 }
 
 async function resetQueueCounts(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const probe = (window as unknown as ProbeWindow).__queueProbe;
+    const probe = window.__queueProbe;
+    if (!probe) throw new Error("queue probe is not installed");
     probe.resume = 0;
     probe.abort = 0;
   });
@@ -100,7 +111,8 @@ async function resetQueueCounts(page: Page): Promise<void> {
  */
 async function settleQueueCounts(page: Page): Promise<{ resume: number; abort: number }> {
   return page.evaluate(async () => {
-    const probe = (window as unknown as ProbeWindow).__queueProbe;
+    const probe = window.__queueProbe;
+    if (!probe) throw new Error("queue probe is not installed");
     await Promise.all(probe.pendingStatusReads.splice(0));
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     await Promise.all(probe.pendingStatusReads.splice(0));
