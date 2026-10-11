@@ -389,4 +389,123 @@ describe("thinking display in the real App", () => {
     expect(screen.getByText("Bea reply")).toBeInTheDocument();
     expect(screen.queryByText("Ada reply one")).toBeNull();
   });
+
+  describe("a refresh still in flight when the reader moves to another persona", () => {
+    // Ada's history request is held open; the reader switches to Bea, whose history loads normally;
+    // then Ada's request completes. Bea's chat must keep showing Bea's messages.
+    function holdAdaHistory(): () => void {
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(Processor.prototype.getMessages).mockImplementation(async (id: string) => {
+        if (id === "ada") await gate;
+        return messagesByPersona.get(id) ?? [];
+      });
+      return release;
+    }
+
+    async function switchToBeaThenRelease(release: () => void) {
+      fireEvent.click(pillName("Bea"));
+      await screen.findByText("Chat with Bea");
+      expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+      release();
+      await settle();
+      expect(screen.getByText("Bea thinks")).toBeInTheDocument();
+      expect(screen.getByText("Bea reply")).toBeInTheDocument();
+      expect(screen.queryByText("Ada reply one")).toBeNull();
+    }
+
+    it("ignores Ada's refresh after a message was added to her", async () => {
+      await openChat("Ada");
+      await screen.findByText("Ada thinks one");
+      vi.spyOn(StateManager.prototype, "messages_append").mockImplementation(() => true);
+      const release = holdAdaHistory();
+
+      await act(async () => {
+        await startedProcessor!.addMessageOnly("ada", makeMessage("a3", "Ada reply three", "Ada thinks three"));
+      });
+      await switchToBeaThenRelease(release);
+    });
+
+    it("ignores Ada's refresh after a state import", async () => {
+      await openChat("Ada");
+      await screen.findByText("Ada thinks one");
+      vi.spyOn(StateManager.prototype, "restoreFromState").mockImplementation(() => {});
+      const release = holdAdaHistory();
+
+      await act(async () => {
+        await startedProcessor!.importState(JSON.stringify(storedState));
+      });
+      await switchToBeaThenRelease(release);
+    });
+
+    it("ignores Ada's refresh after one of her unread replies was marked read", async () => {
+      messagesByPersona.set("ada", [
+        makeMessage("a1", "Ada reply one", "Ada thinks one"),
+        { ...makeMessage("a2", "Ada unread reply", "Ada thinks two"), read: false },
+      ]);
+      vi.spyOn(Processor.prototype, "markMessageRead").mockResolvedValue(true);
+      vi.spyOn(Processor.prototype, "markAllMessagesRead").mockResolvedValue(0);
+      await openChat("Ada");
+      await screen.findByText("Ada thinks two");
+      const release = holdAdaHistory();
+
+      fireEvent.click(screen.getByText("Ada unread reply"));
+      await settle();
+      await switchToBeaThenRelease(release);
+    });
+
+    it("ignores Ada's refresh after her pending message was recalled", async () => {
+      messagesByPersona.set("ada", [
+        makeMessage("a1", "Ada reply one", "Ada thinks one"),
+        { ...makeMessage("a2", "Ada pending message"), role: "human", read: false },
+      ]);
+      vi.spyOn(Processor.prototype, "recallPendingMessages").mockResolvedValue("recalled text");
+      vi.spyOn(Processor.prototype, "markAllMessagesRead").mockResolvedValue(0);
+      await openChat("Ada");
+      await screen.findByText("Ada pending message");
+      const release = holdAdaHistory();
+
+      fireEvent.click(screen.getByText("Ada pending message"));
+      await settle();
+      await switchToBeaThenRelease(release);
+    });
+
+    it("ignores Ada's refresh after an image prompt finished while Bea was selected", async () => {
+      vi.spyOn(window, "alert").mockImplementation(() => {});
+      vi.spyOn(StateManager.prototype, "messages_append").mockImplementation(() => true);
+      let oneShotGuid = "";
+      vi.spyOn(Processor.prototype, "submitOneShotJSON").mockImplementation(async (guid: string) => {
+        oneShotGuid = guid;
+      });
+      await openChat("Ada");
+      await screen.findByText("Ada thinks one");
+
+      // The model's answer is awaited for a while; the reader moves to Bea in the meantime.
+      const imagePromptButton = document.querySelector<HTMLElement>(".ei-image-prompt-btn");
+      if (!imagePromptButton) throw new Error("image prompt button not rendered");
+      fireEvent.click(imagePromptButton);
+      fireEvent.click((await screen.findAllByRole("checkbox"))[0]);
+      fireEvent.click(screen.getByRole("button", { name: /Generate Image \(1 selected\)/ }));
+      await waitFor(() => expect(oneShotGuid).not.toBe(""));
+      fireEvent.click(pillName("Bea"));
+      await screen.findByText("Chat with Bea");
+      expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+
+      // Deliver the model's answer the way the Processor does, through the interface the App registered.
+      const registered: unknown = Reflect.get(startedProcessor!, "interface");
+      if (typeof registered !== "object" || registered === null) throw new Error("the App registered no interface");
+      const deliver: unknown = Reflect.get(registered, "onOneShotJSONReturned");
+      if (typeof deliver !== "function") throw new Error("the App registered no one-shot handler");
+      await act(async () => {
+        deliver(oneShotGuid, { image_prompt: "a lighthouse at dusk" });
+      });
+      await settle();
+
+      expect(screen.getByText("Bea thinks")).toBeInTheDocument();
+      expect(screen.getByText("Bea reply")).toBeInTheDocument();
+      expect(screen.queryByText("Ada reply one")).toBeNull();
+    });
+  });
 });

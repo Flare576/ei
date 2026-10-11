@@ -379,7 +379,9 @@ function App() {
       },
       onMessageAdded: (personaId) => {
         if (personaId === activePersonaIdRef.current) {
-          processorRef.current?.getMessages(personaId).then(setMessages);
+          processorRef.current?.getMessages(personaId).then((loaded) => {
+            if (activePersonaIdRef.current === personaId) setMessages(loaded);
+          });
         }
         processorRef.current?.getPersonaList().then(setPersonas);
       },
@@ -413,7 +415,9 @@ function App() {
               switchPersona(list[0].id);
             } else if (currentPersonaId) {
               setMessages([]);
-              processorRef.current?.getMessages(currentPersonaId).then(setMessages);
+              processorRef.current?.getMessages(currentPersonaId).then((loaded) => {
+                if (activePersonaIdRef.current === currentPersonaId) setMessages(loaded);
+              });
               processorRef.current?.getPersona(currentPersonaId).then((entity) => {
                 if (activePersonaIdRef.current === currentPersonaId) setActivePersonaEntity(entity);
               });
@@ -602,7 +606,9 @@ function App() {
   const handleMarkMessageRead = useCallback(async (messageId: string) => {
     if (!processor || !activePersonaId) return;
     await processor.markMessageRead(activePersonaId, messageId);
-    processor.getMessages(activePersonaId).then(setMessages);
+    processor.getMessages(activePersonaId).then((loaded) => {
+      if (activePersonaIdRef.current === activePersonaId) setMessages(loaded);
+    });
   }, [processor, activePersonaId]);
 
   const handlePausePersona = useCallback(async (personaId: string, pauseUntil?: string) => {
@@ -643,7 +649,9 @@ function App() {
     const recalled = await processor.recallPendingMessages(activePersonaId);
     if (recalled) {
       setInputValue((prev) => prev ? `${prev}\n\n${recalled}` : recalled);
-      processor.getMessages(activePersonaId).then(setMessages);
+      processor.getMessages(activePersonaId).then((loaded) => {
+        if (activePersonaIdRef.current === activePersonaId) setMessages(loaded);
+      });
     }
   }, [processor, activePersonaId]);
 
@@ -935,7 +943,7 @@ function App() {
       
       // Refresh messages
       const updatedMessages = await processor.getMessages(activePersonaId);
-      setMessages(updatedMessages);
+      if (activePersonaIdRef.current === activePersonaId) setMessages(updatedMessages);
       
       // Auto-trigger image generation
       handleImageGenerate(synthesisMessage);
