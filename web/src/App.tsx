@@ -558,8 +558,14 @@ function App() {
 
   useEffect(() => {
     if (processor && activePersonaId) {
-      processor.getMessages(activePersonaId).then(setMessages);
-      processor.getPersona(activePersonaId).then(setActivePersonaEntity);
+      // A slow response for a persona that is no longer selected must not replace the current one.
+      const personaId = activePersonaId;
+      processor.getMessages(personaId).then((loaded) => {
+        if (activePersonaIdRef.current === personaId) setMessages(loaded);
+      });
+      processor.getPersona(personaId).then((entity) => {
+        if (activePersonaIdRef.current === personaId) setActivePersonaEntity(entity);
+      });
     } else {
       setActivePersonaEntity(null);
     }
@@ -777,8 +783,11 @@ function App() {
       if (activePersonaIdRef.current === personaId) setActivePersonaEntity(updated);
       setEditingPersona((editing) => (editing?.id === personaId ? updated : editing));
     });
-    thinkingToggleChainRef.current = step.catch(() => {});
-    return step;
+    const settled = step.catch((error) => {
+      console.error("[EI Error] Failed to toggle persona thinking display:", error);
+    });
+    thinkingToggleChainRef.current = settled;
+    return settled;
   }, [processor, activePersonaId]);
 
   const handlePersonaTraitSave = useCallback(async (trait: PersonaTrait) => {
@@ -1339,7 +1348,7 @@ function App() {
                setCaptureMessage(message);
              }}
              onToolCallsClick={setToolCallsMessage}
-             showThinking={activePersonaEntity?.show_thinking ?? true}
+             showThinking={activePersonaEntity?.id === activePersonaId && (activePersonaEntity?.show_thinking ?? true)}
              onToggleThinking={handleToggleThinking}
              onImageGenerate={handleImageGenerate}
              messageImages={messageImages}

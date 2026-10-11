@@ -7,7 +7,7 @@ import App from "./App";
 import { Processor } from "../../src/core/processor";
 import { StateManager } from "../../src/core/state-manager";
 import { IndexedDBStorage } from "../../src/storage/indexed";
-import type { HumanEntity, Message, PersonaEntity, StorageState } from "../../src/core/types";
+import { ContextStatus, type HumanEntity, type Message, type PersonaEntity, type StorageState } from "../../src/core/types";
 import { installVirtualListStubs } from "./test/virtualListStubs";
 
 const THINKING_ICON = "💭";
@@ -23,7 +23,7 @@ function makePersona(id: string, displayName: string): PersonaEntity {
     is_archived: false,
     is_static: false,
     last_updated: "2026-01-01T00:00:00.000Z",
-  } as unknown as PersonaEntity;
+  };
 }
 
 function makeMessage(id: string, content: string, thinking?: string): Message {
@@ -33,12 +33,12 @@ function makeMessage(id: string, content: string, thinking?: string): Message {
     content,
     timestamp: "2026-01-01T10:00:00.000Z",
     read: true,
-    context_status: "default",
-    ...(thinking !== undefined ? { thinking } : {}),
-  } as Message;
+    context_status: ContextStatus.Default,
+    thinking,
+  };
 }
 
-const human = {
+const human: HumanEntity = {
   entity: "human",
   facts: [],
   topics: [],
@@ -46,9 +46,17 @@ const human = {
   quotes: [],
   last_updated: "2026-01-01T00:00:00.000Z",
   settings: {},
-} as unknown as HumanEntity;
+};
 
-const storedState = { version: 1, timestamp: "t", human, personas: {}, queue: [], providers: [], tools: [] } as unknown as StorageState;
+const storedState: StorageState = {
+  version: 1,
+  timestamp: "t",
+  human,
+  personas: {},
+  queue: [],
+  providers: [],
+  tools: [],
+};
 
 async function settle() {
   await act(async () => {
@@ -118,8 +126,11 @@ describe("thinking display in the real App", () => {
   const storedShowThinking = async (id: string) => (await startedProcessor!.getPersona(id))?.show_thinking;
 
   // The persona name also appears in the panel toggle and the chat header, so target the pill itself.
-  const pillName = (name: string) =>
-    screen.getAllByText(name).find((el) => el.classList.contains("ei-persona-pill__name")) as HTMLElement;
+  const pillName = (name: string) => {
+    const el = screen.getAllByText(name).find((candidate) => candidate.classList.contains("ei-persona-pill__name"));
+    if (!el) throw new Error(`persona pill ${name} not rendered`);
+    return el;
+  };
 
   async function openChat(name: string) {
     render(<App />);
@@ -129,13 +140,14 @@ describe("thinking display in the real App", () => {
   }
 
   async function openEditor(name: string) {
-    const pill = pillName(name).closest("[role='button']") as HTMLElement;
+    const pill = pillName(name).closest<HTMLElement>("[role='button']");
+    if (!pill) throw new Error(`persona pill ${name} has no button ancestor`);
     fireEvent.mouseEnter(pill);
     fireEvent.click(within(pill).getByTitle("Edit"));
     const dialog = await screen.findByRole("dialog", { name: `Edit Persona: ${name}` });
     return {
       dialog,
-      checkbox: within(dialog).getByRole("checkbox", { name: /Show Thinking/ }) as HTMLInputElement,
+      checkbox: within(dialog).getByRole<HTMLInputElement>("checkbox", { name: /Show Thinking/ }),
     };
   }
 
@@ -255,5 +267,91 @@ describe("thinking display in the real App", () => {
     expect(screen.getByText("Ada reply one")).toBeInTheDocument();
     const editor = await openEditor("Ada");
     expect(editor.checkbox.checked).toBe(false);
+  });
+
+  // Switch from Ada to Bea while Bea's persona record is still loading: her messages arrive first,
+  // so what the chat shows in that window must already follow Bea's own preference, not Ada's.
+  async function switchToBeaWhileRecordLoads(): Promise<() => void> {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(Processor.prototype.getPersona).mockImplementation(async (id: string) => {
+      if (id === "bea") await gate;
+      const record = store.get(id);
+      return record ? structuredClone(record) : null;
+    });
+    fireEvent.click(pillName("Bea"));
+    await screen.findByText("Bea reply");
+    return release;
+  }
+
+  it("never shows a persona's hidden thinking while its record is still loading after a persona switch", async () => {
+    store.set("bea", { ...store.get("bea")!, show_thinking: false });
+    await openChat("Ada");
+    await screen.findByText("Ada thinks one");
+
+    let beaThinkingEverShown = false;
+    const observer = new MutationObserver(() => {
+      if (document.body.textContent?.includes("Bea thinks")) beaThinkingEverShown = true;
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+    const release = await switchToBeaWhileRecordLoads();
+    expect(screen.queryByText("Bea thinks")).toBeNull();
+    expect(screen.getAllByRole("button", { name: THINKING_ICON })).toHaveLength(1);
+
+    release();
+    await settle();
+    observer.disconnect();
+
+    expect(screen.queryByText("Bea thinks")).toBeNull();
+    expect(screen.getByText("Bea reply")).toBeInTheDocument();
+    expect(beaThinkingEverShown).toBe(false);
+  });
+
+  it("does not carry the previous persona's hidden setting onto a persona that omits it", async () => {
+    store.set("ada", { ...store.get("ada")!, show_thinking: false });
+    await openChat("Ada");
+    await screen.findByText("Ada reply one");
+    expect(screen.queryByText("Ada thinks one")).toBeNull();
+
+    const release = await switchToBeaWhileRecordLoads();
+    expect(screen.queryByText("Bea thinks")).toBeNull();
+
+    release();
+    expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+  });
+
+  it("ignores a late response for a persona that is no longer selected", async () => {
+    await openChat("Bea");
+    await screen.findByText("Bea thinks");
+
+    // Ada's record and history are slow; the user moves on to Bea again before they arrive.
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(Processor.prototype.getPersona).mockImplementation(async (id: string) => {
+      if (id === "ada") await gate;
+      const record = store.get(id);
+      return record ? structuredClone(record) : null;
+    });
+    vi.mocked(Processor.prototype.getMessages).mockImplementation(async (id: string) => {
+      if (id === "ada") await gate;
+      return messagesByPersona.get(id) ?? [];
+    });
+    fireEvent.click(pillName("Ada"));
+    await screen.findByText("Chat with Ada");
+    fireEvent.click(pillName("Bea"));
+    await screen.findByText("Chat with Bea");
+    expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+
+    release();
+    await settle();
+
+    expect(screen.getByText("Bea thinks")).toBeInTheDocument();
+    expect(screen.getByText("Bea reply")).toBeInTheDocument();
+    expect(screen.queryByText("Ada reply one")).toBeNull();
   });
 });
