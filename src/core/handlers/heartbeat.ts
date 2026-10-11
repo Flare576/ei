@@ -9,6 +9,7 @@ import type { HeartbeatCheckResult, EiHeartbeatResult } from "../../prompts/hear
 import { crossFind } from "../utils/index.js";
 import { qualifyEiMessage } from "../utils/message-id.js";
 import { stripControlChars } from "../utils/message-refusal.js";
+import { turnCaptureFields } from "../turn-capture.js";
 
 export function handleHeartbeatCheck(response: LLMResponse, state: StateManager): void {
   const personaId = response.request.data.personaId as string;
@@ -40,6 +41,7 @@ export function handleHeartbeatCheck(response: LLMResponse, state: StateManager)
       timestamp: now,
       read: false,
       context_status: ContextStatus.Default,
+      ...turnCaptureFields(response),
     };
     state.messages_append(personaId, message);
     console.log(`[HeartbeatCheck ${personaDisplayName}] Added proactive message - topic: ${result.topic ?? 'general'}, message: "${result.message.substring(0, 100)}${result.message.length > 100 ? '...' : ''}"`);
@@ -102,6 +104,7 @@ export function handleEiHeartbeat(response: LLMResponse, state: StateManager): v
     read: false,
     context_status: ContextStatus.Default,
     f: true, t: true, p: true,
+    ...turnCaptureFields(response),
   });
 
   if (result.id === undefined) {
