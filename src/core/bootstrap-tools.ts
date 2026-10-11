@@ -50,6 +50,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 5,
+        kind: "read",
     });
 
     // list_directory tool (TUI only)
@@ -72,6 +73,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 5,
+        kind: "read",
     });
 
     // directory_tree tool (TUI only)
@@ -95,6 +97,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
+        kind: "read",
     });
 
     // search_files tool (TUI only)
@@ -118,6 +121,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
+        kind: "read",
     });
 
     // grep tool (TUI only)
@@ -143,6 +147,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 5,
+        kind: "read",
     });
 
     // get_file_info tool (TUI only)
@@ -165,6 +170,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 5,
+        kind: "read",
     });
 
     // web_fetch tool
@@ -187,6 +193,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
+        kind: "read",
     });
 
     // --- Tavily Search provider ---
@@ -226,6 +233,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
+        kind: "read",
     });
 
     // tavily_news_search
@@ -249,6 +257,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
+        kind: "read",
     });
 
     // --- Spotify provider ---
@@ -285,6 +294,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 3,
+        kind: "read",
     });
 
     // get_liked_songs
@@ -305,6 +315,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         created_at: now,
         max_calls_per_interaction: 1,
+        kind: "read",
     });
 
     // submit_response tool — NOT auto-injected under any current step. submitToolByStep
@@ -342,6 +353,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         is_submit: true,
         max_calls_per_interaction: 1,
+        kind: "read",
         created_at: now,
     });
 
@@ -366,6 +378,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         is_submit: true,
         max_calls_per_interaction: 1,
+        kind: "read",
         created_at: now,
     });
 
@@ -390,6 +403,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         is_submit: true,
         max_calls_per_interaction: 1,
+        kind: "read",
         created_at: now,
     });
 
@@ -468,6 +482,7 @@ export function bootstrapTools(stateManager: StateManager): void {
         enabled: true,
         is_submit: true,
         max_calls_per_interaction: 1,
+        kind: "read",
         created_at: now,
     });
 
