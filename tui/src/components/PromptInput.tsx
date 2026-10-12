@@ -33,6 +33,8 @@ import { captureCommand } from "../commands/capture.js";
 import { importCommand } from "../commands/import.js";
 import { unsourceCommand } from "../commands/unsource.js";
 import { generateCommand } from "../commands/generate.js";
+import { toolCallsCommand } from "../commands/toolcalls.js";
+import { thinkingCommand } from "../commands/thinking.js";
 import { openCYPEditor } from "../util/cyp-editor.js";
 import { useOverlay } from "../context/overlay";
 import { CommandSuggest } from "./CommandSuggest";
@@ -93,6 +95,8 @@ export function PromptInput() {
   registerCommand(importCommand);
   registerCommand(unsourceCommand);
   registerCommand(generateCommand);
+  registerCommand(toolCallsCommand);
+  registerCommand(thinkingCommand);
   registerCommand(authCommand);
   registerCommand(pauseCommand);
   registerCommand(resumeCommand);

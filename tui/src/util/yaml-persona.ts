@@ -55,6 +55,7 @@ interface EditablePersonaData {
   pause_until?: string;
   is_static?: boolean;
   include_message_timestamps?: boolean;
+  show_thinking?: boolean;
   tools?: Record<string, Record<string, boolean>>;
 }
 
@@ -200,6 +201,7 @@ export function personaToYAML(persona: PersonaEntity, allGroups?: string[], allT
     pause_until: persona.pause_until,
     is_static: persona.is_static || undefined,
     include_message_timestamps: persona.include_message_timestamps ?? false,
+    show_thinking: persona.show_thinking ?? true,
     tools: toolsMap,
   };
 
@@ -267,6 +269,7 @@ export function personaEditableFingerprint(persona: PersonaEntity): string {
     pause_until: persona.pause_until ?? null,
     is_static: persona.is_static ?? false,
     include_message_timestamps: persona.include_message_timestamps ?? false,
+    show_thinking: persona.show_thinking ?? true,
     tools: [...(persona.tools ?? [])].sort(),
   });
 }
@@ -373,6 +376,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     pause_until: data.pause_until,
     is_static: validateBooleanField(data.is_static, "is_static") ?? false,
     include_message_timestamps: validateBooleanField(data.include_message_timestamps, "include_message_timestamps") ?? false,
+    show_thinking: validateBooleanField(data.show_thinking, "show_thinking") ?? true,
     tools: preserveHiddenToolGrants(
       resolvePersonaToolsFromMap(data.tools, allTools ?? [], allProviders ?? []),
       original.tools,
