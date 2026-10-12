@@ -4,7 +4,7 @@ import { useEi } from "../context/ei.js";
 import { useKeyboardNav } from "../context/keyboard.js";
 import { logger } from "../util/logger.js";
 import { solarizedDarkSyntax } from "../util/syntax.js";
-import type { Quote, Message } from "../../../src/core/types.js";
+import { TOOLS_RAN_NO_REPLY_SILENCE_REASON, type Quote, type Message, type ToolCallRecord } from "../../../src/core/types.js";
 import { insertQuoteMarkers } from "../util/quote-utils.js";
 
 interface MessageWithQuotes extends Message {
@@ -25,10 +25,18 @@ function getContent(msg: { content?: string }): string {
 
 function buildMessageText(message: Message, humanName: string): string {
   if (message.silence_reason !== undefined) {
+    if (message.role === "system" && message.silence_reason === TOOLS_RAN_NO_REPLY_SILENCE_REASON) {
+      return "[Persona ran tools but sent no reply]";
+    }
     const silentParty = message.role === "human" ? humanName : "Persona";
     return `[${silentParty} chose not to respond: ${message.silence_reason}]`;
   }
   return getContent(message);
+}
+
+function toolCallIcon(toolCalls: ToolCallRecord[] | undefined): string {
+  if (!toolCalls || toolCalls.length === 0) return "";
+  return toolCalls.some(call => call.kind === "write") ? "🧧" : "🔧";
 }
 
 let instanceId = 0;
@@ -37,13 +45,17 @@ export function MessageList() {
   const myId = ++instanceId;
   logger.info(`MessageList instance ${myId} MOUNTED`);
   
-  const { messages, activePersonaId, personas, activeContextBoundary, getQuotes, quotesVersion, getHuman } = useEi();
+  const { messages, activePersonaId, personas, activeContextBoundary, getQuotes, quotesVersion, getHuman, getPersona } = useEi();
   const { focusedPanel, registerMessageScroll } = useKeyboardNav();
 
   const isFocused = () => focusedPanel() === "messages";
 
   const [humanDisplayName, setHumanDisplayName] = createSignal("Human");
   const [allQuotes, setAllQuotes] = createSignal<Quote[]>([]);
+  // The active Persona's resolved thinking-display setting. Unset until the
+  // lookup for the current Persona resolves, so a stored `false` never flashes
+  // visible while the lookup is pending.
+  const [thinkingSetting, setThinkingSetting] = createSignal<{ personaId: string; visible: boolean } | null>(null);
 
   onMount(() => {
     void getHuman().then(human => {
@@ -58,6 +70,29 @@ export function MessageList() {
   createEffect(on(() => [messages(), quotesVersion()], () => {
     void getQuotes().then(setAllQuotes);
   }));
+
+  // Every refetch (a Persona switch or a same-Persona personas() re-emission)
+  // clears the resolved setting and bumps the token, so thinking text is
+  // withheld until the CURRENT lookup resolves and a response that is no
+  // longer the latest lookup is ignored.
+  let thinkingLookupToken = 0;
+  createEffect(on(() => [personas(), activePersonaId()], () => {
+    const personaId = activePersonaId();
+    const token = ++thinkingLookupToken;
+    setThinkingSetting(null);
+    if (!personaId) return;
+    getPersona(personaId).then(persona => {
+      if (token !== thinkingLookupToken) return;
+      setThinkingSetting({ personaId, visible: persona?.show_thinking ?? true });
+    }).catch(error => {
+      logger.error(`Failed to load persona ${personaId} for thinking display`, error);
+    });
+  }));
+
+  const thinkingVisible = () => {
+    const setting = thinkingSetting();
+    return setting !== null && setting.personaId === activePersonaId() && setting.visible;
+  };
 
   const messagesWithQuotes = createMemo<MessageWithQuotes[]>(() => {
     const quotesByMessage = new Map<string, Quote[]>();
@@ -124,7 +159,10 @@ export function MessageList() {
               const speaker = message.role === "human" ? humanDisplayName() : getDisplayName();
               const speakerColor = message.role === "human" ? "#2aa198" : "#b58900";
               
-              const header = () => `${speaker} (${formatTime(message.timestamp)}) [✂️  ${message._quoteIndex}]:`;
+              const thinkingPresent = (message.thinking ?? "").length > 0;
+              const icons = [toolCallIcon(message.tool_calls), thinkingPresent ? "💭" : ""].filter(Boolean).join(" ");
+              const baseHeader = `${speaker} (${formatTime(message.timestamp)}) [✂️  ${message._quoteIndex}]:`;
+              const header = () => (icons ? `${baseHeader} ${icons}` : baseHeader);
               
               const displayContent = insertQuoteMarkers(buildMessageText(message, humanDisplayName()), message._quotes);
               
@@ -160,6 +198,9 @@ export function MessageList() {
                       attributes={TextAttributes.BOLD}
                       content={header()}
                     />
+                    <box paddingLeft={2} visible={thinkingPresent && thinkingVisible()}>
+                      <text fg="#586e75" attributes={TextAttributes.ITALIC} content={message.thinking ?? ""} />
+                    </box>
                     <box paddingLeft={2} flexGrow={1}>
                       <markdown
                         content={displayContent}
