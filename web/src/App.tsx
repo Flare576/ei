@@ -65,6 +65,7 @@ import { SettingsModal } from "./components/Settings";
 import { MessageSelectorModal } from "./components/Modals/MessageSelectorModal";
 import { TargetedCaptureModal } from "./components/Modals/TargetedCaptureModal";
 import { KnowledgeSearchModal } from "./components/Modals/KnowledgeSearchModal";
+import { ToolCallsModal } from "./components/Modals/ToolCallsModal";
 import { ConflictResolutionModal } from "./components/Sync/ConflictResolutionModal";
 import { Onboarding } from "./components/Onboarding";
 import { QueuePanel } from "./components/Queue/QueuePanel";
@@ -201,6 +202,7 @@ function App() {
    const [toolProviders, setToolProviders] = useState<ToolProvider[]>([]);
    const [toolDefinitions, setToolDefinitions] = useState<ToolDefinition[]>([]);
    const [captureMessage, setCaptureMessage] = useState<Message | null>(null);
+   const [toolCallsMessage, setToolCallsMessage] = useState<Message | null>(null);
    const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
    const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
    const [showCaptureModal, setShowCaptureModal] = useState(false);
@@ -377,7 +379,9 @@ function App() {
       },
       onMessageAdded: (personaId) => {
         if (personaId === activePersonaIdRef.current) {
-          processorRef.current?.getMessages(personaId).then(setMessages);
+          processorRef.current?.getMessages(personaId).then((loaded) => {
+            if (activePersonaIdRef.current === personaId) setMessages(loaded);
+          });
         }
         processorRef.current?.getPersonaList().then(setPersonas);
       },
@@ -411,7 +415,12 @@ function App() {
               switchPersona(list[0].id);
             } else if (currentPersonaId) {
               setMessages([]);
-              processorRef.current?.getMessages(currentPersonaId).then(setMessages);
+              processorRef.current?.getMessages(currentPersonaId).then((loaded) => {
+                if (activePersonaIdRef.current === currentPersonaId) setMessages(loaded);
+              });
+              processorRef.current?.getPersona(currentPersonaId).then((entity) => {
+                if (activePersonaIdRef.current === currentPersonaId) setActivePersonaEntity(entity);
+              });
             }
           }
         });
@@ -421,8 +430,12 @@ function App() {
       },
       onContextBoundaryChanged: (personaId) => {
         if (personaId === activePersonaIdRef.current) {
-          processorRef.current?.getPersona(personaId).then(setActivePersonaEntity);
-          processorRef.current?.getMessages(personaId).then(setMessages);
+          processorRef.current?.getPersona(personaId).then((entity) => {
+            if (activePersonaIdRef.current === personaId) setActivePersonaEntity(entity);
+          });
+          processorRef.current?.getMessages(personaId).then((loaded) => {
+            if (activePersonaIdRef.current === personaId) setMessages(loaded);
+          });
         }
       },
       onStateConflict: (data: StateConflictData) => {
@@ -553,8 +566,14 @@ function App() {
 
   useEffect(() => {
     if (processor && activePersonaId) {
-      processor.getMessages(activePersonaId).then(setMessages);
-      processor.getPersona(activePersonaId).then(setActivePersonaEntity);
+      // A slow response for a persona that is no longer selected must not replace the current one.
+      const personaId = activePersonaId;
+      processor.getMessages(personaId).then((loaded) => {
+        if (activePersonaIdRef.current === personaId) setMessages(loaded);
+      });
+      processor.getPersona(personaId).then((entity) => {
+        if (activePersonaIdRef.current === personaId) setActivePersonaEntity(entity);
+      });
     } else {
       setActivePersonaEntity(null);
     }
@@ -587,7 +606,9 @@ function App() {
   const handleMarkMessageRead = useCallback(async (messageId: string) => {
     if (!processor || !activePersonaId) return;
     await processor.markMessageRead(activePersonaId, messageId);
-    processor.getMessages(activePersonaId).then(setMessages);
+    processor.getMessages(activePersonaId).then((loaded) => {
+      if (activePersonaIdRef.current === activePersonaId) setMessages(loaded);
+    });
   }, [processor, activePersonaId]);
 
   const handlePausePersona = useCallback(async (personaId: string, pauseUntil?: string) => {
@@ -628,7 +649,9 @@ function App() {
     const recalled = await processor.recallPendingMessages(activePersonaId);
     if (recalled) {
       setInputValue((prev) => prev ? `${prev}\n\n${recalled}` : recalled);
-      processor.getMessages(activePersonaId).then(setMessages);
+      processor.getMessages(activePersonaId).then((loaded) => {
+        if (activePersonaIdRef.current === activePersonaId) setMessages(loaded);
+      });
     }
   }, [processor, activePersonaId]);
 
@@ -756,6 +779,30 @@ function App() {
     }
     processor.getPersonaList().then(setPersonas);
   }, [processor, editingPersonaId, activePersonaId]);
+
+  // Each toggle reads the stored value inside a serialized step, so rapid clicks flip it once each
+  // instead of all deriving the next value from the same rendered snapshot.
+  const thinkingToggleChainRef = useRef<Promise<void>>(Promise.resolve());
+  const handleToggleThinking = useCallback(async (): Promise<boolean> => {
+    if (!processor || !activePersonaId) return false;
+    const personaId = activePersonaId;
+    const step = thinkingToggleChainRef.current.then(async (): Promise<boolean> => {
+      const current = await processor.getPersona(personaId);
+      if (!current) return false;
+      await processor.updatePersona(personaId, { show_thinking: !(current.show_thinking ?? true) });
+      const updated = await processor.getPersona(personaId);
+      if (!updated) return false;
+      if (activePersonaIdRef.current === personaId) setActivePersonaEntity(updated);
+      setEditingPersona((editing) => (editing?.id === personaId ? updated : editing));
+      return true;
+    });
+    const settled = step.catch((error) => {
+      console.error("[EI Error] Failed to toggle persona thinking display:", error);
+      return false;
+    });
+    thinkingToggleChainRef.current = settled.then(() => undefined);
+    return settled;
+  }, [processor, activePersonaId]);
 
   const handlePersonaTraitSave = useCallback(async (trait: PersonaTrait) => {
     if (!processor || !editingPersonaId) return;
@@ -896,7 +943,7 @@ function App() {
       
       // Refresh messages
       const updatedMessages = await processor.getMessages(activePersonaId);
-      setMessages(updatedMessages);
+      if (activePersonaIdRef.current === activePersonaId) setMessages(updatedMessages);
       
       // Auto-trigger image generation
       handleImageGenerate(synthesisMessage);
@@ -1314,6 +1361,9 @@ function App() {
                setShowPersonaEditor(false);
                setCaptureMessage(message);
              }}
+             onToolCallsClick={setToolCallsMessage}
+             showThinking={activePersonaEntity?.id === activePersonaId && (activePersonaEntity?.show_thinking ?? true)}
+             onToggleThinking={handleToggleThinking}
              onImageGenerate={handleImageGenerate}
              messageImages={messageImages}
              generatingImageFor={generatingImageFor}
@@ -1513,6 +1563,11 @@ function App() {
        onUnarchive={handleUnarchivePersona}
        onDelete={handleDeleteArchivedPersona}
      />
+
+     <ToolCallsModal
+        message={toolCallsMessage}
+        onClose={() => setToolCallsMessage(null)}
+      />
 
      <QuoteCaptureModal
         isOpen={captureMessage !== null}

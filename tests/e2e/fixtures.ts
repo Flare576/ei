@@ -1,6 +1,15 @@
 import { test as base, expect, type TestInfo } from "@playwright/test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
 import { COMFY_PROMPT_TEMPLATE } from "../../src/core/types/entities.js";
+import type { ToolCallRecord } from "../../src/core/types/llm.js";
+
+/** A seeded chat message. `tool_calls` and `thinking` are carried into the checkpoint as-is. */
+export interface CheckpointMessage {
+  role: string;
+  content: string;
+  tool_calls?: ToolCallRecord[];
+  thinking?: string;
+}
 
 /** Base port - each worker gets BASE + parallelIndex */
 const BASE_PORT = 3001;
@@ -162,7 +171,7 @@ export interface MinimalCheckpoint {
         is_archived: boolean;
         last_updated: string;
       };
-      messages: Array<{ id: string; role: string; content: string; timestamp: string }>;
+      messages: Array<{ id: string; role: string; content: string; timestamp: string; tool_calls?: ToolCallRecord[]; thinking?: string }>;
     };
   };
   queue: never[];
@@ -171,14 +180,14 @@ export interface MinimalCheckpoint {
 
 export interface MinimalCheckpointOptions {
   mockServerUrl: string;
-  messages?: Array<{ role: string; content: string }>;
+  messages?: CheckpointMessage[];
   imageProviderUrl?: string;
   imageWorkflow?: any;
 }
 
 export function createMinimalCheckpoint(
   optionsOrUrl: MinimalCheckpointOptions | string,
-  messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }],
+  messages: CheckpointMessage[] = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }],
   imageProviderUrl?: string
 ): MinimalCheckpoint {
   // Handle both old signature (url, messages, imageProviderUrl) and new object signature
@@ -256,6 +265,8 @@ export function createMinimalCheckpoint(
           id: `msg-${i}`,
           role: m.role,
           content: m.content,
+          ...(m.tool_calls !== undefined && { tool_calls: m.tool_calls }),
+          ...(m.thinking !== undefined && { thinking: m.thinking }),
           timestamp,
         })),
       },
@@ -272,7 +283,7 @@ export function createMinimalCheckpoint(
 export async function seedCheckpoint(
   page: import("@playwright/test").Page,
   optionsOrUrl: MinimalCheckpointOptions | string,
-  messages: Array<{ role: string; content: string }> = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }],
+  messages: CheckpointMessage[] = [{ role: "assistant", content: DEFAULT_WELCOME_MESSAGE }],
   imageProviderUrl?: string
 ) {
   const state = createMinimalCheckpoint(optionsOrUrl, messages, imageProviderUrl);
