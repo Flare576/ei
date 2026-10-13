@@ -171,6 +171,7 @@ The TUI and E2E tiers are unaffected — they either use bun intentionally or ha
 ### Testing Strategy
 
 - **Unit tests**: Pure functions, complex logic
+  - Every unit tier points `EI_DATA_PATH` at an empty temp dir before any test runs, so a mock that fails to intercept can never write to your real `state.json` (it fails with "No saved state found" instead): root and `tui/` Vitest via `setupFiles` (`tests/helpers/isolate-data-path.ts`), the TUI `bun test` tier via the `[test]` preload in `tui/bunfig.toml` (`tests/helpers/isolate-data-path.bun.ts`). Both share `tests/helpers/isolated-data-dir.ts`. Tests needing a populated data dir set their own `EI_DATA_PATH`; the embedding model cache is symlinked in from the real data dir. TUI E2E (`tui-test`) launches the app with an explicit `env` allowlist that always sets `EI_DATA_PATH`, and web Playwright E2E uses browser localStorage (no data path), so neither needs it.
 - **Integration tests**: Critical flows with mocks
 - **E2E validation**: Human testing (most reliable for UI)
 - **Structural invariant checks** (`ci/structural-checks.sh`): Fast grep-based fitness functions that enforce architectural rules without running the app. Run automatically in CI. Run locally with `bash ci/structural-checks.sh`. Currently guards:
