@@ -132,6 +132,10 @@ Connect in **Settings → Tool Kits → Spotify**. Once connected, personas can 
 
 Tools aren't global — you choose which personas get access. Edit a persona and toggle the tools it can use. A focused work persona might only have filesystem tools. A general-purpose companion might have everything.
 
+### Seeing What a Persona Did
+
+A persona reply whose turn called tools is marked 🔧 when every tool it called is classified as read-only, or 🧧 when at least one is classified as a tool that can change something (like `edit_trait`). That marks the kind of tool, not whether anything actually changed. You can open the list of calls — name, arguments, a shortened result — for any marked reply. When the model shared its reasoning, the reply is marked 💭 and, unless you've turned it off for that persona, the thinking is shown above the text. None of it is fed back to the persona as conversation. Details for the [TUI](./tui/README.md#messages--context) (`/toolcalls`, `/thinking`) and the [Web](web/README.md#talk-to-personas).
+
 ---
 
 ## How Ei Works
