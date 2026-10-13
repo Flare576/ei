@@ -119,6 +119,27 @@ describe("tool-call icon in the 1:1 message header", () => {
     expect(headerLine(after, 1)).toContain("🧧");
     expect(headerLine(after, 1)).not.toContain("🔧");
   });
+
+  test("a call whose kind is missing or unrecognised counts as write, so the icon is 🧧 unless every call is read", async () => {
+    const unclassified = (extra: Record<string, unknown>) =>
+      ({ name: "legacy_tool", arguments: {}, result: "ok", error: false, ...extra }) as unknown as ToolCallRecord;
+    const read = makeToolCall({ kind: "read" });
+    const { frame } = await mountSettled(
+      stubWith([
+        makeMessage("system", { content: "missing kind", tool_calls: [unclassified({})] }),
+        makeMessage("system", { content: "odd kind", tool_calls: [unclassified({ kind: "bogus" })] }),
+        makeMessage("system", { content: "read plus missing", tool_calls: [read, unclassified({})] }),
+        makeMessage("system", { content: "all read", tool_calls: [read, read] }),
+      ]),
+    );
+
+    for (const index of [1, 2, 3]) {
+      expect(headerLine(frame, index)).toContain("🧧");
+      expect(headerLine(frame, index)).not.toContain("🔧");
+    }
+    expect(headerLine(frame, 4)).toContain("🔧");
+    expect(headerLine(frame, 4)).not.toContain("🧧");
+  });
 });
 
 describe("tool-call/no-reply fallback row", () => {

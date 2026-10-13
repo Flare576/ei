@@ -523,6 +523,25 @@ export class Processor {
     bootstrapTools(this.stateManager);
   }
 
+  /**
+   * A backup made before tool `kind` existed restores built-ins without it, and a call's persisted kind is
+   * stamped once from the definition in effect when it runs (unclassified counts as write). Give each such
+   * built-in the kind the current bootstrap defines. Everything else in a restored definition stays as the
+   * backup had it: re-running bootstrap's upsert here would overwrite its per-tool config and heartbeat_eligible.
+   */
+  private async backfillBuiltinToolKinds(): Promise<void> {
+    const reference = new StateManager();
+    bootstrapTools(reference);
+    await reference.flush(); // the reference has no storage; this only drops the save its bootstrap scheduled
+    const currentKinds = new Map(reference.tools_getAll().map(tool => [tool.name, tool.kind]));
+    for (const tool of this.stateManager.tools_getAll()) {
+      const kind = currentKinds.get(tool.name);
+      if (tool.builtin && tool.kind === undefined && kind !== undefined) {
+        this.stateManager.tools_update(tool.id, { kind });
+      }
+    }
+  }
+
   async stop(): Promise<void> {
     console.log(
       `[Processor ${this.instanceId}] stop() called, running=${this.running}, stopped=${this.stopped}`
@@ -1632,6 +1651,7 @@ const toolNextSteps = new Set([
       throw new Error("Invalid backup file format");
     }
     this.stateManager.restoreFromState(state);
+    await this.backfillBuiltinToolKinds();
     this.interface.onStateImported?.();
   }
 
@@ -1640,7 +1660,8 @@ const toolNextSteps = new Set([
   }
 
   async restoreFromState(state: StorageState): Promise<void> {
-    return this.stateManager.restoreFromState(state);
+    this.stateManager.restoreFromState(state);
+    await this.backfillBuiltinToolKinds();
   }
 
   // ==========================================================================

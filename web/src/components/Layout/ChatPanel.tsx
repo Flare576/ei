@@ -129,6 +129,8 @@ interface ChatPanelProps {
   onScissorsClick?: (message: Message) => void;
   onToolCallsClick?: (message: Message) => void;
   showThinking?: boolean;
+  /** False while the active persona's thinking setting has not loaded yet; the icon stays but its action is inert. */
+  thinkingSettingKnown?: boolean;
   /** Persists the flipped setting; resolves true once it has been applied, false if it could not be. */
   onToggleThinking?: () => Promise<boolean>;
   onImageGenerate?: (message: Message) => void;
@@ -165,6 +167,7 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
   onScissorsClick,
   onToolCallsClick,
   showThinking = true,
+  thinkingSettingKnown = true,
   onToggleThinking,
   onImageGenerate,
   messageImages = {},
@@ -606,10 +609,11 @@ export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function Ch
               
               const hasThinking = typeof msg.thinking === "string" && msg.thinking.length > 0;
               const thinkingButton = onToggleThinking && hasThinking && (
-                <Tooltip text={showThinking ? "Hide thinking" : "Show thinking"}>
+                <Tooltip text={!thinkingSettingKnown ? "Loading thinking setting…" : showThinking ? "Hide thinking" : "Show thinking"}>
                   <button
                     type="button"
                     className="ei-message__thinking-toggle"
+                    disabled={!thinkingSettingKnown}
                     onClick={(e) => {
                       e.stopPropagation();
                       const armed = armThinkingToggleAnchor(e.currentTarget, virtualRow.index, msg.id);

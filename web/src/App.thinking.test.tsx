@@ -323,6 +323,53 @@ describe("thinking display in the real App", () => {
     expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
   });
 
+  describe("a thinking icon click while the persona's record is still loading", () => {
+    async function clickIconWhileLoading(): Promise<() => void> {
+      await openChat("Ada");
+      await screen.findByText("Ada thinks one");
+      const release = await switchToBeaWhileRecordLoads();
+      const icon = screen.getByRole("button", { name: THINKING_ICON });
+      expect(icon).toBeDisabled();
+      vi.mocked(Processor.prototype.updatePersona).mockClear();
+      fireEvent.click(icon);
+      return release;
+    }
+
+    it("changes and saves nothing for a default-on record (setting field absent)", async () => {
+      const release = await clickIconWhileLoading();
+      release();
+      await settle();
+
+      expect(Processor.prototype.updatePersona).not.toHaveBeenCalled();
+      expect(await storedShowThinking("bea")).toBeUndefined();
+      expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+
+      // Once the record is known the same icon works.
+      const icon = screen.getByRole("button", { name: THINKING_ICON });
+      expect(icon).toBeEnabled();
+      fireEvent.click(icon);
+      await waitFor(() => expect(screen.queryByText("Bea thinks")).toBeNull());
+      expect(await storedShowThinking("bea")).toBe(false);
+    });
+
+    it("changes and saves nothing for an explicit-false record", async () => {
+      store.set("bea", { ...store.get("bea")!, show_thinking: false });
+      const release = await clickIconWhileLoading();
+      release();
+      await settle();
+
+      expect(Processor.prototype.updatePersona).not.toHaveBeenCalled();
+      expect(await storedShowThinking("bea")).toBe(false);
+      expect(screen.queryByText("Bea thinks")).toBeNull();
+
+      const icon = screen.getByRole("button", { name: THINKING_ICON });
+      expect(icon).toBeEnabled();
+      fireEvent.click(icon);
+      expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+      expect(await storedShowThinking("bea")).toBe(true);
+    });
+  });
+
   it("ignores a late response for a persona that is no longer selected", async () => {
     await openChat("Bea");
     await screen.findByText("Bea thinks");

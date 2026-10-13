@@ -160,7 +160,8 @@ export async function handleRoomJudge(response: LLMResponse, state: StateManager
       silence_reason: result.reason,
       timestamp: new Date().toISOString(),
       read: false,
-      context_status: "default" as import("../types.js").ContextStatus,
+      context_status: ContextStatus.Default,
+      ...turnCaptureFields(response),
     };
     state.appendRoomMessage(roomId, verdictMsg);
   }

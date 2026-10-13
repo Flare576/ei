@@ -148,6 +148,11 @@
   opacity: 1;
 }
 
+.ei-message__thinking-toggle:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
 /* The persona's reasoning, shown above its reply; plain text so it is never reformatted */
 .ei-message__thinking {
   color: var(--ei-text-muted);

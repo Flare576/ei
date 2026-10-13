@@ -34,9 +34,10 @@ function buildMessageText(message: Message, humanName: string): string {
   return getContent(message);
 }
 
+// An unclassified call (missing or unrecognised `kind`) counts as write: 🔧 only when every call is read.
 function toolCallIcon(toolCalls: ToolCallRecord[] | undefined): string {
   if (!toolCalls || toolCalls.length === 0) return "";
-  return toolCalls.some(call => call.kind === "write") ? "🧧" : "🔧";
+  return toolCalls.every(call => call.kind === "read") ? "🔧" : "🧧";
 }
 
 let instanceId = 0;
