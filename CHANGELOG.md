@@ -11,6 +11,47 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **See which tools a persona used to answer you.** A persona message whose turn ran tools now
+  carries an icon: 🔧 when every call only read or looked something up, 🧧 when at least one call
+  wrote something — the persona editing its own traits, topics, or description, adding or clearing
+  one of its notes, or resolving one of its signals. A tool Ei can't classify (a custom one, say)
+  counts as a write.
+  - **Web**: the icon sits in the message's action row. Clicking it opens a dialog listing every
+    call in order — tool name, its `action` when it has one, each argument in full, the saved
+    result, and its error flag. Escape, the ✕ button, or a click outside the dialog closes it;
+    focus moves into the dialog, Tab and Shift+Tab stay inside it, and focus returns to where it
+    was when the dialog closes.
+  - **TUI**: the icon sits in the message header. `/toolcalls` opens the same detail for the most
+    recent persona message, and `/toolcalls <N>` for message N (the number `/quotes <N>` uses).
+- **Persona thinking, shown above the reply.** When the model returns its reasoning, the message
+  is marked 💭 and the reasoning is shown above the reply. Whether it's shown is a per-persona
+  setting, on by default, and applies to all of that persona's messages at once: click 💭 on any
+  message in the web app, run `/thinking` in the TUI, or use **Show Thinking** on the web persona
+  editor's Settings tab or `show_thinking` in the TUI's `/details` editor. The setting is in-app
+  only — `ei --id` and `ei_lookup` never show it, and `ei update persona` rejects it.
+- **Tool calls and thinking are saved with the message.** They're written once, on the single
+  final message of the whole turn (every tool round included), when the turn finishes — nothing
+  is streamed in as it runs. The saved copy of each tool result is cut to 150 characters plus
+  `... (truncated)`; the persona itself still sees the full result while the turn runs. Arguments
+  are saved in full, and so is thinking: every round's thinking is joined with a blank line and
+  kept with no size cap, so saved history grows faster with models that think at length. Neither
+  is ever sent back to the model as part of later conversation history — they exist for you to
+  read. Rationale: [ADR-040](./docs/adr/ADR-040-tool-calls-and-thinking-are-persisted-for-human-display-only.md).
+- **A 1:1 turn that ran tools but produced no reply now leaves a message**, shown as "[*name* ran
+  tools but sent no reply]" in the web app and "[Persona ran tools but sent no reply]" in the TUI,
+  so the tool calls it made have somewhere to appear. A persona that deliberately chooses not to
+  respond still shows the usual "chose not to respond" message.
+- **Heartbeats and Rooms save the same detail.** A heartbeat that reaches out carries its turn's
+  tool calls and thinking on the message it sends; a heartbeat that decides not to reach out still
+  writes nothing. Room replies save them too, and a Messages Against Persona verdict saves the
+  Judge's thinking — but Rooms don't display any of it yet, and `/toolcalls` and `/thinking` only
+  work in 1:1 conversations.
+- Restoring or importing a backup made before this release gives each built-in tool its read/write
+  classification, so calls made after the restore aren't all marked as writes. Nothing else in
+  the restored tool definitions (per-tool config, heartbeat eligibility) is touched.
+
 ## [1.10.0] — 2026-08-09
 
 ### Added

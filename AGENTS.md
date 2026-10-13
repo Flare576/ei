@@ -441,13 +441,22 @@ Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedl
 
 `runtime: "node"` — TUI only. The executor is registered lazily via `registerFileReadExecutor()` to prevent `node:fs` from being bundled in the web build. In the browser, these tools exist in the registry but no executor is registered — they return an error result if called.
 
+### Kind Field
+
+`kind: "read" | "write"` classifies a tool for **display only**: it decides whether a message whose turn ran tools shows 🔧 (every call `read`) or 🧧 (any call not `read`). `write` means the tool persists something on the persona's behalf; `read` means it only reads or looks something up. Exactly six built-ins are `write` — `resolve_signal`, `edit_trait`, `edit_topic`, `update_description`, `add_note`, `clear_note` — and every other built-in, the `is_submit` tools included, is `read`. `tests/unit/core/builtin-tool-kind.test.ts` fails if any built-in is left without one. A custom tool, or any definition with no `kind`, counts as `write`. The value is stamped onto each saved call record when the call runs, so a later rename or deletion never changes how an old message is shown. `kind` is not an authorization mechanism: heartbeat access is decided by `heartbeat_eligible` alone, and the two are allowed to differ.
+
+### Tool Calls and Thinking Are Saved for Display Only
+
+A turn's tool calls and the model's thinking are saved as `tool_calls`/`thinking` on the single final `Message` or `RoomMessage` the turn writes (field rules in `CONTRACTS.md` → Semantic Field Names). Any handler that writes a turn's final row spreads `turnCaptureFields(response)` (`src/core/turn-capture.ts`) into it — that is the only place these fields are produced and the only place a saved tool result is cut to 150 characters. They must never reach an LLM request: a history or prompt builder that spreads a whole message object would leak them. `tests/unit/core/conversational-history-display-fields.test.ts` guards the 1:1 and Room conversation paths only, so a new prompt route has to project fields explicitly. See `docs/adr/ADR-040-tool-calls-and-thinking-are-persisted-for-human-display-only.md`.
+
 ### Adding a New Built-in Tool
 
 1. Create executor in `src/core/tools/builtin/[name].ts` — implement `ToolExecutor` interface
 2. Register executor in `src/core/tools/index.ts` (or `registerFileReadExecutor()` if Node-only)
 3. Add seed block in `Processor.bootstrapTools()` using `tools_getByName` guard
 4. If it needs a new provider, add provider seed block before the tool seed block
-5. Update the Built-in Tool Registry table above
+5. Set `kind` to `"read"` or `"write"` (see Kind Field above)
+6. Update the Built-in Tool Registry table above
 
 ### Persona Tool Grants Survive Provider Disable
 

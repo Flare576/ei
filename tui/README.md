@@ -153,6 +153,11 @@ Rooms have three modes, set at creation time:
 | `/quotes <N>` | | View/edit quotes attached to message number N |
 | `/quotes search "term"` | | Search quotes by keyword |
 | `/quotes <persona>` | | View/edit quotes attributed to a specific persona |
+| `/toolcalls` | | Show the tool calls behind the most recent persona message |
+| `/toolcalls <N>` | | Show the tool calls behind message number N (same numbering as `/quotes <N>`) |
+| `/thinking` | | Toggle whether the active persona's thinking is shown above its replies |
+
+A persona message whose turn ran tools shows 🔧 in its header when every call only read or looked something up, or 🧧 when at least one call wrote something (an edit to the persona's own traits, topics, description, or notes, or resolving one of its signals; a tool Ei can't classify counts as a write too). A message that came with model thinking also shows 💭. `/toolcalls` lists each call in order: its name (and `action`, when it has one), the error flag, every argument in full, and the saved result, which is cut to 150 characters plus `... (truncated)`. Inside it, `j`/`k` or the arrow keys scroll, `PgUp`/`PgDn` page, and `Esc` or `q` closes. Thinking visibility is a per-persona setting, on by default — `/thinking` flips it, or set `show_thinking` in `/details`. Both commands only work in 1:1 conversations, not while a Room is active.
 
 ### Data & Settings
 
