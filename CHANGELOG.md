@@ -13,18 +13,26 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ### Added
 
-- **See which tools a persona used to answer you.** A persona message whose turn ran tools now
-  carries an icon: 🔧 when every call only read or looked something up, 🧧 when at least one call
-  wrote something — the persona editing its own traits, topics, or description, adding or clearing
-  one of its notes, or resolving one of its signals. A tool Ei can't classify (a custom one, say)
-  counts as a write.
+- **See which tools a persona called to answer you.** A persona message whose turn called tools
+  now carries an icon: 🔧 when every call went to a tool classified as read-only (it only reads or
+  looks something up), 🧧 when at least one call went to a tool classified as a write — one that
+  can change something, such as the persona's own traits, topics, description, or notes, or the
+  status of one of its signals. The icon describes the tools that were called, not what the calls
+  did: a call is listed whenever it got a result, including a call to a tool that doesn't exist,
+  one refused because the tool had used up its calls for the turn, and one that failed, so 🧧
+  doesn't mean anything was actually written. A tool with no classification — an unknown tool, or
+  a custom tool without a `kind` — counts as a write; a custom tool marked `kind: "read"` stays
+  read-only.
   - **Web**: the icon sits in the message's action row. Clicking it opens a dialog listing every
     call in order — tool name, its `action` when it has one, each argument in full, the saved
-    result, and its error flag. Escape, the ✕ button, or a click outside the dialog closes it;
-    focus moves into the dialog, Tab and Shift+Tab stay inside it, and focus returns to where it
-    was when the dialog closes.
+    result, and its error flag. The flag is passed through exactly as the tool layer set it and
+    can be off even when the result describes an error, so read the result too. Escape, the ✕
+    button, or a click outside the dialog closes it; focus moves into the dialog, Tab and
+    Shift+Tab stay inside it, and focus returns to where it was when the dialog closes.
   - **TUI**: the icon sits in the message header. `/toolcalls` opens the same detail for the most
     recent persona message, and `/toolcalls <N>` for message N (the number `/quotes <N>` uses).
+    If that message has no tool calls, you get a notice instead; it never falls back to an older
+    message.
 - **Persona thinking, shown above the reply.** When the model returns its reasoning, the message
   is marked 💭 and the reasoning is shown above the reply. Whether it's shown is a per-persona
   setting, on by default, and applies to all of that persona's messages at once: click 💭 on any
@@ -39,7 +47,7 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
   kept with no size cap, so saved history grows faster with models that think at length. Neither
   is ever sent back to the model as part of later conversation history — they exist for you to
   read. Rationale: [ADR-040](./docs/adr/ADR-040-tool-calls-and-thinking-are-persisted-for-human-display-only.md).
-- **A 1:1 turn that ran tools but produced no reply now leaves a message**, shown as "[*name* ran
+- **A 1:1 turn that called tools but produced no reply now leaves a message**, shown as "[*name* ran
   tools but sent no reply]" in the web app and "[Persona ran tools but sent no reply]" in the TUI,
   so the tool calls it made have somewhere to appear. A persona that deliberately chooses not to
   respond still shows the usual "chose not to respond" message.
