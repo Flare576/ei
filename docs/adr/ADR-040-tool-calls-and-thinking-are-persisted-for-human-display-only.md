@@ -174,9 +174,12 @@ tool-specific announcement is added.
 
 ### 15. Test and recovery limits accepted at release
 
-Processor wiring of the capture path is exercised through a copy of the fetcher in a test fixture, which
-proves the fixture's behavior and the capture module, but not independently the Processor's own wiring;
-this indirection is accepted rather than reopened. Full tool output is lost to truncation unless the
+The guard that keeps persisted display fields out of the next conversational request (item 4) drives the
+real queue and history projections using fetcher callbacks copied from the Processor into the test. It
+verifies that those fields are excluded from the next 1:1 and Room request, but it does not independently
+verify the Processor's own fetcher wiring; this limitation is accepted rather than reopened. Capture
+itself (accumulation, pairing, truncation, the final write) is covered by separate tests, not by that
+fixture. Full tool output is lost to truncation unless the
 opt-in debug network log was on, and that log does not exist in the browser. Always-on logging of the
 original output, the original intent for recovery, is deferred, not abandoned, and the opt-in log is a
 release shortcut rather than its resolution.
