@@ -168,6 +168,8 @@ describe("ensureAgentPersona", () => {
       "sisyphus ultraworker",
       "Planner-Sisyphus",
       "planner-sisyphus",
+      "P-Sisyphus",
+      "p-sisyphus",
     ]);
     expect(result.display_name).toBe("Sisyphus");
   });
@@ -198,6 +200,16 @@ describe("ensureAgentPersona", () => {
 
   it("resolves 'Sisyphus - Ultraworker' (OMOC ≥ 3.x display name) to canonical 'Sisyphus'", async () => {
     const result = await ensureAgentPersona("Sisyphus - Ultraworker", {
+      stateManager: mockStateManager as StateManager,
+      interface: mockInterface as Ei_Interface,
+      reader: mockReader as IOpenCodeReader,
+    });
+
+    expect(result.display_name).toBe("Sisyphus");
+  });
+
+  it("resolves 'P-Sisyphus' (Pantheon agent id) to canonical 'Sisyphus', not a new 'P Sisyphus' persona", async () => {
+    const result = await ensureAgentPersona("P-Sisyphus", {
       stateManager: mockStateManager as StateManager,
       interface: mockInterface as Ei_Interface,
       reader: mockReader as IOpenCodeReader,

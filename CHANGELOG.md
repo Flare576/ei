@@ -11,6 +11,12 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pantheon's `P-Sisyphus` agent id now resolves to the existing `Sisyphus` persona.** Pi/OMP
+  sessions attributed to `P-Sisyphus` were creating a separate `P Sisyphus` persona on import;
+  `p-sisyphus`/`P-Sisyphus` are now `Sisyphus` aliases alongside the other OpenCode variants.
+
 ### Added
 
 - **Claude Haiku 5.5 (`claude-haiku-5-5`) is a known model.** Provider auto-detection now picks

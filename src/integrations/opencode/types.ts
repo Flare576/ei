@@ -201,6 +201,8 @@ export const AGENT_ALIASES: Record<string, string[]> = {
     "sisyphus ultraworker",
     "Planner-Sisyphus",
     "planner-sisyphus",
+    "P-Sisyphus",               // Pantheon Sisyphus (OMP/Pi sessions)
+    "p-sisyphus",
   ],
   Build: ["build", "Build"],
   Plan: ["plan", "Plan"],
