@@ -29,6 +29,8 @@ To **add a new persona**, click the `+` button at the top of the persona panel. 
 
 To **edit a persona** — their traits, topics, or settings — hover over their name in the list and click the pencil icon.
 
+To **see what a persona did** to answer you, look at the buttons next to its reply. 🔧 means it used tools that only read or looked something up; 🧧 means at least one tool wrote something — the persona edited its own traits, topics, description, or notes, or resolved one of its signals (a tool Ei can't classify counts as a write too). Click either to see every call: the tool's name, its arguments in full, the result (saved cut to 150 characters), and whether it errored. When the model shared its thinking, the reply also shows 💭 and the thinking appears above it; click 💭 to hide or show thinking on all of that persona's messages, or use **Show Thinking** on the Settings tab of the persona editor.
+
 ### Manage Your Data
 
 As you chat, Ei builds up a picture of you: facts, personality traits, people in your life, and topics you care about. You can view and edit all of this directly.
