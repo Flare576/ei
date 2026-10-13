@@ -16,8 +16,14 @@ function formatArgumentValue(value: unknown): string {
 }
 
 function ToolCall({ call }: { call: ToolCallRecord }) {
-  const argumentNames = Object.keys(call.arguments);
-  const action = call.arguments.action;
+  // A provider can return the JSON `null` (or omit the field), and it is persisted as-is.
+  const args = call.arguments ?? {};
+  const argumentNames = Object.keys(args);
+  const action = args.action;
+  const noArguments =
+    call.arguments === null ? "(none: arguments were null)"
+    : call.arguments === undefined ? "(none: arguments were absent)"
+    : "(none)";
 
   return (
     <li className="ei-tool-call">
@@ -27,14 +33,14 @@ function ToolCall({ call }: { call: ToolCallRecord }) {
       )}
       <div className="ei-tool-call__label">Arguments</div>
       {argumentNames.length === 0 ? (
-        <div className="ei-tool-call__empty">(none)</div>
+        <div className="ei-tool-call__empty">{noArguments}</div>
       ) : (
         <dl className="ei-tool-call__arguments">
           {argumentNames.map((argumentName) => (
             <div key={argumentName} className="ei-tool-call__argument">
               <dt>{argumentName}</dt>
               <dd>
-                <pre>{formatArgumentValue(call.arguments[argumentName])}</pre>
+                <pre>{formatArgumentValue(args[argumentName])}</pre>
               </dd>
             </div>
           ))}

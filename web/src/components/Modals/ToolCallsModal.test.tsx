@@ -86,6 +86,36 @@ describe("ToolCallsModal", () => {
     expect(within(call).getByText("birthday")).toBeInTheDocument();
   });
 
+  it("opens for a call whose persisted arguments are null, showing name, result, error and a visible null marker", () => {
+    const nullArgsCall = {
+      name: "get_my_identity",
+      arguments: null,
+      result: "{}",
+      error: true,
+      kind: "write",
+    } as unknown as ToolCallRecord;
+    render(<ToolCallsModal message={message([nullArgsCall])} onClose={() => {}} />);
+
+    expect(screen.getByRole("dialog", { name: "Tool calls (1)" })).toBeInTheDocument();
+    const call = callSection(0);
+    expect(within(call).getByRole("heading", { name: "get_my_identity" })).toBeInTheDocument();
+    expect(within(call).getByText("Arguments")).toBeInTheDocument();
+    expect(within(call).getByText("(none: arguments were null)")).toBeInTheDocument();
+    expect(within(call).queryByText(/^action:/)).toBeNull();
+    expect(within(call).getByText("{}")).toBeInTheDocument();
+    expect(within(call).getByText("error: true")).toBeInTheDocument();
+  });
+
+  it("opens for a call whose arguments field is absent, marking it as absent", () => {
+    const absentArgsCall = { name: "get_my_identity", result: "ok", error: false, kind: "read" } as unknown as ToolCallRecord;
+    render(<ToolCallsModal message={message([absentArgsCall])} onClose={() => {}} />);
+
+    const call = callSection(0);
+    expect(within(call).getByRole("heading", { name: "get_my_identity" })).toBeInTheDocument();
+    expect(within(call).getByText("(none: arguments were absent)")).toBeInTheDocument();
+    expect(within(call).getByText("error: false")).toBeInTheDocument();
+  });
+
   it("renders nothing without a selected message", () => {
     render(<ToolCallsModal message={null} onClose={() => {}} />);
 
