@@ -59,6 +59,14 @@ editor) or in-app behavior (pause/archive), and the in-app surface is where it b
 user asks you to pause, archive, or grant a tool to a persona, tell them that's a TUI action
 now, not something this skill can do on their behalf.
 
+**`show_thinking` never appears in `ei --id` output at all.** It's the persona's Show Thinking
+display setting — whether the model's reasoning is shown above its replies in Ei's own chat — and
+like the fields above, sending it in a `create` or `update` payload is rejected as an
+unrecognized field. An `update` that leaves it out (which is every update you can send) leaves the
+stored value alone. If a user wants a persona's thinking hidden or shown, that's the TUI's
+`/thinking` command (or `show_thinking` in `/details`) or the Show Thinking toggle on the web
+persona editor's Settings tab.
+
 **`PersonaTrait`** — a named character trait:
 ```
 id,            # optional on write — see "auto-assigned ids" below
