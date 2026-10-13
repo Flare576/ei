@@ -301,6 +301,55 @@ describe("handleRoomJudge", () => {
     expect(state.appendRoomMessage).not.toHaveBeenCalled();
   });
 
+  it("persists the judge turn's thinking, exactly, on the verdict row", async () => {
+    const winner = makeRoomMessage({ id: "winner-id", parent_id: "parent-1" });
+    const state = createMockRoomState({ messages: [winner] });
+    const response: LLMResponse = {
+      ...makeJudgeResponse({ winner_message_id: "winner-id", reason: "The best argument won." }),
+      turn_capture: { tool_calls: [], thinking: "JUDGE_REASONING" },
+    };
+
+    await handleRoomJudge(response, state as unknown as StateManager);
+
+    expect(state._roomMessages).toHaveLength(1);
+    const verdictMsg = state._roomMessages[0];
+    expect(verdictMsg.silence_reason).toBe("The best argument won.");
+    expect(verdictMsg.thinking).toBe("JUDGE_REASONING");
+    expect("tool_calls" in verdictMsg).toBe(false);
+  });
+
+  it.each([
+    ["no capture on the response", undefined],
+    ["a capture with no thinking", { tool_calls: [] }],
+    ["a capture with empty thinking", { tool_calls: [], thinking: "" }],
+  ])("omits the thinking key from the verdict row for %s", async (_label, capture) => {
+    const winner = makeRoomMessage({ id: "winner-id", parent_id: "parent-1" });
+    const state = createMockRoomState({ messages: [winner] });
+    const response: LLMResponse = {
+      ...makeJudgeResponse({ winner_message_id: "winner-id", reason: "The best argument won." }),
+      ...(capture ? { turn_capture: capture } : {}),
+    };
+
+    await handleRoomJudge(response, state as unknown as StateManager);
+
+    expect(state._roomMessages).toHaveLength(1);
+    expect("thinking" in state._roomMessages[0]).toBe(false);
+    expect("tool_calls" in state._roomMessages[0]).toBe(false);
+  });
+
+  it("still writes no verdict row when the judge gave no reason, even if its turn captured thinking", async () => {
+    const winner = makeRoomMessage({ id: "winner-id", parent_id: "parent-1" });
+    const state = createMockRoomState({ messages: [winner] });
+    const response: LLMResponse = {
+      ...makeJudgeResponse({ winner_message_id: "winner-id" }),
+      turn_capture: { tool_calls: [], thinking: "JUDGE_REASONING" },
+    };
+
+    await handleRoomJudge(response, state as unknown as StateManager);
+
+    expect(state.appendRoomMessage).not.toHaveBeenCalled();
+  });
+
   // ── Next-Round Queue ─────────────────────────────────────────────────────
 
   it("queues HandleRoomResponse for each non-judge persona", async () => {
