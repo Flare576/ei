@@ -10,10 +10,6 @@ import { IndexedDBStorage } from "../../src/storage/indexed";
 import { ContextStatus, type HumanEntity, type Message, type PersonaEntity, type StorageState } from "../../src/core/types";
 import { installVirtualListStubs } from "./test/virtualListStubs";
 
-// Processor.start is stubbed here, so its StateManager has no storage. importState now re-runs the tool
-// bootstrap, whose writes would schedule a save against that missing storage; nothing here exercises tools.
-vi.mock("../../src/core/bootstrap-tools", () => ({ bootstrapTools: vi.fn() }));
-
 const THINKING_ICON = "💭";
 
 function makePersona(id: string, displayName: string): PersonaEntity {
