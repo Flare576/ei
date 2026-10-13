@@ -73,7 +73,10 @@ tracked separately.
 `ToolDefinition.kind: 'read' | 'write'`, using ADR-039 item 4's criterion: a tool that authors or
 persists something on the Persona's behalf is write; one that only reads or looks something up is read.
 Exactly `resolve_signal`, `edit_trait`, `edit_topic`, `update_description`, `add_note` and `clear_note`
-are write. An unclassified or custom tool counts as write so a forgotten tag is noticed, not hidden. The
+are write. A definition with no `kind` (including an unclassified custom tool) defaults to write so a
+forgotten tag is noticed, not hidden; a custom tool that carries an explicit `kind` keeps it. The
+classification describes what a tool is capable of, not what a call achieved: an icon marking a write
+does not mean a write succeeded or even executed (see item 13). The
 kind is stamped into each persisted record at execution time from the resolved definition, not looked up
 at render time, so a later rename or deletion cannot recolor an old message. `kind` is not an
 authorization mechanism: heartbeat eligibility remains `ToolDefinition.heartbeat_eligible`, and the two
@@ -123,6 +126,59 @@ non-submit call batched with it is not executed and is not shown. Calls dropped 
 limit get no representation: an entry exists only for a call that received a result. No recovery is
 built for a turn that fails permanently before a row is written, or for an in-flight continuation a
 human send, recall or clear removed after its tools ran.
+
+### 11. Capture is generic and unconditional, and its cost is accepted
+
+The accumulator is attached to every queue request, whether or not a handler consumes it, and carried
+across continuations. There is no allow-list of request types that capture. Capture is a property of the
+queue, not something each handler opts into, so a new handler that writes a turn's final row cannot
+forget to ask for it. The price is an unused copy on requests that never write a row and a roughly
+doubled in-flight payload for a running turn; both are accepted. No cap on the number of continuation
+rounds is added here. The existing per-turn tool-execution limit (item 10) and the uncapped thinking size
+(item 3) are separate matters, and the continuation chain is otherwise unbounded as it was before.
+
+### 12. Records are assembled losslessly, in request order, matched by tool-call id
+
+A record is built from a request's own tool calls in the order the model made them, each matched to its
+result by call id. Provider call ids are consumed in order rather than assumed unique, so two calls that
+share an id each pair with their own result instead of one overwriting the other. A call with no result
+gets no record (item 10).
+
+### 13. Classification boundaries, and what the icon does and does not claim
+
+Built-in tags are held by convention and a completeness test over the built-in set. The TypeScript
+definition keeps `kind` optional, and no creation-time validation is added, because there is no custom
+tool authoring roadmap that would justify one. The display kind and the other `kind` literals in the
+codebase stay separate types with no shared public alias, and the fallback-reason constant stays in its
+own leaf module.
+
+The icon reports classification only. A record exists for any call that received a result, and the
+result may be an unknown-tool error, a blocked call, a missing-executor error or a thrown error; such a
+call is saved with the kind resolved for it (write when unclassified) and so can show the write icon
+without anything having been written. This is accepted: a more accurate success claim would need an error
+classifier that does not exist, and the raw `error` flag is forwarded unchanged (item 2). Two fallback
+boundaries are also deliberate. Later LLM-visible history still describes a tools-ran-no-reply row
+with the same wording as a chosen silence, and a bare `NoResponse` sentinel with no tool calls writes no
+row and no marker, as before.
+
+### 14. Display and accessibility choices
+
+A persisted record is shown whole when it arrives. No client simulates progressive reveal (typewriter,
+staggered rows) of content that is already complete, which keeps the shipped behavior distinct from the
+deferred real streaming work. Closing the Web detail dialog restores focus to whatever held it before,
+not unconditionally to the icon, because the icon may have been activated by pointer. The thinking
+control's accessibility parity with the tool-call control is a recorded fast-follow, not part of this
+decision. A new message that carries tool calls uses the existing passive unread notification; no
+tool-specific announcement is added.
+
+### 15. Test and recovery limits accepted at release
+
+Processor wiring of the capture path is exercised through a copy of the fetcher in a test fixture, which
+proves the fixture's behavior and the capture module, but not independently the Processor's own wiring;
+this indirection is accepted rather than reopened. Full tool output is lost to truncation unless the
+opt-in debug network log was on, and that log does not exist in the browser. Always-on logging of the
+original output, the original intent for recovery, is deferred, not abandoned, and the opt-in log is a
+release shortcut rather than its resolution.
 
 ## Alternatives Considered
 
