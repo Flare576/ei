@@ -1632,6 +1632,9 @@ const toolNextSteps = new Set([
       throw new Error("Invalid backup file format");
     }
     this.stateManager.restoreFromState(state);
+    // The backup's tool list replaced ours; re-normalise the built-ins exactly as startup does
+    // (a backup from before tool `kind` existed would otherwise have its built-ins stamped "write").
+    this.bootstrapTools();
     this.interface.onStateImported?.();
   }
 
@@ -1640,7 +1643,8 @@ const toolNextSteps = new Set([
   }
 
   async restoreFromState(state: StorageState): Promise<void> {
-    return this.stateManager.restoreFromState(state);
+    this.stateManager.restoreFromState(state);
+    this.bootstrapTools();
   }
 
   // ==========================================================================
