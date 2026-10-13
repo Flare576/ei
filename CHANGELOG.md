@@ -11,6 +11,20 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **Claude Haiku 5.5 (`claude-haiku-5-5`) is a known model.** Provider auto-detection now picks
+  it as the Anthropic extraction model and stamps `temperature_disabled` (the API returns a 400
+  for any temperature other than 1, which previously sent every extraction request to the
+  dead-letter queue), `max_output_tokens: 128000`, and a `token_limit` of 80k. That limit sits
+  below Anthropic's 100k-token prompt-pricing threshold because Ei's character-based token
+  estimate runs about 1.5x low for Haiku 5.5's tokenizer.
+- **Claude Sonnet 5.5 and Opus 5.5 (`claude-sonnet-5-5`, `claude-opus-5-5`) are known models.**
+  Fresh Anthropic detection already selected them as the chat and bonus models, but neither
+  had an entry, so Ei sent `temperature` and the API rejected every chat request with a 400.
+  Both now get `temperature_disabled` and `max_output_tokens: 128000`, with a `token_limit` of
+  200k matching the other Sonnet/Opus entries.
+
 ## [1.10.0] — 2026-08-09
 
 ### Added
