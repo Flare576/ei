@@ -10,6 +10,10 @@ import { IndexedDBStorage } from "../../src/storage/indexed";
 import { ContextStatus, type HumanEntity, type Message, type PersonaEntity, type StorageState } from "../../src/core/types";
 import { installVirtualListStubs } from "./test/virtualListStubs";
 
+// Processor.start is stubbed here, so its StateManager has no storage. importState now re-runs the tool
+// bootstrap, whose writes would schedule a save against that missing storage; nothing here exercises tools.
+vi.mock("../../src/core/bootstrap-tools", () => ({ bootstrapTools: vi.fn() }));
+
 const THINKING_ICON = "💭";
 
 function makePersona(id: string, displayName: string): PersonaEntity {
@@ -321,6 +325,53 @@ describe("thinking display in the real App", () => {
 
     release();
     expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+  });
+
+  describe("a thinking icon click while the persona's record is still loading", () => {
+    async function clickIconWhileLoading(): Promise<() => void> {
+      await openChat("Ada");
+      await screen.findByText("Ada thinks one");
+      const release = await switchToBeaWhileRecordLoads();
+      const icon = screen.getByRole("button", { name: THINKING_ICON });
+      expect(icon).toBeDisabled();
+      vi.mocked(Processor.prototype.updatePersona).mockClear();
+      fireEvent.click(icon);
+      return release;
+    }
+
+    it("changes and saves nothing for a default-on record (setting field absent)", async () => {
+      const release = await clickIconWhileLoading();
+      release();
+      await settle();
+
+      expect(Processor.prototype.updatePersona).not.toHaveBeenCalled();
+      expect(await storedShowThinking("bea")).toBeUndefined();
+      expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+
+      // Once the record is known the same icon works.
+      const icon = screen.getByRole("button", { name: THINKING_ICON });
+      expect(icon).toBeEnabled();
+      fireEvent.click(icon);
+      await waitFor(() => expect(screen.queryByText("Bea thinks")).toBeNull());
+      expect(await storedShowThinking("bea")).toBe(false);
+    });
+
+    it("changes and saves nothing for an explicit-false record", async () => {
+      store.set("bea", { ...store.get("bea")!, show_thinking: false });
+      const release = await clickIconWhileLoading();
+      release();
+      await settle();
+
+      expect(Processor.prototype.updatePersona).not.toHaveBeenCalled();
+      expect(await storedShowThinking("bea")).toBe(false);
+      expect(screen.queryByText("Bea thinks")).toBeNull();
+
+      const icon = screen.getByRole("button", { name: THINKING_ICON });
+      expect(icon).toBeEnabled();
+      fireEvent.click(icon);
+      expect(await screen.findByText("Bea thinks")).toBeInTheDocument();
+      expect(await storedShowThinking("bea")).toBe(true);
+    });
   });
 
   it("ignores a late response for a persona that is no longer selected", async () => {

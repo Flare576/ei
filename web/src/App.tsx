@@ -1363,6 +1363,7 @@ function App() {
              }}
              onToolCallsClick={setToolCallsMessage}
              showThinking={activePersonaEntity?.id === activePersonaId && (activePersonaEntity?.show_thinking ?? true)}
+             thinkingSettingKnown={activePersonaEntity?.id === activePersonaId}
              onToggleThinking={handleToggleThinking}
              onImageGenerate={handleImageGenerate}
              messageImages={messageImages}
