@@ -50,6 +50,12 @@ describe("selectModelsForProvider — latest selection (numeric descending)", ()
     expect(result.chatModel).toBe("claude-sonnet-4-6");
   });
 
+  test("undated claude-haiku-5-5 beats dated claude-haiku-4-5-20251001", () => {
+    const models = ["claude-haiku-4-5-20251001", "claude-haiku-5-5", "claude-sonnet-4-6"];
+    const result = selectModelsForProvider("Anthropic", models);
+    expect(result.extractionModel).toBe("claude-haiku-5-5");
+  });
+
   test("single haiku version — selects it", () => {
     const models = ["claude-haiku-4-5", "claude-sonnet-4-5"];
     const result = selectModelsForProvider("Anthropic", models);
@@ -605,6 +611,42 @@ describe("buildProviderAccounts — known model limits", () => {
 
     const opus = accounts[0].models!.find((m) => m.name === "claude-opus-4-8");
     expect(opus?.temperature_disabled).toBe(true);
+  });
+
+  test("claude-haiku-5-5 gets temperature_disabled and a token_limit below the 100k pricing threshold", () => {
+    // Oracle: Haiku 5.5's API rejects temperature != 1 (confirmed live: 400), and prompts over
+    // 100k tokens bill at 5x. Ei's chars/4 estimate runs ~1.5x low for this tokenizer and
+    // chunks use 0.75 * token_limit, so the stamped limit must stay at or below ~88k.
+    const { accounts } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["claude-haiku-5-5", "claude-sonnet-4-6"],
+      selected: { extractionModel: "claude-haiku-5-5", chatModel: "claude-sonnet-4-6" },
+      status: "detected",
+    }]);
+
+    const haiku = accounts[0].models!.find((m) => m.name === "claude-haiku-5-5");
+    expect(haiku?.temperature_disabled).toBe(true);
+    expect(haiku?.token_limit).toBeLessThanOrEqual(88000);
+  });
+
+  test("claude-sonnet-5-5 and claude-opus-5-5 get temperature_disabled when auto-configured", () => {
+    // Oracle: both reject temperature != 1 with a 400 (confirmed live against the API), so a
+    // fresh Anthropic detection that selects them as chat/bonus models must stamp the flag.
+    const { accounts } = buildProviderAccounts([{
+      name: "Anthropic",
+      url: "https://api.anthropic.com/v1",
+      apiKey: "sk-test",
+      modelIds: ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"],
+      selected: { extractionModel: "claude-haiku-5-5", chatModel: "claude-sonnet-5-5", bonusModel: "claude-opus-5-5" },
+      status: "detected",
+    }]);
+
+    for (const name of ["claude-sonnet-5-5", "claude-opus-5-5"]) {
+      const model = accounts[0].models!.find((m) => m.name === name);
+      expect(model?.temperature_disabled).toBe(true);
+    }
   });
 
   test("models without temperature_disabled in KNOWN_MODEL_LIMITS do not get the flag", () => {

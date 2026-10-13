@@ -8,5 +8,6 @@ export default defineConfig({
     exclude: ["../tests/tui/storage/**", "../tests/tui/e2e/**"],
     environment: "node",
     globals: true,
+    setupFiles: ["../tests/helpers/isolate-data-path.ts"],
   },
 });

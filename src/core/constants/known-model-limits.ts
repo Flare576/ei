@@ -21,6 +21,10 @@ export interface KnownModelLimits {
 }
 
 export const KNOWN_MODEL_LIMITS: Readonly<Record<string, KnownModelLimits>> = {
+  // Anthropic — claude-opus-5.x
+  // Rejects any temperature other than 1 (a 400 from the API), same as 4-8 onward. Advertised
+  // context is 1M; token_limit follows the other Opus/Sonnet entries' 200k effective cap.
+  "claude-opus-5-5":              { token_limit: 200000, max_output_tokens: 128000, temperature_disabled: true },
   // Anthropic — claude-opus-4.x
   // Models from 4-8 onward always use extended thinking and reject the temperature parameter.
   "claude-opus-4-8":              { token_limit: 200000, max_output_tokens: 128000, temperature_disabled: true },
@@ -29,10 +33,18 @@ export const KNOWN_MODEL_LIMITS: Readonly<Record<string, KnownModelLimits>> = {
   "claude-opus-4-5-20251101":     { token_limit: 200000, max_output_tokens: 64000 },
   "claude-opus-4-1-20250805":     { token_limit: 200000, max_output_tokens: 32000 },
   // Anthropic — claude-sonnet-5.x
+  "claude-sonnet-5-5":            { token_limit: 200000, max_output_tokens: 128000, temperature_disabled: true },
   "claude-sonnet-5":              { token_limit: 200000, max_output_tokens: 128000, temperature_disabled: true },
   // Anthropic — claude-sonnet-4.x
   "claude-sonnet-4-6":            { token_limit: 200000, max_output_tokens: 64000 },
   "claude-sonnet-4-5-20250929":   { token_limit: 200000, max_output_tokens: 64000 },
+  // Anthropic — claude-haiku-5.x
+  // Rejects any temperature other than 1 (a 400 from the API), so it is omitted entirely.
+  // Advertised context is 1M and max output 128K, but token_limit is capped at 80k on purpose:
+  // prompts over 100k tokens bill at 5x the input rate, Ei's chars/4 estimator undercounts this
+  // tokenizer by ~1.5x (measured on real extraction calls), and chunks are budgeted at 0.75 *
+  // token_limit — so 80k estimated-token budgets land around 90k real tokens.
+  "claude-haiku-5-5":             { token_limit: 80000, max_output_tokens: 128000, temperature_disabled: true },
   // Anthropic — claude-haiku-4.x
   // Note: advertised context is 200k but extraction quality degrades above ~100k in practice
   "claude-haiku-4-5-20251001":    { token_limit: 100000, max_output_tokens: 64000 },
