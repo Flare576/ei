@@ -158,8 +158,9 @@ call is saved with the kind resolved for it (write when unclassified) and so can
 without anything having been written. This is accepted: a more accurate success claim would need an error
 classifier that does not exist, and the raw `error` flag is forwarded unchanged (item 2). Two fallback
 boundaries are also deliberate. Later LLM-visible history still describes a tools-ran-no-reply row
-with the same wording as a chosen silence, and a bare `NoResponse` sentinel with no tool calls writes no
-row and no marker, as before.
+with the same wording as a chosen silence. And a `NoResponse` sentinel, with or without a reason, keeps
+writing the silence row it always did, now carrying whatever capture the turn produced; it is never given
+the tools-ran-no-reply marker, which belongs only to empty output with no sentinel.
 
 ### 14. Display and accessibility choices
 
