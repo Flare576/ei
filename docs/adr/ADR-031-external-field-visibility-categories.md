@@ -114,6 +114,7 @@ should have covered them.
 | `model` | System Hidden | Only affects Ei's own dispatch. The interface is `/provider` in-app |
 | `heartbeat_delay_ms`, `context_window_ms` | System Hidden | Scheduling |
 | `include_message_timestamps`, `context_boundary` | System Hidden | Prompt shaping |
+| `show_thinking` | System Hidden | Display-only setting (whether the TUI/Web show a message's saved thinking); no external meaning and nothing a caller can reason from. See ADR-040 |
 | `is_paused`, `pause_until` | System Hidden | In-app behaviour |
 | `is_archived`, `archived_at` | System Hidden | In-app behaviour. Close to externally meaningful, but not today |
 | `last_heartbeat` | System Hidden | Debugging; `state.json` is that surface |
