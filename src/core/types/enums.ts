@@ -42,6 +42,8 @@ export enum LLMNextStep {
   // data.toolHistory: serialized LLMHistoryMessage[] (assistant + tool result messages)
   // data.toolCallCounts: serialized Map entries [[name, count], ...] carrying per-tool call counts
   // data.originalNextStep: the next_step value from the originating request
+  // data.turnCapture: the whole-turn TurnCapture so far ({ tool_calls, thinking? }: every executed call with its full, untruncated
+  //   result, plus the non-empty rounds' thinking joined by "\n\n"); the handler that ends the turn persists it via turnCaptureFields
   HandleToolContinuation = "handleToolContinuation",
   HandleRewriteScan = "handleRewriteScan",
   HandleRewriteRewrite = "handleRewriteRewrite",

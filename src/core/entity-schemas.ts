@@ -279,11 +279,11 @@ export const personaTopicSchema = z.strictObject({
  * ADR-031's field-visibility sweep (this plan's TODO 3 + the S5 residual
  * fold-in): `tools`, `model`, `heartbeat_delay_ms`, `context_window_ms`,
  * `include_message_timestamps`, `context_boundary`, `is_paused`,
- * `pause_until`, `is_archived`, `archived_at` (all System Hidden) and
- * `group_primary`, `groups_visible` (System Visible — read-only, never
- * caller-write, S5) are gone from this shape entirely. `is_static`/
- * `last_heartbeat`/`last_updated`/`description_embedding` were never here
- * (System Visible/Hidden, always server-stamped).
+ * `pause_until`, `is_archived`, `archived_at`, `show_thinking` (all System
+ * Hidden) and `group_primary`, `groups_visible` (System Visible —
+ * read-only, never caller-write, S5) are gone from this shape entirely.
+ * `is_static`/`last_heartbeat`/`last_updated`/`description_embedding` were
+ * never here (System Visible/Hidden, always server-stamped).
  *
  * Exported as a raw shape for `deriveSchemaPair` — one declaration
  * produces the CREATE schema below, plus the PATCH/CANDIDATE pair

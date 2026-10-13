@@ -37,8 +37,9 @@
  * `tools`/`model`/`heartbeat_delay_ms`/`context_window_ms`/
  * `include_message_timestamps`/`context_boundary`/`is_paused`/
  * `pause_until`/`is_archived`/`archived_at`/`group_primary`/
- * `groups_visible` are gone from BOTH create and update entirely
- * (ADR-031: System Hidden or System Visible — never externally writable).
+ * `groups_visible`/`show_thinking` are gone from BOTH create and update
+ * entirely (ADR-031: System Hidden or System Visible — never externally
+ * writable).
  */
 
 import { z } from "zod";
