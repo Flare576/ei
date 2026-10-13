@@ -47,6 +47,7 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [037](ADR-037-extraction-prompts-stay-single-purpose.md) | Extraction and Reducer Prompts Stay Single-Purpose | Accepted | 2026-08-11 | Current |
 | [038](ADR-038-persona-signals-supersede-the-reflection-critic.md) | Attributed Persona Signals Replace the Reflection Critic and Its Append-Only Log | Accepted | 2026-08-11 | Current |
 | [039](ADR-039-signal-resolution-status-only-separate-identity-tools.md) | Signal Resolution Is Status-Only; Identity Editing Is a Separate Native Tool Set | Accepted | 2026-09-11 | Current |
+| [040](ADR-040-tool-calls-and-thinking-are-persisted-for-human-display-only.md) | Tool Calls and Thinking Are Persisted With the Message for Human Display Only | Accepted | 2026-10-13 | Current |
 
 ## Conventions
 
