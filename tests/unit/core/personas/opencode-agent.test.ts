@@ -2,10 +2,24 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   ensureAgentPersona,
   ensureAllAgentPersonas,
+  resolveCanonicalAgent,
 } from "../../../../src/core/personas/opencode-agent.js";
-import type { StateManager } from "../../../../src/core/state-manager.js";
+import { StateManager } from "../../../../src/core/state-manager.js";
 import type { Ei_Interface, PersonaEntity } from "../../../../src/core/types.js";
+import { AGENT_ALIASES } from "../../../../src/integrations/opencode/types.js";
 import type { IOpenCodeReader } from "../../../../src/integrations/opencode/types.js";
+import { createMockStorage } from "../../../helpers/mock-storage.js";
+
+// Preserve Zod's namespace export under Vitest's bare-specifier interop —
+// same workaround as tests/unit/integrations/omp/importer.test.ts. Real
+// `StateManager` reaches Zod via entity-schemas.ts.
+vi.mock("zod", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    z: (actual.z ?? actual.default ?? actual) as Record<string, unknown>,
+  };
+});
 
 describe("ensureAgentPersona", () => {
   let mockStateManager: Partial<StateManager>;
@@ -351,6 +365,103 @@ describe("ensureAgentPersona", () => {
     expect(result.traits[0]).toMatchObject({ name: "Genuine Responses", sentiment: 0.5, strength: 0.7 });
     expect(result.traits[1]).toMatchObject({ name: "Natural Speech", sentiment: 0.5, strength: 0.7 });
     expect(result.topics).toEqual([]);
+  });
+});
+
+// Tested by `Beta` — 2026-10-22
+describe("single-letter prefixed agent ids", () => {
+  let sm: StateManager;
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+  });
+
+  function makeStoredPersona(id: string, displayName: string, aliases: string[], overrides: Partial<PersonaEntity> = {}): PersonaEntity {
+    return {
+      id,
+      display_name: displayName,
+      entity: "system",
+      aliases,
+      short_description: `${displayName} description`,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: "2026-01-01T00:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  it("resolves 's-architect' and 'architect' to the same canonical 'Architect'", () => {
+    const prefixed = resolveCanonicalAgent("s-architect");
+    const bare = resolveCanonicalAgent("architect");
+
+    expect(prefixed.canonical).toBe("Architect");
+    expect(bare.canonical).toBe("Architect");
+    expect(prefixed.canonical).toBe(bare.canonical);
+  });
+
+  it("records 's-architect' exactly once as an alias without mutating the shared alias table", async () => {
+    const snapshot = structuredClone(AGENT_ALIASES);
+
+    const resolved = resolveCanonicalAgent("s-architect");
+    expect(resolved.aliases.filter((a) => a === "s-architect")).toHaveLength(1);
+    expect(AGENT_ALIASES).toEqual(snapshot);
+    expect(resolveCanonicalAgent("architect").aliases).not.toContain("s-architect");
+
+    const created = await ensureAgentPersona("s-architect", { stateManager: sm });
+    const stored = sm.persona_getById(created.id);
+    expect(stored).not.toBeNull();
+    expect(stored!.aliases.filter((a) => a === "s-architect")).toHaveLength(1);
+  });
+
+  it("derives 'DevOps Engineer' and 'QA Engineer' canonicals from prefixed ids", () => {
+    expect(resolveCanonicalAgent("s-devops-engineer").canonical).toBe("DevOps Engineer");
+    expect(resolveCanonicalAgent("s-qa-engineer").canonical).toBe("QA Engineer");
+  });
+
+  it("treats a spaced 'S Architect' as its own canonical and leaves a stored archived 'S Architect' persona untouched", async () => {
+    expect(resolveCanonicalAgent("S Architect").canonical).toBe("S Architect");
+
+    sm.persona_add(
+      makeStoredPersona("stored-prefixed-architect", "S Architect", ["S Architect"], { is_archived: true }),
+    );
+
+    await ensureAgentPersona("s-architect", { stateManager: sm });
+
+    const stored = sm.persona_getById("stored-prefixed-architect");
+    expect(stored).not.toBeNull();
+    expect(stored!.id).toBe("stored-prefixed-architect");
+    expect(stored!.display_name).toBe("S Architect");
+    expect(stored!.aliases).toEqual(["S Architect"]);
+    expect(stored!.is_archived).toBe(true);
+  });
+
+  it("keeps distinct reviewers apart and only strips a single-letter leading prefix", () => {
+    const reviewer = resolveCanonicalAgent("reviewer");
+    const codeReviewer = resolveCanonicalAgent("code-reviewer");
+    expect(reviewer.canonical).toBe("Reviewer");
+    expect(codeReviewer.canonical).toBe("Code Reviewer");
+    expect(reviewer.canonical).not.toBe(codeReviewer.canonical);
+
+    expect(resolveCanonicalAgent("foo-s-bar").canonical).toBe("Foo S Bar");
+    expect(resolveCanonicalAgent("S-Architect").canonical).toBe("Architect");
+
+    expect(resolveCanonicalAgent("Minos-SDLC").canonical).toBe("Minos SDLC");
+    expect(Object.keys(AGENT_ALIASES)).not.toContain("Minos SDLC");
+    expect(Object.values(AGENT_ALIASES).flat()).not.toContain("Minos-SDLC");
+  });
+
+  it("reuses a stored 'Architect' persona for 's-architect' without altering its aliases", async () => {
+    sm.persona_add(makeStoredPersona("stored-architect", "Architect", ["architect"]));
+
+    const result = await ensureAgentPersona("s-architect", { stateManager: sm });
+
+    expect(result.id).toBe("stored-architect");
+    expect(result.aliases).toEqual(["architect"]);
+    expect(sm.persona_getById("stored-architect")!.aliases).toEqual(["architect"]);
   });
 });
 
