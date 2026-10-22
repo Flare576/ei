@@ -1,7 +1,7 @@
-import type { OmpMessage, OmpProvenance, OmpSession, OmpTranscriptRecord } from "./types.js";
+import type { OmpMessage, OmpProvenance, OmpSession, OmpTranscriptRecord, OmpTree } from "./types.js";
 import type { join } from "path";
 import type { readdir, lstat } from "fs/promises";
-import type { existsSync, createReadStream } from "fs";
+import type { existsSync, createReadStream, Dirent } from "fs";
 import type { createHash } from "crypto";
 
 const isBrowser = typeof document !== "undefined";
@@ -72,6 +72,48 @@ function labelFromFilename(filename: string): string {
   return lastDot === -1 ? stem : stem.slice(lastDot + 1);
 }
 
+/**
+ * A tree's id is the UUID segment of its root session file name: the text
+ * after the first "_" in the stem (`<timestamp>_<uuid>`), the same
+ * derivation the Pi reader uses. It comes from the name alone, so it is
+ * known without opening the file and is the same for a copied tree. A stem
+ * with no "_" has no id and is not a tree.
+ */
+function treeIdFromStem(stem: string): string | null {
+  const underscoreIdx = stem.indexOf("_");
+  if (underscoreIdx === -1) return null;
+  return stem.slice(underscoreIdx + 1);
+}
+
+/** Joins the strings of an array-form `systemPrompt` into the one string whose hash is the revision. */
+const SYSTEM_PROMPT_SEPARATOR = "\n\n";
+
+function extractSystemPrompt(raw: unknown): string | undefined {
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw) && raw.every((part) => typeof part === "string")) {
+    return raw.join(SYSTEM_PROMPT_SEPARATOR);
+  }
+  return undefined;
+}
+
+async function readDirents(dir: string): Promise<Dirent[]> {
+  try {
+    return await _readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+/** The mtime in ms of a regular file (never follows a symlink), or `null` when it cannot be statted. */
+async function mtimeOf(filePath: string): Promise<number | null> {
+  try {
+    const stats = await _lstat(filePath);
+    return stats.isFile() ? stats.mtimeMs : null;
+  } catch {
+    return null;
+  }
+}
+
 interface OmpContentBlock {
   type?: string;
   text?: string;
@@ -107,6 +149,79 @@ export class OmpReader {
     const records: OmpTranscriptRecord[] = [];
     await this.walk(root, 0, records);
     return records.sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  /**
+   * Every session tree under `sessionsRoot` (default `~/.omp/agent/sessions`).
+   * Every directory directly under the root is a project directory and is
+   * searched, whatever its name; nothing about the process's working directory
+   * or a session's own header is consulted. A tree is a root file
+   * `<name>.jsonl` in a project directory plus every file under the sibling
+   * directory `<name>/` at any depth; a directory with no root file is not a
+   * tree. Only regular files are accepted. Listing only stats: no file is
+   * opened or read. `newestMtimeMs` covers the root file and every file under
+   * the sibling directory, `.jsonl` or not, so a change to a tool-output log
+   * still counts as activity in the tree; `transcripts` lists only its
+   * `.jsonl` files.
+   */
+  async listTrees(sessionsRoot?: string): Promise<OmpTree[]> {
+    if (!(await ensureNodeModules())) return [];
+
+    const root = sessionsRoot ?? _join(process.env.HOME || "/", ".omp", "agent", "sessions");
+    if (!_existsSync(root)) return [];
+
+    const trees: OmpTree[] = [];
+    for (const project of await readDirents(root)) {
+      if (!project.isDirectory()) continue;
+      const projectDir = _join(root, project.name);
+      const entries = await readDirents(projectDir);
+      const siblingDirs = new Set(entries.filter((e) => e.isDirectory()).map((e) => e.name));
+
+      for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+        const stem = entry.name.slice(0, -".jsonl".length);
+        const id = treeIdFromStem(stem);
+        if (!id) continue;
+
+        const rootPath = _join(projectDir, entry.name);
+        const rootMtime = await mtimeOf(rootPath);
+        if (rootMtime === null) continue;
+
+        const transcripts: OmpTranscriptRecord[] = [];
+        let newestMtimeMs = rootMtime;
+        if (siblingDirs.has(stem)) {
+          newestMtimeMs = Math.max(newestMtimeMs, await this.walkTree(_join(projectDir, stem), 0, transcripts));
+        }
+        transcripts.sort((a, b) => a.path.localeCompare(b.path));
+        trees.push({ id, rootPath, transcripts, newestMtimeMs });
+      }
+    }
+    return trees.sort((a, b) => a.rootPath.localeCompare(b.rootPath));
+  }
+
+  /**
+   * Collects the `.jsonl` regular files under a tree's sibling directory into
+   * `out` (`depth` 0 is the sibling directory itself, so a file in it is CD2)
+   * and returns the newest mtime among every regular file found there.
+   */
+  private async walkTree(dir: string, depth: number, out: OmpTranscriptRecord[]): Promise<number> {
+    let newest = 0;
+    for (const entry of await readDirents(dir)) {
+      const fullPath = _join(dir, entry.name);
+      if (entry.isDirectory()) {
+        newest = Math.max(newest, await this.walkTree(fullPath, depth + 1, out));
+        continue;
+      }
+      if (!entry.isFile()) continue;
+
+      const mtime = await mtimeOf(fullPath);
+      if (mtime === null) continue;
+      newest = Math.max(newest, mtime);
+      if (entry.name.endsWith(".jsonl")) {
+        out.push({ path: fullPath, cd: depth + 2, label: labelFromFilename(entry.name) });
+      }
+    }
+    return newest;
   }
 
   private async walk(dir: string, depth: number, out: OmpTranscriptRecord[]): Promise<void> {
@@ -203,7 +318,7 @@ export class OmpReader {
         return true;
       }
       if (entry.type !== "message") return true;
-      const message = entry.message as { role?: unknown; content?: unknown } | undefined;
+      const message = entry.message as { role?: unknown; content?: unknown; attribution?: unknown } | undefined;
       if (!message || typeof message !== "object") return true;
 
       const role = message.role;
@@ -216,11 +331,20 @@ export class OmpReader {
       if (!firstTs || ts < firstTs) firstTs = ts;
       if (!lastTs || ts > lastTs) lastTs = ts;
 
+      // `agent` on the outer entry names the persona in a main session;
+      // `attribution` says whether a user-role line is the parent agent's or
+      // the human's. Either is left off when the entry does not carry it.
+      const agent = typeof entry.agent === "string" ? entry.agent : undefined;
+      const attribution =
+        message.attribution === "agent" || message.attribution === "user" ? message.attribution : undefined;
+
       messages.push({
         id: typeof entry.id === "string" ? entry.id : `line-${lineNo}`,
         role,
         content,
         timestamp: ts,
+        ...(agent !== undefined && { agent }),
+        ...(attribution !== undefined && { attribution }),
       });
       return true;
     };
@@ -255,8 +379,7 @@ export class OmpReader {
     if (entryCount === 0) return null; // nothing parseable -> null
 
     const agentId = typeof sessionInit?.agent === "string" ? (sessionInit.agent as string) : undefined;
-    const systemPrompt =
-      typeof sessionInit?.systemPrompt === "string" ? (sessionInit.systemPrompt as string) : undefined;
+    const systemPrompt = extractSystemPrompt(sessionInit?.systemPrompt);
 
     const provenance: OmpProvenance = {
       harness: "omp",
