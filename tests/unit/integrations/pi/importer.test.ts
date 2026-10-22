@@ -1,4 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import { importPiSessions } from "../../../../src/integrations/pi/importer.js";
 import type { StateManager } from "../../../../src/core/state-manager.js";
 import type { Ei_Interface, HumanEntity, Message } from "../../../../src/core/types.js";
@@ -12,6 +15,7 @@ import {
   buildExternalMessage,
   buildChatMessage,
 } from "../shared/importer-test-utils.js";
+import { ompMainSession, ompMessage, writeOmpTree } from "../shared/omp-transcript-fixtures.js";
 
 vi.mock("../../../../src/integrations/process-check.js", () => ({
   isProcessRunning: vi.fn().mockResolvedValue(true),
@@ -286,5 +290,123 @@ describe("importPiSessions", () => {
     });
 
     expect(result.sessionsProcessed).toBe(0);
+  });
+
+  describe("process guard", () => {
+    const youngSession = () =>
+      makeSession({
+        id: "019e45e3-e2e5-7174-8165-da221c147ebb",
+        lastMessageAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      });
+    const running = (names: string[]) =>
+      vi.mocked(isProcessRunning).mockImplementation(async (name: string) => names.includes(name));
+
+    it("imports an eligible young session while pi is stopped and omp is running", async () => {
+      running(["omp"]);
+      mockReader.getSessions = vi.fn().mockResolvedValue([youngSession()]);
+
+      const result = await importPiSessions({
+        stateManager: mockStateManager as StateManager,
+        interface: mockInterface as Ei_Interface,
+        reader: mockReader as IPiReader,
+      });
+
+      expect(result.sessionsProcessed).toBe(1);
+      expect(result.messagesImported).toBe(2);
+    });
+
+    it("still defers the same young session while pi is running", async () => {
+      running(["pi", "omp"]);
+      mockReader.getSessions = vi.fn().mockResolvedValue([youngSession()]);
+
+      const result = await importPiSessions({
+        stateManager: mockStateManager as StateManager,
+        interface: mockInterface as Ei_Interface,
+        reader: mockReader as IPiReader,
+      });
+
+      expect(result.sessionsProcessed).toBe(0);
+      expect(result.messagesImported).toBe(0);
+    });
+  });
+
+  describe("Pi persona aliases", () => {
+    it("creates a vanilla Pi persona with aliases exactly pi and pi coding agent", async () => {
+      mockReader.getSessions = vi.fn().mockResolvedValue([makeSession({ id: "019e45e3-e2e5-7174-8165-da221c147ebb" })]);
+
+      await importPiSessions({
+        stateManager: mockStateManager as StateManager,
+        interface: mockInterface as Ei_Interface,
+        reader: mockReader as IPiReader,
+      });
+
+      const added = vi.mocked(mockStateManager.persona_add!).mock.calls[0][0] as unknown as { aliases: string[] };
+      expect(added.aliases).toEqual(["pi", "pi coding agent"]);
+    });
+
+    it("leaves a pre-seeded Pi persona with extra stored aliases unchanged after a Pi pass", async () => {
+      piPersona = {
+        ...buildPersonaEntity("pi-id", "Pi"),
+        aliases: ["pi", "my-custom-alias", "oh-my-pi"],
+        long_description: "hand-edited description",
+      } as typeof piPersona;
+      const before = structuredClone(piPersona);
+      mockReader.getSessions = vi.fn().mockResolvedValue([makeSession({ id: "019e45e3-e2e5-7174-8165-da221c147ebb" })]);
+
+      const result = await importPiSessions({
+        stateManager: mockStateManager as StateManager,
+        interface: mockInterface as Ei_Interface,
+        reader: mockReader as IPiReader,
+      });
+
+      expect(result.sessionsProcessed).toBe(1);
+      expect(mockStateManager.persona_add).not.toHaveBeenCalled();
+      expect(mockStateManager.persona_update).not.toHaveBeenCalled();
+      expect(piPersona).toEqual(before);
+    });
+  });
+
+  describe("default reader roots", () => {
+    let originalHome: string | undefined;
+    let tmpHome: string;
+
+    beforeEach(async () => {
+      originalHome = process.env.HOME;
+      tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "pi-home-"));
+      process.env.HOME = tmpHome;
+    });
+
+    afterEach(async () => {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      await fs.rm(tmpHome, { recursive: true, force: true });
+    });
+
+    it("imports the ~/.pi session and never the ~/.omp session when no reader is injected", async () => {
+      vi.mocked(isProcessRunning).mockResolvedValue(false);
+      const piUuid = "019e45e3-e2e5-7174-8165-da221c147ebb";
+      await writeOmpTree(path.join(tmpHome, ".omp", "agent", "sessions"), {
+        stem: "2026-08-01T00-00-00-000Z_029e45e3-e2e5-7174-8165-da221c147ecc",
+        main: ompMainSession({ messages: [ompMessage("user", "omp only question"), ompMessage("assistant", "omp only answer")] }),
+      });
+      const piDir = path.join(tmpHome, ".pi", "agent", "sessions", "--work--");
+      await fs.mkdir(piDir, { recursive: true });
+      const line = (id: string, ts: string, role: string, text: string) =>
+        JSON.stringify({ type: "message", id, parentId: null, timestamp: ts, message: { role, content: role === "user" ? text : [{ type: "text", text }] } });
+      await fs.writeFile(
+        path.join(piDir, `2026-09-01T00-00-00-000Z_${piUuid}.jsonl`),
+        [line("pi000001", "2026-09-01T00:00:01.000Z", "user", "pi only question"), line("pi000002", "2026-09-01T00:00:02.000Z", "assistant", "pi only answer")].join("\n") + "\n"
+      );
+
+      const result = await importPiSessions({
+        stateManager: mockStateManager as StateManager,
+        interface: mockInterface as Ei_Interface,
+      });
+
+      expect(result.sessionsProcessed).toBe(1);
+      const imported = [...messageStore.values()].flat().map((m) => m.content);
+      expect(imported).toEqual(["pi only question", "pi only answer"]);
+      expect(Object.keys(mockHuman.settings?.pi?.processed_sessions ?? {})).toEqual([piUuid]);
+    });
   });
 });
