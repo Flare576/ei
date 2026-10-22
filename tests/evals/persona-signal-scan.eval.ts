@@ -2,6 +2,7 @@ import { buildPersonaSignalScanPrompt } from "../../src/prompts/human/persona-si
 import type { Message } from "../../src/core/types/llm.js";
 import { ContextStatus } from "../../src/core/types/enums.js";
 import { runEval, printSummary, hydratePrompt } from "./runner.js";
+import { buildParentLinePrompt, PARENT_LINE_ASSERTIONS } from "./persona-signal-scan-parent-line.js";
 
 // BETA-PS-002: static unit tests (tests/unit/prompts/persona-signal-scan.test.ts) only pin
 // prompt wording — they can't tell whether a model actually draws the line the prompt asks
@@ -156,6 +157,22 @@ const summary = await runEval(
           ].join(" "),
         },
       ],
+    },
+    // A sub-agent transcript: the parent's note about Sisyphus arrives as a `system` message from
+    // "Parent agent" (the importer's real mapping), the rest are Sisyphus's own lines. The parent's
+    // note must not be read as a human's testimony, and Sisyphus's own concrete practice must
+    // still be retained as self-report. Known-bad control:
+    // tests/evals/persona-signal-scan-parent-line-control.observe.ts (same input, parent line as human).
+    // Known limitation of the scan on the local gemma-4-26b-a4b-qat model: in some runs it reads the
+    // parent's note as a human's testimony (2 of 5 in a recorded run), so this case does not reach
+    // 5 of 5 on that model.
+    {
+      description: "Persona-signal-scan: a sub-agent's parent-agent line is not read as a human observer (P0)",
+      tags: ["persona-signal-scan", "parent-line"],
+      repeat: 5,
+      pass_threshold: 1,
+      prompt: () => buildParentLinePrompt(false),
+      assert: PARENT_LINE_ASSERTIONS,
     },
   ],
   "tests/evals/results/persona-signal-scan-latest.json"
