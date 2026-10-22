@@ -105,6 +105,7 @@ describe("Final QA — OnboardingOverlay Install step: genuine installer failure
       cursor: false,
       codex: false,
       pi: false,
+      omp: false,
     });
 
     let onDismissCalled = false;

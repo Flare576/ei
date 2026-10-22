@@ -85,13 +85,10 @@ export interface OmpSession {
 /**
  * Stored under human.settings.omp.
  *
- * WARNING: ADDING A NEW FIELD HERE?
- * If it is runtime-managed (not user-editable), also preserve it in
- * settingsFromYAML() in tui/src/util/yaml-settings.ts or /settings will
- * wipe it. No settings-UI toggle exists for `omp` at all, so it is not a
- * key that parser knows about; every field here already round-trips
- * untouched via that function's own `{ ...original, ... }` merge, which
- * never lists `omp` as one of the keys it overwrites.
+ * `integration`, `polling_interval_ms` and `extraction_model` are the keys
+ * /settings edits (a plain `omp` block like the other integrations').
+ * settingsFromYAML() carries every other field over from the live settings, so
+ * a new runtime-managed field here needs no change there.
  */
 export interface OmpSettings {
   integration?: boolean;

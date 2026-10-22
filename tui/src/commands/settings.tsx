@@ -42,7 +42,10 @@ export const settingsCommand: Command = {
       }
       
       try {
-        const newSettings = settingsFromYAML(result.content, human.settings, accounts);
+        // The importer keeps writing its cursor while the editor is open, so the
+        // runtime fields are carried from the settings as they are now.
+        const live = await ctx.ei.getHuman();
+        const newSettings = settingsFromYAML(result.content, live.settings, accounts);
         const llmAccounts = human.settings?.accounts?.filter(a => a.type === "llm") ?? [];
 
         if (newSettings.conversation_model) {
