@@ -24,19 +24,28 @@ export interface EnsureAgentPersonaOptions {
 }
 
 /**
- * Finds the persona for an agent name by exact (case-insensitive) display name or
- * alias of its canonical form. No partial matching, and the original prefixed ID
- * is not consulted, so an existing prefixed persona is never merged into.
+ * The persona in `personas` for a canonical agent name: exact (case-insensitive)
+ * display name first, else exact alias. No partial matching.
  */
-export function findAgentPersonaExact(stateManager: StateManager, agentName: string): PersonaEntity | null {
-  const { canonical } = resolveCanonicalAgent(agentName);
+export function matchAgentPersona<P extends Pick<PersonaEntity, "display_name" | "aliases">>(
+  personas: readonly P[],
+  canonical: string
+): P | null {
   const term = canonical.toLowerCase();
-  const personas = stateManager.persona_getAll();
   return (
     personas.find((p) => p.display_name.toLowerCase() === term) ??
     personas.find((p) => p.aliases?.some((a) => a.toLowerCase() === term)) ??
     null
   );
+}
+
+/**
+ * Finds the persona for an agent name by exact (case-insensitive) display name or
+ * alias of its canonical form. No partial matching, and the original prefixed ID
+ * is not consulted, so an existing prefixed persona is never merged into.
+ */
+export function findAgentPersonaExact(stateManager: StateManager, agentName: string): PersonaEntity | null {
+  return matchAgentPersona(stateManager.persona_getAll(), resolveCanonicalAgent(agentName).canonical);
 }
 
 export function resolveCanonicalAgent(agentName: string): { canonical: string; aliases: string[] } {
