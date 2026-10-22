@@ -1,8 +1,8 @@
 /**
  * Pi Integration Types
  *
- * Pi (pi.dev / earendil-works/pi and the oh-my-pi fork) stores sessions as
- * JSONL files under ~/.pi/agent/sessions/ (pi) or ~/.omp/agent/sessions/ (omp).
+ * Pi (pi.dev / earendil-works/pi) stores sessions as
+ * JSONL files under ~/.pi/agent/sessions/.
  *
  * Directory layout:
  *   <sessionsRoot>/
@@ -49,8 +49,6 @@ export interface PiMessageEntry {
   id: string;
   parentId?: string;
   timestamp: string;
-  /** Active agent definition name, present only for OMP sessions. Mirrors the `agent` field on OpenCode message rows. */
-  agent?: string;
   message: PiMessagePayload;
   [key: string]: unknown;
 }
@@ -114,15 +112,13 @@ export interface PiMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
-  /** Active agent definition name when this message was recorded; undefined for vanilla Pi or OMP without an active agent. */
-  agent?: string;
 }
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-/** Single persona name for all Pi/OMP sessions on a machine */
+/** Single persona name for all Pi sessions on a machine */
 export const PI_PERSONA_NAME = "Pi";
 
 /** Topic groups assigned to Pi session topics */

@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PiReader } from "../../../../src/integrations/pi/reader.js";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { ompMainSession, ompMessage, writeOmpTree } from "../shared/omp-transcript-fixtures.js";
 
 function makeEntry(overrides: Record<string, unknown>): string {
   return JSON.stringify(overrides);
@@ -260,31 +261,6 @@ describe("PiReader", () => {
     }
   });
 
-  it("reads from both pi and omp roots when both provided", async () => {
-    const tmpPi = await fs.mkdtemp(path.join(os.tmpdir(), "pi-test-"));
-    const tmpOmp = await fs.mkdtemp(path.join(os.tmpdir(), "omp-test-"));
-    try {
-      const uuidPi = "aaaaaaaa-0000-0000-0000-000000000001";
-      const uuidOmp = "bbbbbbbb-0000-0000-0000-000000000002";
-      await writeSession(tmpPi, "--proj--", `2026-05-19T10-00-00-000Z_${uuidPi}.jsonl`, [
-        makeUserEntry("aa000001", "root", "2026-05-19T10:00:00.000Z", "Pi session"),
-      ]);
-      await writeSession(tmpOmp, "--proj--", `2026-05-20T10-00-00-000Z_${uuidOmp}.jsonl`, [
-        makeUserEntry("bb000001", "root", "2026-05-20T10:00:00.000Z", "OMP session"),
-      ]);
-
-      const reader = new PiReader([tmpPi, tmpOmp]);
-      const sessions = await reader.getSessions();
-
-      expect(sessions).toHaveLength(2);
-      expect(sessions.map((s) => s.id)).toContain(uuidPi);
-      expect(sessions.map((s) => s.id)).toContain(uuidOmp);
-    } finally {
-      await fs.rm(tmpPi, { recursive: true, force: true });
-      await fs.rm(tmpOmp, { recursive: true, force: true });
-    }
-  });
-
   it("getMessageById returns the message with context window", async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "pi-test-"));
     try {
@@ -314,5 +290,49 @@ describe("PiReader", () => {
     const reader = new PiReader(["/nonexistent"]);
     const result = await reader.getMessageById("no-such-session", "no-such-msg");
     expect(result).toBeNull();
+  });
+});
+
+describe("PiReader default roots", () => {
+  const PI_UUID = "019e45e3-e2e5-7174-8165-da221c147ebb";
+  const OMP_UUID = "029e45e3-e2e5-7174-8165-da221c147ecc";
+  let originalHome: string | undefined;
+  let tmpHome: string;
+
+  beforeEach(async () => {
+    originalHome = process.env.HOME;
+    tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "pi-home-"));
+    process.env.HOME = tmpHome;
+    await writeOmpTree(path.join(tmpHome, ".omp", "agent", "sessions"), {
+      stem: `2026-08-01T00-00-00-000Z_${OMP_UUID}`,
+      main: ompMainSession({ messages: [ompMessage("user", "omp only question"), ompMessage("assistant", "omp only answer")] }),
+    });
+    await writeSession(path.join(tmpHome, ".pi", "agent", "sessions"), "--work--", `2026-09-01T00-00-00-000Z_${PI_UUID}.jsonl`, [
+      makeUserEntry("pi000001", "root", "2026-09-01T00:00:01.000Z", "pi only question"),
+      makeAssistantEntry("pi000002", "pi000001", "2026-09-01T00:00:02.000Z", [{ type: "text", text: "pi only answer" }]),
+    ]);
+  });
+
+  afterEach(async () => {
+    if (originalHome === undefined) delete process.env.HOME;
+    else process.env.HOME = originalHome;
+    await fs.rm(tmpHome, { recursive: true, force: true });
+  });
+
+  it("reads only the ~/.pi root when constructed with no explicit roots", async () => {
+    const sessions = await new PiReader().getSessions();
+
+    expect(sessions.map((s) => s.id)).toEqual([PI_UUID]);
+    expect(sessions[0].messages.map((m) => m.content)).toEqual(["pi only question", "pi only answer"]);
+  });
+
+  it("resolves a message id from the ~/.pi session and not from the ~/.omp session", async () => {
+    const reader = new PiReader();
+
+    const fromPi = await reader.getMessageById(PI_UUID, `${PI_UUID}/pi000002`);
+    const fromOmp = await reader.getMessageById(OMP_UUID, `${OMP_UUID}/e0000001`);
+
+    expect(fromPi?.message.content).toBe("pi only answer");
+    expect(fromOmp).toBeNull();
   });
 });

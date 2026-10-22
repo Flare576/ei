@@ -199,7 +199,6 @@ export class PiReader implements IPiReader {
         role,
         content,
         timestamp: ts ?? new Date(0).toISOString(),
-        agent: entry.agent as string | undefined,
       });
     }
 
@@ -241,8 +240,5 @@ export class PiReader implements IPiReader {
 
 function getDefaultSessionsRoots(): string[] {
   const home = process.env.HOME ?? "~";
-  return [
-    _join(home, ".pi", "agent", "sessions"),
-    _join(home, ".omp", "agent", "sessions"),
-  ];
+  return [_join(home, ".pi", "agent", "sessions")];
 }
