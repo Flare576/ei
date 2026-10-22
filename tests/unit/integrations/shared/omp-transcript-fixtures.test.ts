@@ -52,6 +52,11 @@ describe("OMP transcript generator", () => {
     expect(assignment.message.timestamp).toBe(Date.parse(assignment.timestamp));
   });
 
+  it("sub-agent transcript: systemPrompt is written in string form when given a string", () => {
+    const entries = parse(ompTranscriptText(ompSubAgent({ systemPrompt: "one single prompt", messages: [] })));
+    expect(entries[1].systemPrompt).toBe("one single prompt");
+  });
+
   it("main-session transcript: the persona agent sits at the outer entry.agent, never inside the message", () => {
     const entries = parse(
       ompTranscriptText(
