@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { OmpReader, slugifyProjectPath, MAX_TRANSCRIPT_BYTES, MAX_TRANSCRIPT_ENTRIES } from "../../../../src/integrations/omp/reader.js";
+import { OmpReader, slugifyProjectPath } from "../../../../src/integrations/omp/reader.js";
+import { qualifyOmpMessage } from "../../../../src/core/utils/message-id.js";
+import {
+  ompHeader,
+  ompIrcIncoming,
+  ompMessage,
+  ompSessionInit,
+  ompTranscriptText,
+} from "../shared/omp-transcript-fixtures.js";
 import type { OmpSession } from "../../../../src/integrations/omp/types.js";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -7,21 +15,12 @@ import * as os from "node:os";
 import { execFileSync } from "node:child_process";
 
 function sessionInitLine(overrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    type: "session_init",
-    id: "init-1",
-    timestamp: "2026-08-01T00:00:00.000Z",
-    ...overrides,
-  });
+  // A raw session_init entry (no defaulted systemPrompt/agent), so tests can omit either field.
+  return ompTranscriptText([{ type: "session_init", ...overrides }], { trailingNewline: false });
 }
 
 function messageLine(id: string, role: "user" | "assistant", text: string, timestamp: string): string {
-  return JSON.stringify({
-    type: "message",
-    id,
-    timestamp,
-    message: { role, content: [{ type: "text", text }] },
-  });
+  return ompTranscriptText([ompMessage(role, text, { id, timestamp })], { trailingNewline: false });
 }
 
 async function mkTmp(): Promise<string> {
@@ -149,24 +148,45 @@ describe("OmpReader", () => {
       await expect(reader.readTranscript("/nonexistent/transcript.jsonl")).resolves.toBeNull();
     });
 
-    it("a transcript with valid lines plus one invalid line is rejected whole (Stint holistic review Bucket 1, finding I5, 2026-08-11)", async () => {
+    it("a transcript with valid messages before and after an invalid middle line is rejected whole", async () => {
       const tmp = await mkTmp();
       try {
         const filePath = path.join(tmp, "PartiallyBroken.jsonl");
         await fs.writeFile(
           filePath,
-          `${sessionInitLine({ agent: "backend-engineer", systemPrompt: "sys" })}\n` +
-            `${messageLine("m1", "assistant", "valid content", "2026-08-01T00:01:00.000Z")}\n` +
-            `not valid json at all\n`
+          ompTranscriptText([
+            ompHeader(),
+            ompSessionInit({ agent: "backend-engineer", systemPrompt: "sys" }),
+            ompMessage("assistant", "valid before", { id: "m1" }),
+            "not valid json at all",
+            ompMessage("assistant", "valid after", { id: "m2" }),
+          ])
         );
 
-        // D5's "malformed transcript returns null" was previously
-        // implemented as a per-line skip (null only when EVERY line
-        // failed) — a file with otherwise-valid lines plus one invalid
-        // line was wrongly accepted as partial evidence. It must now
-        // reject the whole transcript, same as a wholly-malformed file.
-        const reader = new OmpReader();
-        await expect(reader.readTranscript(filePath)).resolves.toBeNull();
+        await expect(new OmpReader().readTranscript(filePath)).resolves.toBeNull();
+      } finally {
+        await fs.rm(tmp, { recursive: true, force: true });
+      }
+    });
+
+    it("a transcript ending in a malformed unterminated fragment is rejected whole", async () => {
+      const tmp = await mkTmp();
+      try {
+        const filePath = path.join(tmp, "TruncatedTail.jsonl");
+        await fs.writeFile(
+          filePath,
+          ompTranscriptText(
+            [
+              ompHeader(),
+              ompSessionInit({ agent: "backend-engineer", systemPrompt: "sys" }),
+              ompMessage("assistant", "valid content", { id: "m1" }),
+              '{"type":"message"',
+            ],
+            { trailingNewline: false }
+          )
+        );
+
+        await expect(new OmpReader().readTranscript(filePath)).resolves.toBeNull();
       } finally {
         await fs.rm(tmp, { recursive: true, force: true });
       }
@@ -338,47 +358,104 @@ describe("OmpReader", () => {
     });
   });
 
-  describe("D11/R9/AT9 — an oversized transcript is skipped before full in-memory parsing", () => {
-    it("a transcript whose on-disk size exceeds the documented byte-size budget returns null without allocating its content", async () => {
+  describe("large transcripts are read in full", () => {
+    it("returns all 5001 messages of a generated transcript over 8 MiB and 5000 entries", async () => {
       const tmp = await mkTmp();
       try {
         const filePath = path.join(tmp, "Huge.jsonl");
-        const oversizedText = "x".repeat(MAX_TRANSCRIPT_BYTES + 1024);
+        const total = 5001;
+        const body = (n: number) => String(n).padStart(4, "0").padEnd(1800, "x");
+        const finalContent = "FINAL".padEnd(1800, "z");
+        const messages = Array.from({ length: total - 1 }, (_, i) =>
+          ompMessage(i % 2 === 0 ? "user" : "assistant", body(i), i === 0 ? { id: "first-entry" } : {})
+        );
+        messages.push(ompMessage("assistant", finalContent, { id: "last-entry" }));
         await fs.writeFile(
           filePath,
-          `${sessionInitLine({ agent: "backend-engineer", systemPrompt: "sys" })}\n` +
-            `${messageLine("m1", "assistant", oversizedText, "2026-08-01T00:01:00.000Z")}\n`
+          ompTranscriptText([ompHeader(), ompSessionInit({ agent: "backend-engineer", systemPrompt: "sys" }), ...messages])
         );
 
-        const reader = new OmpReader();
-        await expect(reader.readTranscript(filePath)).resolves.toBeNull();
+        expect((await fs.stat(filePath)).size).toBeGreaterThan(8 * 1024 * 1024);
+        expect(messages.length).toBeGreaterThan(5000);
 
-        // A budget rejection is D5's ordinary null-return convention — the
-        // reader itself remains usable for the next eligible file right after.
-        const okPath = path.join(tmp, "Fine.jsonl");
-        await fs.writeFile(
-          okPath,
-          `${sessionInitLine({ agent: "backend-engineer", systemPrompt: "sys" })}\n` +
-            `${messageLine("m1", "assistant", "small content", "2026-08-01T00:01:00.000Z")}\n`
-        );
-        await expect(reader.readTranscript(okPath)).resolves.not.toBeNull();
+        const session = await new OmpReader().readTranscript(filePath);
+        expect(session).not.toBeNull();
+        expect(session!.messages).toHaveLength(total);
+        expect(session!.messages).toContainEqual(expect.objectContaining({ id: "first-entry", role: "user", content: body(0) }));
+        expect(session!.messages).toContainEqual(expect.objectContaining({ id: "last-entry", role: "assistant", content: finalContent }));
       } finally {
         await fs.rm(tmp, { recursive: true, force: true });
       }
     });
+  });
 
-    it("a transcript whose parsed-entry count exceeds the documented entry-count budget returns null before allocating its full message array", async () => {
-      const tmp = await mkTmp();
+  describe("physical-line native IDs and unterminated final lines", () => {
+    it("derives stable physical-line IDs across reads and same-named transcripts", async () => {
+      const root = await mkTmp();
       try {
-        const filePath = path.join(tmp, "TooManyEntries.jsonl");
-        const lines = [sessionInitLine({ agent: "backend-engineer", systemPrompt: "sys" })];
-        for (let i = 0; i < MAX_TRANSCRIPT_ENTRIES + 10; i++) {
-          lines.push(messageLine(`m${i}`, i % 2 === 0 ? "user" : "assistant", `entry ${i}`, "2026-08-01T00:01:00.000Z"));
-        }
-        await fs.writeFile(filePath, `${lines.join("\n")}\n`);
+        const duplicateTimestamp = "2026-08-01T00:05:00.000Z";
+        const text = ompTranscriptText([
+          ompHeader(),
+          "",
+          ompSessionInit({ agent: "backend-engineer", systemPrompt: "sys" }),
+          ompIrcIncoming("woken by parent"),
+          ompMessage("assistant", "same content", { id: null, timestamp: duplicateTimestamp }),
+          "",
+          ompMessage("assistant", "same content", { id: null, timestamp: duplicateTimestamp }),
+        ]);
 
         const reader = new OmpReader();
-        await expect(reader.readTranscript(filePath)).resolves.toBeNull();
+        const qualified: Record<string, string[]> = {};
+        for (const dir of ["one", "two"]) {
+          await fs.mkdir(path.join(root, dir));
+          const filePath = path.join(root, dir, "Transcript.jsonl");
+          await fs.writeFile(filePath, text);
+
+          const natives: string[][] = [];
+          for (let pass = 0; pass < 2; pass++) {
+            const session = await reader.readTranscript(filePath);
+            expect(session).not.toBeNull();
+            const ids = session!.messages.map((m) => m.id);
+            expect(ids).toEqual(["line-5", "line-7"]);
+            expect(ids[0]).not.toBe(ids[1]);
+            natives.push(ids);
+            qualified[dir] = ids.map((id) => qualifyOmpMessage("test-machine", session!.path, id));
+          }
+          expect(natives[0]).toEqual(natives[1]);
+        }
+
+        const prefix = `omp:test-machine:${encodeURIComponent(root)}`;
+        expect(qualified.one).toEqual([`${prefix}%2Fone%2FTranscript.jsonl:line-5`, `${prefix}%2Fone%2FTranscript.jsonl:line-7`]);
+        expect(qualified.two).toEqual([`${prefix}%2Ftwo%2FTranscript.jsonl:line-5`, `${prefix}%2Ftwo%2FTranscript.jsonl:line-7`]);
+        expect(qualified.one[0]).not.toBe(qualified.two[0]);
+        expect(qualified.one[1]).not.toBe(qualified.two[1]);
+      } finally {
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it("accepts a valid final line without a trailing newline", async () => {
+      const tmp = await mkTmp();
+      try {
+        const filePath = path.join(tmp, "Unterminated.jsonl");
+        await fs.writeFile(
+          filePath,
+          ompTranscriptText(
+            [
+              ompHeader(),
+              ompSessionInit({ agent: "backend-engineer", systemPrompt: "sys" }),
+              ompMessage("user", "first message", { id: "m1", timestamp: "2026-08-01T00:02:00.000Z" }),
+              ompMessage("assistant", "final unterminated message", { id: null, timestamp: "2026-08-01T00:03:00.000Z" }),
+            ],
+            { trailingNewline: false }
+          )
+        );
+
+        const session = await new OmpReader().readTranscript(filePath);
+        expect(session?.messages).toEqual([
+          { id: "m1", role: "user", content: "first message", timestamp: "2026-08-01T00:02:00.000Z" },
+          { id: "line-4", role: "assistant", content: "final unterminated message", timestamp: "2026-08-01T00:03:00.000Z" },
+        ]);
       } finally {
         await fs.rm(tmp, { recursive: true, force: true });
       }

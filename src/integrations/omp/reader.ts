@@ -1,16 +1,16 @@
 import type { OmpMessage, OmpProvenance, OmpSession, OmpTranscriptRecord } from "./types.js";
 import type { join } from "path";
-import type { readdir, readFile, lstat } from "fs/promises";
-import type { existsSync } from "fs";
+import type { readdir, lstat } from "fs/promises";
+import type { existsSync, createReadStream } from "fs";
 import type { createHash } from "crypto";
 
 const isBrowser = typeof document !== "undefined";
 
 let _join: typeof join;
 let _readdir: typeof readdir;
-let _readFile: typeof readFile;
 let _lstat: typeof lstat;
 let _existsSync: typeof existsSync;
+let _createReadStream: typeof createReadStream;
 let _createHash: typeof createHash;
 let _nodeModulesLoaded = false;
 
@@ -35,25 +35,13 @@ async function ensureNodeModules(): Promise<boolean> {
 
   _join = pathMod.join;
   _readdir = fsMod.readdir;
-  _readFile = fsMod.readFile;
   _lstat = fsMod.lstat;
   _existsSync = fsSyncMod.existsSync;
+  _createReadStream = fsSyncMod.createReadStream;
   _createHash = cryptoMod.createHash;
   _nodeModulesLoaded = true;
   return true;
 }
-
-/**
- * D11 (Beta review I6): documented resource budgets for `readTranscript`,
- * enforced before allocating full in-memory structures — a file whose
- * on-disk size or parsed-entry count exceeds either budget is skipped,
- * treated as unreadable (D5's `null`-return convention), never fully
- * parsed. Chosen generously for a real CD2+ sub-agent transcript — this
- * Bolt's own implementer choice (Spec-permitted, D11), not asserted
- * against a specific production-representative number.
- */
-export const MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024;
-export const MAX_TRANSCRIPT_ENTRIES = 5000;
 
 /**
  * D1's verified slug algorithm (Spec §4.13): for a project path under the
@@ -139,8 +127,8 @@ export class OmpReader {
       }
       // D9 (Beta review I4): reject any directory entry that is not a
       // regular file — a FIFO, socket, or symlink named `*.jsonl` is
-      // skipped here, never opened, so it can never block `readFile()`
-      // and wedge the enabled sync worker indefinitely.
+      // skipped here, never opened or read, so it can never block and
+      // wedge the enabled sync worker indefinitely.
       if (!entry.isFile()) continue;
 
       if (!entry.name.endsWith(".jsonl")) continue; // R2/§4.13: non-.jsonl siblings ignored
@@ -156,71 +144,116 @@ export class OmpReader {
   }
 
   /**
-   * Parses one transcript file's events. Returns `null`, never throws, for
-   * an unreadable or malformed file (D5) — adopting `PiReader.readJsonl`'s
-   * own verified silent-skip behavior, since no warning sink exists in
-   * this codebase to log against. A transcript missing `session_init`, or
-   * missing its `agent`/`systemPrompt` fields, is NOT malformed — it still
-   * parses to a valid `OmpSession`, just with an incomplete `provenance`
-   * (D3's fail-closed case, judged downstream by `classifyObservationLens`).
+   * Parses one transcript file's events, streaming the file line by line
+   * (lines delimited by `\n`; an unterminated final line is a line like any
+   * other). Returns `null`, never throws, for an unreadable file, a file
+   * with no parseable entry, or a file with ANY unparseable non-blank line
+   * — such a transcript is rejected whole, never accepted as partial
+   * evidence. There is no size or entry-count limit. A transcript missing
+   * `session_init`, or missing its `agent`/`systemPrompt` fields, is NOT
+   * malformed — it still parses to a valid `OmpSession`, just with an
+   * incomplete `provenance` (judged downstream by
+   * `classifyObservationLens`).
+   *
+   * A message entry with no string `id` is identified as `line-<n>`, where
+   * n is its 1-based physical line number in the file, counting every line
+   * (header, blank and non-message lines included), so the id is stable
+   * across reads.
    */
   async readTranscript(filePath: string): Promise<OmpSession | null> {
     if (!(await ensureNodeModules())) return null;
 
-    // D9/I6 (Stint holistic review Bucket 1, finding I6, 2026-08-11):
-    // re-assert regular-file identity immediately before the read, not
+    // Re-assert regular-file identity immediately before the read, not
     // only at directory-enumeration time — `walk`'s `Dirent.isFile()`
-    // check (D9) is a TOCTOU snapshot; a FIFO, socket, or symlink swapped
-    // in at this exact path between enumeration and now is rejected here
-    // too, via `lstat()` (never follows a symlink, unlike `stat()`), so it
-    // can never be opened and block `readFile()` indefinitely.
-    //
-    // D11 (Beta review I6): the documented byte-size budget, checked here
-    // too, BEFORE ever reading the file's content into memory — an
-    // oversized (but otherwise syntactically valid) transcript is skipped,
-    // treated as unreadable (D5's null-return convention), rather than
-    // fully allocated.
+    // check is a TOCTOU snapshot; a FIFO, socket, or symlink swapped in at
+    // this exact path between enumeration and now is rejected here too,
+    // via `lstat()` (never follows a symlink, unlike `stat()`), so it can
+    // never be opened and block the read indefinitely.
     try {
       const stats = await _lstat(filePath);
       if (!stats.isFile()) return null;
-      if (stats.size > MAX_TRANSCRIPT_BYTES) return null;
     } catch {
       return null;
     }
 
-    let raw: string;
-    try {
-      raw = await _readFile(filePath, "utf-8");
-    } catch {
-      return null;
-    }
+    let entryCount = 0;
+    let sessionInit: Record<string, unknown> | undefined;
+    const messages: OmpMessage[] = [];
+    let firstTs: string | null = null;
+    let lastTs: string | null = null;
+    let lineNo = 0;
 
-    const entries: Record<string, unknown>[] = [];
-    for (const line of raw.split("\n")) {
+    // Returns false when the line is non-blank and not valid JSON.
+    const consume = (line: string): boolean => {
+      lineNo++;
       const trimmed = line.trim();
-      if (!trimmed) continue;
-      // D11: the entry-count budget, also enforced before allocating any
-      // more of the full in-memory `entries`/`messages` structures — a
-      // syntactically-valid file with an unreasonable number of JSONL
-      // records is skipped rather than fully parsed.
-      if (entries.length >= MAX_TRANSCRIPT_ENTRIES) return null;
+      if (!trimmed) return true;
+      let parsed: unknown;
       try {
-        const parsed = JSON.parse(trimmed);
-        if (parsed && typeof parsed === "object") entries.push(parsed as Record<string, unknown>);
+        parsed = JSON.parse(trimmed);
       } catch {
-        // I5 (Stint holistic review Bucket 1, 2026-08-11): ANY unparseable
-        // non-blank line rejects the WHOLE transcript — D5's own
-        // "malformed transcript returns null" text was previously
-        // implemented as a per-line skip (entries.length === 0 below was
-        // the only null-triggering condition), so a file with valid lines
-        // plus one invalid one was wrongly accepted as partial evidence.
-        return null;
+        return false;
       }
+      if (!parsed || typeof parsed !== "object") return true;
+      entryCount++;
+      const entry = parsed as Record<string, unknown>;
+
+      if (entry.type === "session_init") {
+        sessionInit ??= entry;
+        return true;
+      }
+      if (entry.type !== "message") return true;
+      const message = entry.message as { role?: unknown; content?: unknown } | undefined;
+      if (!message || typeof message !== "object") return true;
+
+      const role = message.role;
+      if (role !== "user" && role !== "assistant") return true;
+
+      const content = extractText(message.content);
+      if (!content) return true;
+
+      const ts = typeof entry.timestamp === "string" ? entry.timestamp : new Date(0).toISOString();
+      if (!firstTs || ts < firstTs) firstTs = ts;
+      if (!lastTs || ts > lastTs) lastTs = ts;
+
+      messages.push({
+        id: typeof entry.id === "string" ? entry.id : `line-${lineNo}`,
+        role,
+        content,
+        timestamp: ts,
+      });
+      return true;
+    };
+
+    try {
+      const decoder = new TextDecoder();
+      // Fragments of the current unfinished line; each decoded piece is
+      // scanned for "\n" once and the line is joined once, when it ends.
+      let fragments: string[] = [];
+      const feed = (text: string): boolean => {
+        let start = 0;
+        for (let nl = text.indexOf("\n"); nl !== -1; nl = text.indexOf("\n", start)) {
+          fragments.push(text.slice(start, nl));
+          const line = fragments.join("");
+          fragments = [];
+          if (!consume(line)) return false;
+          start = nl + 1;
+        }
+        if (start < text.length) fragments.push(start === 0 ? text : text.slice(start));
+        return true;
+      };
+      for await (const chunk of _createReadStream(filePath)) {
+        if (!feed(decoder.decode(chunk, { stream: true }))) return null;
+      }
+      if (!feed(decoder.decode())) return null;
+      const last = fragments.join("");
+      if (last && !consume(last)) return null;
+    } catch {
+      return null;
     }
 
-    if (entries.length === 0) return null; // D5: nothing parseable -> null
+    if (entryCount === 0) return null; // nothing parseable -> null
 
-    const sessionInit = entries.find((e) => e.type === "session_init");
     const agentId = typeof sessionInit?.agent === "string" ? (sessionInit.agent as string) : undefined;
     const systemPrompt =
       typeof sessionInit?.systemPrompt === "string" ? (sessionInit.systemPrompt as string) : undefined;
@@ -234,33 +267,6 @@ export class OmpReader {
         ? `sha256:${_createHash("sha256").update(systemPrompt, "utf-8").digest("hex")}`
         : undefined,
     };
-
-    const messages: OmpMessage[] = [];
-    let firstTs: string | null = null;
-    let lastTs: string | null = null;
-
-    for (const entry of entries) {
-      if (entry.type !== "message") continue;
-      const message = entry.message as { role?: unknown; content?: unknown } | undefined;
-      if (!message || typeof message !== "object") continue;
-
-      const role = message.role;
-      if (role !== "user" && role !== "assistant") continue;
-
-      const content = extractText(message.content);
-      if (!content) continue;
-
-      const ts = typeof entry.timestamp === "string" ? entry.timestamp : new Date(0).toISOString();
-      if (!firstTs || ts < firstTs) firstTs = ts;
-      if (!lastTs || ts > lastTs) lastTs = ts;
-
-      messages.push({
-        id: typeof entry.id === "string" ? entry.id : crypto.randomUUID(),
-        role,
-        content,
-        timestamp: ts,
-      });
-    }
 
     messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
