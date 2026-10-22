@@ -504,7 +504,7 @@ export interface ResolvedMessageSpeaker {
   /**
    * Stable identifier for the speaker, populated only where one exists: a
    * persona id (ei-direct/ei-room, including a dangling id when the
-   * PersonaEntity was deleted), or an OpenCode/Pi per-message agent slug.
+   * PersonaEntity was deleted), or an OpenCode per-message agent slug.
    * Absent for every "human" role and for external roles with no stable
    * per-message identity (Claude Code, Cursor, and Codex each speak
    * through one fixed integration-wide name).
@@ -827,7 +827,7 @@ export async function resolveExternalMessage(
           origin_kind: "pi",
           source_id: qualifyPiMessage(parsed.machine!, win.session.id, m.id),
           container,
-          speaker: externalSpeaker(m.role, m.agent, m.agent ?? PI_PERSONA_NAME),
+          speaker: externalSpeaker(m.role, undefined, PI_PERSONA_NAME),
           timestamp: m.timestamp,
           content: m.content,
           before: [],
