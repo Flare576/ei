@@ -9,6 +9,7 @@ import type { ClaudeCodeSettings } from "../../../src/integrations/claude-code/t
 import type { CursorSettings } from "../../../src/integrations/cursor/types.js";
 import type { CodexSettings } from "../../../src/integrations/codex/types.js";
 import type { PiSettings } from "../../../src/integrations/pi/types.js";
+import type { OmpSettings } from "../../../src/integrations/omp/types.js";
 import type { SlackSettings, SlackAuth } from "../../../src/integrations/slack/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
 import { parseDuration, formatDuration } from "./duration.js";
@@ -62,6 +63,12 @@ interface EditableSettingsData {
     polling_interval_ms?: string | null;
     last_sync?: string | null;
     extraction_point?: string | null;
+    extraction_model?: string | null;
+  };
+  omp?: {
+    integration?: boolean | null;
+    polling_interval_ms?: string | null;
+    last_sync?: string | null;
     extraction_model?: string | null;
   };
   slack?: {
@@ -143,6 +150,12 @@ export function settingsToYAML(settings: HumanSettings | undefined, accounts: Pr
       extraction_model: guidToDisplay(settings?.pi?.extraction_model) ?? 'default',
       last_sync: settings?.pi?.last_sync ?? null,
       extraction_point: settings?.pi?.extraction_point ?? null,
+    },
+    omp: {
+      integration: settings?.omp?.integration ?? false,
+      polling_interval_ms: formatDuration(settings?.omp?.polling_interval_ms ?? 60000),
+      extraction_model: guidToDisplay(settings?.omp?.extraction_model) ?? 'default',
+      last_sync: settings?.omp?.last_sync ?? null,
     },
     slack: {
       polling_interval_ms: formatDuration(settings?.slack?.polling_interval_ms ?? 60000),
@@ -260,6 +273,16 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     };
   }
 
+  let omp: OmpSettings | undefined = original?.omp;
+  if (data.omp) {
+    omp = {
+      ...original?.omp,
+      integration: nullToUndefined(data.omp.integration),
+      polling_interval_ms: parseMsDuration(data.omp.polling_interval_ms, 60000),
+      extraction_model: displayToGuid(data.omp.extraction_model),
+    };
+  }
+
   let slack: SlackSettings | undefined;
   if (data.slack) {
     const parsedWorkspaces: SlackSettings["workspaces"] = {};
@@ -308,6 +331,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     cursor,
     codex,
     pi,
+    omp,
     slack,
     backup,
   };

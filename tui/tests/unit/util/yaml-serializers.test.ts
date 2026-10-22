@@ -1574,3 +1574,106 @@ describe("queueItemsToYAML / queueItemsFromYAML", () => {
     expect(result.updates[0].id).toBe("req-keep");
   });
 });
+
+describe("settingsToYAML / settingsFromYAML - omp integration toggle", () => {
+  const timestamp = "2024-01-01T00:00:00.000Z";
+  const accounts: ProviderAccount[] = [
+    {
+      id: "acc-1",
+      name: "Anthropic",
+      type: ProviderType.LLM,
+      url: "https://api.anthropic.com",
+      enabled: true,
+      created_at: timestamp,
+      models: [{ id: "guid-haiku", name: "claude-haiku-4-5" }],
+    },
+  ];
+
+  const ompRuntime = {
+    last_sync: "2026-10-20T10:00:00.000Z",
+    processed_sessions: { "tree-a": "2026-10-19T00:00:00.000Z" },
+    current_tree: { tree: "tree-b", planned_at: "2026-10-20T09:00:00.000Z", done: ["blk-1", "blk-2"] },
+  };
+  const piRuntime = {
+    last_sync: "2026-10-18T10:00:00.000Z",
+    processed_sessions: { "/pi/session.jsonl": "2026-10-18T09:00:00.000Z" },
+  };
+
+  const flipOmp = (yaml: string, from: boolean, to: boolean) =>
+    yaml.replace(`omp:\n  integration: ${from}`, `omp:\n  integration: ${to}`);
+
+  test("emits an editable omp.integration: false when settings.omp is absent, and true is written back without touching pi", () => {
+    const settings: HumanSettings = { pi: { integration: true, ...piRuntime } };
+    const yaml = settingsToYAML(settings, accounts);
+    expect(yaml).toContain("omp:\n  integration: false");
+
+    const result = settingsFromYAML(flipOmp(yaml, false, true), settings, accounts);
+    expect(result.omp?.integration).toBe(true);
+    expect(result.pi?.integration).toBe(true);
+    expect(result.pi?.last_sync).toBe(piRuntime.last_sync);
+    expect(result.pi?.processed_sessions).toEqual(piRuntime.processed_sessions);
+  });
+
+  test("emits omp.integration: true for { integration: true } and false is written back when edited", () => {
+    const settings: HumanSettings = { omp: { integration: true } };
+    const yaml = settingsToYAML(settings, accounts);
+    expect(yaml).toContain("omp:\n  integration: true");
+
+    const result = settingsFromYAML(flipOmp(yaml, true, false), settings, accounts);
+    expect(result.omp?.integration).toBe(false);
+  });
+
+  test("a save preserves polling_interval_ms, extraction_model, last_sync, processed_sessions and current_tree", () => {
+    const settings: HumanSettings = {
+      omp: {
+        integration: true,
+        polling_interval_ms: 120000,
+        extraction_model: "guid-haiku",
+        ...ompRuntime,
+      },
+    };
+    const yaml = settingsToYAML(settings, accounts);
+    expect(yaml).toContain("polling_interval_ms: 2m");
+
+    const omp = settingsFromYAML(yaml, settings, accounts).omp;
+    expect(omp?.integration).toBe(true);
+    expect(omp?.polling_interval_ms).toBe(120000);
+    expect(omp?.extraction_model).toBe("guid-haiku");
+    expect(omp?.last_sync).toBe(ompRuntime.last_sync);
+    expect(omp?.processed_sessions).toEqual(ompRuntime.processed_sessions);
+    expect(omp?.current_tree).toEqual(ompRuntime.current_tree);
+  });
+
+  test("flipping omp leaves pi's flag and runtime fields alone, and flipping pi leaves omp's", () => {
+    const settings: HumanSettings = {
+      pi: { integration: false, ...piRuntime },
+      omp: { integration: false, ...ompRuntime },
+    };
+    const yaml = settingsToYAML(settings, accounts);
+
+    const ompOn = settingsFromYAML(flipOmp(yaml, false, true), settings, accounts);
+    expect(ompOn.omp?.integration).toBe(true);
+    expect(ompOn.omp?.current_tree).toEqual(ompRuntime.current_tree);
+    expect(ompOn.pi?.integration).toBe(false);
+    expect(ompOn.pi?.last_sync).toBe(piRuntime.last_sync);
+    expect(ompOn.pi?.processed_sessions).toEqual(piRuntime.processed_sessions);
+
+    const piOn = settingsFromYAML(yaml.replace("pi:\n  integration: false", "pi:\n  integration: true"), settings, accounts);
+    expect(piOn.pi?.integration).toBe(true);
+    expect(piOn.pi?.last_sync).toBe(piRuntime.last_sync);
+    expect(piOn.omp?.integration).toBe(false);
+    expect(piOn.omp?.last_sync).toBe(ompRuntime.last_sync);
+    expect(piOn.omp?.processed_sessions).toEqual(ompRuntime.processed_sessions);
+    expect(piOn.omp?.current_tree).toEqual(ompRuntime.current_tree);
+  });
+
+  test("removing the omp section from the YAML leaves the whole live settings.omp object untouched", () => {
+    const settings: HumanSettings = {
+      omp: { integration: true, polling_interval_ms: 120000, extraction_model: "guid-haiku", ...ompRuntime },
+    };
+    const withoutOmp = settingsToYAML(settings, accounts).replace(/^omp:\n(?:[ #].*\n)+/m, "");
+    expect(withoutOmp).not.toContain("omp:");
+
+    expect(settingsFromYAML(withoutOmp, settings, accounts).omp).toEqual(settings.omp);
+  });
+});
