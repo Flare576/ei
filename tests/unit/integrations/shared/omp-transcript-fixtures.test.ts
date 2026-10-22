@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { OmpReader } from "../../../../src/integrations/omp/reader.js";
 import {
+  ompHeader,
   ompIrcIncoming,
   ompMainSession,
   ompMessage,
@@ -145,5 +147,32 @@ describe("OMP transcript generator", () => {
       const files = [written.rootFile, ...Object.values(written.children), ...Object.values(written.extraFiles)];
       for (const file of files) expect((await fs.stat(file)).mtime.getTime()).toBe(mtime.getTime());
     });
+  });
+
+  // Tested by Beta — 2026-10-22
+  it("an explicit ompMessage timestamp survives generation and OmpReader.readTranscript exactly", async () => {
+    const expected = "2026-07-29T03:21:45.678Z";
+    const lines = [
+      ompHeader({ id: "00000000-0000-7000-8000-0000000000a1" }),
+      ompMessage("user", "explicit timestamp", { timestamp: expected }),
+    ];
+
+    const raw = parse(ompTranscriptText(lines));
+    expect(raw[1].timestamp).toBe(expected);
+    expect(raw[1].message.timestamp).toBe(Date.parse(expected));
+
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "omp-fixture-ts-"));
+    try {
+      const written = await writeOmpTree(tmp, { stem: "2026-07-29T03-21-45-678Z_ts", main: lines });
+      const onDisk = parse(await fs.readFile(written.rootFile, "utf-8"));
+      expect(onDisk[1].message.timestamp).toBe(Date.parse(expected));
+
+      const session = await new OmpReader().readTranscript(written.rootFile);
+      expect(session).not.toBeNull();
+      expect(session!.messages).toHaveLength(1);
+      expect(session!.messages[0].timestamp).toBe(expected);
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
   });
 });
