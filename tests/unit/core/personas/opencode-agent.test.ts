@@ -553,3 +553,94 @@ describe("ensureAllAgentPersonas", () => {
     expect(mockStateManager.persona_add).not.toHaveBeenCalled();
   });
 });
+
+// Tested by `Beta` — 2026-10-22
+describe("ensureAgentPersona creation kind", () => {
+  let sm: StateManager;
+
+  beforeEach(async () => {
+    sm = new StateManager();
+    await sm.initialize(createMockStorage());
+  });
+
+  function makeStoredPersona(id: string, displayName: string, overrides: Partial<PersonaEntity> = {}): PersonaEntity {
+    return {
+      id,
+      display_name: displayName,
+      entity: "system",
+      aliases: [displayName.toLowerCase()],
+      short_description: `${displayName} description`,
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: "2026-01-01T00:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  it("creates an unarchived persona without archived_at when no creation kind is given", async () => {
+    const created = await ensureAgentPersona("sisyphus", { stateManager: sm });
+
+    const stored = sm.persona_getById(created.id);
+    expect(stored).not.toBeNull();
+    expect(stored!.display_name).toBe("Sisyphus");
+    expect(stored!.is_archived).toBe(false);
+    expect(stored!.archived_at).toBeUndefined();
+    expect(created.is_archived).toBe(false);
+    expect(created.archived_at).toBeUndefined();
+  });
+
+  it("creates an unarchived persona without archived_at for an explicit main-session", async () => {
+    const created = await ensureAgentPersona("sisyphus", { stateManager: sm, creation: "main-session" });
+
+    const stored = sm.persona_getById(created.id);
+    expect(stored).not.toBeNull();
+    expect(stored!.display_name).toBe("Sisyphus");
+    expect(stored!.is_archived).toBe(false);
+    expect(stored!.archived_at).toBeUndefined();
+  });
+
+  it("creates an archived persona stamped with archived_at for an explicit sub-agent", async () => {
+    const created = await ensureAgentPersona("sisyphus", { stateManager: sm, creation: "sub-agent" });
+
+    const stored = sm.persona_getById(created.id);
+    expect(stored).not.toBeNull();
+    expect(stored!.display_name).toBe("Sisyphus");
+    expect(stored!.is_archived).toBe(true);
+    expect(typeof stored!.archived_at).toBe("string");
+    expect(Number.isNaN(Date.parse(stored!.archived_at!))).toBe(false);
+    expect(stored!.archived_at).toBe(stored!.last_updated);
+  });
+
+  it("leaves an existing archived persona byte-identical when looked up as a main-session", async () => {
+    sm.persona_add(
+      makeStoredPersona("stored-sisyphus", "Sisyphus", {
+        is_archived: true,
+        archived_at: "2026-02-02T00:00:00.000Z",
+      }),
+    );
+    const before = JSON.stringify(sm.persona_getById("stored-sisyphus"));
+
+    const result = await ensureAgentPersona("sisyphus", { stateManager: sm, creation: "main-session" });
+
+    expect(result.id).toBe("stored-sisyphus");
+    expect(result.is_archived).toBe(true);
+    expect(JSON.stringify(sm.persona_getById("stored-sisyphus"))).toBe(before);
+    expect(sm.persona_getAll()).toHaveLength(1);
+  });
+
+  it("leaves an existing unarchived persona byte-identical when looked up as a sub-agent", async () => {
+    sm.persona_add(makeStoredPersona("stored-sisyphus", "Sisyphus"));
+    const before = JSON.stringify(sm.persona_getById("stored-sisyphus"));
+
+    const result = await ensureAgentPersona("sisyphus", { stateManager: sm, creation: "sub-agent" });
+
+    expect(result.id).toBe("stored-sisyphus");
+    expect(result.is_archived).toBe(false);
+    expect(result.archived_at).toBeUndefined();
+    expect(JSON.stringify(sm.persona_getById("stored-sisyphus"))).toBe(before);
+    expect(sm.persona_getAll()).toHaveLength(1);
+  });
+});

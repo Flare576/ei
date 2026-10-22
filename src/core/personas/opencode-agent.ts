@@ -12,6 +12,31 @@ export interface EnsureAgentPersonaOptions {
   stateManager: StateManager;
   interface?: Ei_Interface;
   reader?: IOpenCodeReader;
+  /**
+   * Where a newly created persona's agent was first seen: a main-session message
+   * (created unarchived) or a sub-agent transcript (created archived, so it only
+   * becomes active when the user un-archives it). Passing it also switches the
+   * existing-persona lookup to exact display name or alias, so "reviewer" never
+   * resolves to "Code Reviewer". Omitted (OpenCode): partial-match lookup, created
+   * unarchived. An existing persona is returned as-is and never re-archived.
+   */
+  creation?: "main-session" | "sub-agent";
+}
+
+/**
+ * Finds the persona for an agent name by exact (case-insensitive) display name or
+ * alias of its canonical form. No partial matching, and the original prefixed ID
+ * is not consulted, so an existing prefixed persona is never merged into.
+ */
+export function findAgentPersonaExact(stateManager: StateManager, agentName: string): PersonaEntity | null {
+  const { canonical } = resolveCanonicalAgent(agentName);
+  const term = canonical.toLowerCase();
+  const personas = stateManager.persona_getAll();
+  return (
+    personas.find((p) => p.display_name.toLowerCase() === term) ??
+    personas.find((p) => p.aliases?.some((a) => a.toLowerCase() === term)) ??
+    null
+  );
 }
 
 export function resolveCanonicalAgent(agentName: string): { canonical: string; aliases: string[] } {
@@ -48,11 +73,13 @@ export async function ensureAgentPersona(
   agentName: string,
   options: EnsureAgentPersonaOptions
 ): Promise<PersonaEntity> {
-  const { stateManager, interface: eiInterface, reader } = options;
+  const { stateManager, interface: eiInterface, reader, creation } = options;
 
   const { canonical, aliases } = resolveCanonicalAgent(agentName);
 
-  const existing = stateManager.persona_getByName(canonical);
+  const existing = creation
+    ? findAgentPersonaExact(stateManager, agentName)
+    : stateManager.persona_getByName(canonical);
   if (existing) {
     return existing;
   }
@@ -82,7 +109,8 @@ export async function ensureAgentPersona(
     traits: seedTraits,
     topics: [],
     is_paused: false,
-    is_archived: false,
+    is_archived: creation === "sub-agent",
+    ...(creation === "sub-agent" ? { archived_at: now } : {}),
     is_static: false,
     heartbeat_delay_ms: TWELVE_HOURS_MS,
     last_heartbeat: now,
