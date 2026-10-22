@@ -4,8 +4,8 @@
 // (.sisyphus/reviews/fetch-message-oracle-6-coverage.md), this file is the
 // suite that actually exercises resolveExternalMessage's branches.
 //
-// Mocking boundary: getMachineId and the 5 external reader modules are
-// mocked with literal, deterministic fixtures (a developer's local
+// Mocking boundary: getMachineId and the five non-OMP external reader modules
+// are mocked with literal, deterministic fixtures (a developer's local
 // transcript stores or machine id must never decide whether these rows
 // run). The two Ei-internal origins (ei-direct/ei-room) are NOT mocked —
 // they go through the real loadLatestState() against a scratch
@@ -13,7 +13,9 @@
 // established pattern.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "fs";
-import { join } from "path";
+import { basename, dirname, join } from "path";
+import type * as Fs from "fs";
+import type * as FsPromises from "fs/promises";
 import { tmpdir } from "os";
 import { spawnSync } from "child_process";
 import type { StorageState } from "../../../src/core/types/integrations.js";
@@ -73,37 +75,52 @@ vi.mock("../../../src/integrations/pi/reader.js", () => ({
   })),
 }));
 
-// OMP has no getMessageById -- readTranscript returns the whole session,
-// keyed by path (the transcript's own unique locator, per the 2026-08-19
-// message-locator fix), so the mock must dispatch on its own argument
-// rather than return one fixed value -- this is what actually proves two
-// distinct paths resolve to two distinct transcripts, never whichever one
-// mocked last.
-const mockOmpTranscriptsByPath = new Map<string, unknown>();
-const mockOmpReadTranscript = vi.fn(async (path: string) => mockOmpTranscriptsByPath.get(path) ?? null);
-// S2 fix (.sisyphus/reviews/session-fixes-review/beta-code-review.md):
-// resolveExternalMessage's "omp" case now checks listTranscripts()'s own
-// returned set before reading -- every path a test registers in
-// mockOmpTranscriptsByPath is implicitly "a real, importable transcript"
-// for that test's own purposes, so this mock derives eligibility from the
-// exact same map, never a second list to keep in sync. A path a test
-// deliberately never registers (the unlisted/out-of-root S2 case) is
-// correctly ineligible.
-const mockOmpListTranscripts = vi.fn(async () =>
-  [...mockOmpTranscriptsByPath.keys()].map((path) => ({ path, cd: 2, label: path.split("/").pop() ?? path }))
-);
-vi.mock("../../../src/integrations/omp/reader.js", () => ({
-  OmpReader: vi.fn().mockImplementation(() => ({
-    readTranscript: mockOmpReadTranscript,
-    listTranscripts: mockOmpListTranscripts,
-  })),
+// Observe content opens before the reader caches its lazy filesystem imports.
+// Opening a FileHandle counts even when its subsequent reads use that handle;
+// metadata calls (lstat/stat/realpath) remain real and uncounted.
+const ompOpens = vi.hoisted(() => ({
+  stream: 0,
+  readFile: 0,
+  open: 0,
+  get count() { return this.stream + this.readFile + this.open; },
 }));
+vi.mock("fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof Fs>();
+  const createReadStream = ((...args: Parameters<typeof actual.createReadStream>) => {
+    ompOpens.stream++;
+    return actual.createReadStream(...args);
+  }) as typeof actual.createReadStream;
+  return { ...actual, createReadStream, default: { ...actual, createReadStream } };
+});
+vi.mock("fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof FsPromises>();
+  const readFile = ((...args: Parameters<typeof actual.readFile>) => {
+    ompOpens.readFile++;
+    return actual.readFile(...args);
+  }) as typeof actual.readFile;
+  const open = ((...args: Parameters<typeof actual.open>) => {
+    ompOpens.open++;
+    return actual.open(...args);
+  }) as typeof actual.open;
+  return { ...actual, readFile, open, default: { ...actual, readFile, open } };
+});
 
-import { resolveExternalMessage, resolveOpenCodeMessage, type ResolvedMessage } from "../../../src/cli/retrieval.js";
+// Preserve Zod's namespace export under Vitest's bare-specifier interop.
+vi.mock("zod", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, z: (actual.z ?? actual.default ?? actual) as Record<string, unknown> };
+});
+
+import { resolveExternalMessage, resolveOpenCodeMessage, type ResolvedMessage, type ResolverRefusal } from "../../../src/cli/retrieval.js";
 import { createFetchMessageExecutor } from "../../../src/core/tools/builtin/fetch-message.js";
 import { createMcpServer } from "../../../src/cli/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import * as fsp from "fs/promises";
+import { StateManager } from "../../../src/core/state-manager.js";
+import { importOmpSessions } from "../../../src/integrations/omp/importer.js";
+import { createMockStorage } from "../../helpers/mock-storage.js";
+import { ompMessage, ompMainSession, ompSubAgent, ompTranscriptText, writeOmpTree } from "../integrations/shared/omp-transcript-fixtures.js";
 
 // --- shared fixture ids -----------------------------------------------
 
@@ -142,9 +159,6 @@ const PI_SESSION_ID = "pi-session-1";
 const PI_MSG_ID = "pi-msg-1";
 const PI_QUALIFIED_ID = qualifyPiMessage(MACHINE, PI_SESSION_ID, PI_MSG_ID);
 
-const OMP_PATH = "/fake/root/a/Worker.jsonl";
-const OMP_MSG_ID = "omp-msg-1";
-const OMP_QUALIFIED_ID = qualifyOmpMessage(MACHINE, OMP_PATH, OMP_MSG_ID);
 
 // --- fixture builders ---------------------------------------------------
 
@@ -216,11 +230,13 @@ function ocMessage(id: string, role: "user" | "assistant", agent: string, conten
   return { id, sessionId: OC_SESSION_ID, role, agent, content, timestamp: NOW };
 }
 
-/** Asserts a resolve succeeded (not null, not the cross-machine error sentinel) and narrows the type for field access. */
-function expectResolved(result: ResolvedMessage | { error: string } | null): ResolvedMessage {
+/** Asserts a resolve succeeded and narrows away missing messages, refusals and cross-machine errors. */
+function expectResolved(result: ResolvedMessage | ResolverRefusal | { error: string } | null): ResolvedMessage {
   expect(result).not.toBeNull();
   expect(result).not.toHaveProperty("error");
-  return result as ResolvedMessage;
+  expect(result).not.toHaveProperty("refused");
+  if (!result || "error" in result || "refused" in result) throw new Error("expected a resolved message");
+  return result;
 }
 
 let tempDir: string | undefined;
@@ -231,6 +247,8 @@ function writeState(state: StorageState) {
   process.env.EI_DATA_PATH = tempDir;
 }
 
+const originalEiDataPath = process.env.EI_DATA_PATH;
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -240,7 +258,8 @@ afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
   }
-  delete process.env.EI_DATA_PATH;
+  if (originalEiDataPath === undefined) delete process.env.EI_DATA_PATH;
+  else process.env.EI_DATA_PATH = originalEiDataPath;
 });
 
 // --- ei-direct -----------------------------------------------------------
@@ -667,147 +686,392 @@ describe("resolveExternalMessage — pi", () => {
   });
 });
 
+// Tested by Beta — 2026-10-22
 // --- omp ---------------------------------------------------------------
+//
+// Real trees under a temporary HOME, imported by the real importer through
+// the real reader; the resolver then reads the same files. Nothing about OMP
+// is mocked: only `fs.createReadStream` is observed (a counting passthrough)
+// so a refusal can prove no transcript content was ever opened.
+
+const OMP_IMPORT_NOW = Date.parse("2026-09-01T00:00:00.000Z");
+const ompStem = (n: number) => `2026-08-01T00-00-00-000Z_00000000-0000-7000-8000-${String(n).padStart(12, "0")}`;
+const ompIso = (minutes: number) => new Date(Date.parse("2026-08-01T00:00:00.000Z") + minutes * 60_000).toISOString();
+
+interface OmpEnv {
+  dir: string;
+  sessions: string;
+  data: string;
+  sm: StateManager;
+}
+
+interface ImportedLine {
+  message: Message;
+  owner: PersonaEntity;
+}
+
+/** A fresh HOME, state directory, unrelated cwd and StateManager for one test; everything is restored and removed afterwards. */
+async function withOmpEnv(run: (env: OmpEnv) => Promise<void>): Promise<void> {
+  const dir = await fsp.mkdtemp(join(tmpdir(), "ei-omp-resolver-"));
+  const previous = { home: process.env.HOME, data: process.env.EI_DATA_PATH, cwd: process.cwd() };
+  try {
+    const home = join(dir, "home");
+    const data = join(dir, "state");
+    const unrelated = join(dir, "cwd");
+    for (const d of [home, data, unrelated]) await fsp.mkdir(d);
+    process.env.HOME = home;
+    process.env.EI_DATA_PATH = data;
+    process.chdir(unrelated);
+
+    const sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    const human = sm.getHuman();
+    sm.setHuman({ ...human, settings: { ...human.settings, omp: { integration: true, processed_sessions: {} } } });
+
+    await run({ dir, sessions: join(home, ".omp", "agent", "sessions"), data, sm });
+  } finally {
+    process.chdir(previous.cwd);
+    if (previous.home === undefined) delete process.env.HOME;
+    else process.env.HOME = previous.home;
+    if (previous.data === undefined) delete process.env.EI_DATA_PATH;
+    else process.env.EI_DATA_PATH = previous.data;
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Drives the importer until it has nothing left to do. Each block replaces its
+ * persona's external messages, so what exists is captured after every call,
+ * with the persona that holds it, before the queue is drained for the next one.
+ */
+async function importAllOmp({ sm }: OmpEnv): Promise<ImportedLine[]> {
+  const byId = new Map<string, ImportedLine>();
+  for (let call = 0; call < 25; call++) {
+    const result = await importOmpSessions({ stateManager: sm, now: () => OMP_IMPORT_NOW });
+    if (result.blocksQueued === 0 && result.treesCompleted === 0) {
+      expect(sm.queue_getAllActiveItems()).toEqual([]);
+      expect(sm.getHuman().settings?.omp?.current_tree).toBeUndefined();
+      return [...byId.values()];
+    }
+    for (const owner of sm.persona_getAll()) {
+      for (const message of sm.messages_get(owner.id)) {
+        if (message.external) byId.set(message.id, { message: structuredClone(message), owner: structuredClone(owner) });
+      }
+    }
+    for (const request of sm.queue_getAllActiveItems()) sm.queue_complete(request.id);
+  }
+  throw new Error("OMP import never finished");
+}
+
+/** Writes the importer's resulting state where the resolver reads it. */
+async function saveOmpState({ sm, data }: OmpEnv): Promise<void> {
+  await fsp.writeFile(join(data, "state.json"), JSON.stringify(sm.getStorageState()));
+}
+
+function ompIdOf(imported: ImportedLine[], content: string): string {
+  const line = imported.find((i) => i.message.content === content);
+  if (!line) throw new Error(`no imported message with content ${content}`);
+  return line.message.id;
+}
+
+interface ExpectedSpeaker {
+  kind: "human" | "agent";
+  name: string;
+  /** An assistant line: its name must also be the stored persona that owns the message. */
+  filed?: true;
+}
+
+/** Resolves every imported message and compares it with the importer's stored content and owner. */
+async function expectOmpLines(imported: ImportedLine[], expected: Record<string, ExpectedSpeaker>): Promise<void> {
+  expect(imported.map((i) => i.message.content).sort()).toEqual(Object.keys(expected).sort());
+  for (const { message, owner } of imported) {
+    if (message.content === undefined) throw new Error("imported fixture message has no content");
+    const want = expected[message.content];
+    const result = expectResolved(await resolveExternalMessage(message.id));
+    expect(result.content).toBe(message.content);
+    expect(result.source_id).toBe(message.id);
+    expect(result.speaker).toEqual({ kind: want.kind, display_name: want.name });
+    expect(result.speaker.id).toBeUndefined();
+    if (want.filed) expect(result.speaker).toEqual({ kind: "agent", display_name: owner.display_name });
+    if (want.kind === "human") expect(message.role).toBe("human");
+    if (want.name === "Parent agent") {
+      expect(message.role).toBe("system");
+      expect(message.speaker_name).toBe("Parent agent");
+    }
+  }
+}
+
+async function putFile(file: string, text: string): Promise<string> {
+  await fsp.mkdir(dirname(file), { recursive: true });
+  await fsp.writeFile(file, text);
+  return file;
+}
+
+const OMP_GUARDED_TEXT = ompTranscriptText(
+  ompMainSession({ messages: [ompMessage("assistant", "guarded content", { id: "m1", timestamp: ompIso(1) })] })
+);
+
+/** A main session and a sub-agent transcript that both name the agent `reviewer`. */
+async function writeReviewerTree(sessions: string): Promise<void> {
+  await writeOmpTree(sessions, {
+    projectDir: "proj-reviewer",
+    stem: ompStem(3),
+    main: ompMainSession({ messages: [ompMessage("assistant", "main alias reply", { id: "ma", timestamp: ompIso(1), agent: "reviewer" })] }),
+    children: {
+      P: ompSubAgent({ agent: "reviewer", messages: [ompMessage("assistant", "child alias reply", { id: "ca", timestamp: ompIso(2) })] }),
+    },
+  });
+}
 
 describe("resolveExternalMessage — omp", () => {
-  beforeEach(() => {
-    mockOmpTranscriptsByPath.clear();
-  });
+  it("names speakers from what the importer stored: named sub-agent, per-message main agents, and every user attribution", async () => {
+    await withOmpEnv(async (env) => {
+      await writeOmpTree(env.sessions, {
+        projectDir: "proj-named",
+        stem: ompStem(1),
+        main: ompMainSession({
+          messages: [
+            ompMessage("user", "main question", { id: "mu", timestamp: ompIso(1) }),
+            ompMessage("assistant", "planner reply", { id: "ma1", timestamp: ompIso(2), agent: "planner" }),
+            ompMessage("assistant", "engineer reply", { id: "ma2", timestamp: ompIso(3), agent: "backend-engineer" }),
+          ],
+        }),
+        children: {
+          P: ompSubAgent({
+            agent: "code-reviewer",
+            messages: [
+              ompMessage("user", "parent attributed line", { id: "cu1", timestamp: ompIso(4), attribution: "agent" }),
+              ompMessage("user", "parent unattributed line", { id: "cu2", timestamp: ompIso(5) }),
+              ompMessage("user", "human typed line", { id: "cu3", timestamp: ompIso(6), attribution: "user" }),
+              ompMessage("assistant", "reviewer reply", { id: "ca1", timestamp: ompIso(7) }),
+            ],
+          }),
+        },
+      });
 
-  const OMP_SESSION_MESSAGE = { id: OMP_MSG_ID, role: "assistant" as const, content: "Wrote thorough tests", timestamp: NOW };
+      const imported = await importAllOmp(env);
+      await saveOmpState(env);
 
-  it("resolves an omp message, deriving the speaker display name from the transcript's own resolved sub-agent", async () => {
-    mockOmpTranscriptsByPath.set(OMP_PATH, {
-      path: OMP_PATH,
-      provenance: { harness: "omp", mode: "delegated", agent_id: "sisyphus" },
-      messages: [OMP_SESSION_MESSAGE],
-      firstMessageAt: NOW,
-      lastMessageAt: NOW,
+      await expectOmpLines(imported, {
+        "main question": { kind: "human", name: "Human" },
+        "planner reply": { kind: "agent", name: "Planner", filed: true },
+        "engineer reply": { kind: "agent", name: "Backend Engineer", filed: true },
+        "parent attributed line": { kind: "agent", name: "Parent agent" },
+        "parent unattributed line": { kind: "agent", name: "Parent agent" },
+        "human typed line": { kind: "human", name: "Human" },
+        "reviewer reply": { kind: "agent", name: "Code Reviewer", filed: true },
+      });
     });
+  });
 
-    const result = await resolveExternalMessage(OMP_QUALIFIED_ID);
+  it("falls back to OhMyPi for a main session and Task for a sub-agent transcript that name no agent", async () => {
+    await withOmpEnv(async (env) => {
+      await writeOmpTree(env.sessions, {
+        projectDir: "proj-anonymous",
+        stem: ompStem(2),
+        main: ompMainSession({
+          messages: [
+            ompMessage("user", "anonymous question", { id: "mu", timestamp: ompIso(1) }),
+            ompMessage("assistant", "anonymous main answer", { id: "ma", timestamp: ompIso(2) }),
+          ],
+        }),
+        children: {
+          P: ompSubAgent({
+            messages: [
+              ompMessage("user", "anonymous parent line", { id: "cu", timestamp: ompIso(3), attribution: "agent" }),
+              ompMessage("assistant", "anonymous child answer", { id: "ca", timestamp: ompIso(4) }),
+            ],
+          }),
+        },
+      });
 
-    expect(result).toEqual({
-      origin_kind: "omp",
-      source_id: OMP_QUALIFIED_ID,
-      container: { kind: "session", id: OMP_PATH, display_name: "Sisyphus" },
-      speaker: { kind: "agent", id: undefined, display_name: "Sisyphus" },
-      timestamp: NOW,
-      content: "Wrote thorough tests",
-      before: [],
-      after: [],
+      const imported = await importAllOmp(env);
+      await saveOmpState(env);
+
+      await expectOmpLines(imported, {
+        "anonymous question": { kind: "human", name: "Human" },
+        "anonymous main answer": { kind: "agent", name: "OhMyPi", filed: true },
+        "anonymous parent line": { kind: "agent", name: "Parent agent" },
+        "anonymous child answer": { kind: "agent", name: "Task", filed: true },
+      });
     });
-    expect(mockOmpReadTranscript).toHaveBeenCalledWith(OMP_PATH);
   });
 
-  it("maps user role to speaker.kind human", async () => {
-    mockOmpTranscriptsByPath.set(OMP_PATH, {
-      path: OMP_PATH,
-      provenance: { harness: "omp", mode: "delegated", agent_id: "sisyphus" },
-      messages: [{ id: OMP_MSG_ID, role: "user" as const, content: "Hi from the human", timestamp: NOW }],
-      firstMessageAt: NOW,
-      lastMessageAt: NOW,
+  it("reports an existing persona's display name when the agent is only one of its aliases, in a main session and a sub-agent transcript", async () => {
+    await withOmpEnv(async (env) => {
+      env.sm.persona_add({ ...makePersona("persona-my-reviewer", "My reviewer"), aliases: ["Reviewer"] });
+      await writeReviewerTree(env.sessions);
+
+      const imported = await importAllOmp(env);
+      await saveOmpState(env);
+
+      expect(imported.map((i) => i.owner.id)).toEqual(["persona-my-reviewer", "persona-my-reviewer"]);
+      await expectOmpLines(imported, {
+        "main alias reply": { kind: "agent", name: "My reviewer", filed: true },
+        "child alias reply": { kind: "agent", name: "My reviewer", filed: true },
+      });
     });
-
-    const result = expectResolved(await resolveExternalMessage(OMP_QUALIFIED_ID));
-    expect(result.speaker).toEqual({ kind: "human", display_name: "Human" });
   });
 
-  it("falls back to a generic display name when the transcript's own provenance never resolved an agent (direct-probe defensive path)", async () => {
-    mockOmpTranscriptsByPath.set(OMP_PATH, {
-      path: OMP_PATH,
-      provenance: { harness: "omp", mode: "delegated" },
-      messages: [OMP_SESSION_MESSAGE],
-      firstMessageAt: NOW,
-      lastMessageAt: NOW,
+  it("reports the canonical agent name when no state is saved, even though the importer filed the lines under another persona", async () => {
+    await withOmpEnv(async (env) => {
+      env.sm.persona_add({ ...makePersona("persona-my-reviewer", "My reviewer"), aliases: ["Reviewer"] });
+      await writeReviewerTree(env.sessions);
+
+      const imported = await importAllOmp(env);
+
+      expect(imported.map((i) => i.owner.display_name)).toEqual(["My reviewer", "My reviewer"]);
+      // Neither state.json, a backup nor corrections exist for the resolver to find.
+      expect(await fsp.readdir(env.data)).toEqual([]);
+      await expectOmpLines(imported, {
+        "main alias reply": { kind: "agent", name: "Reviewer" },
+        "child alias reply": { kind: "agent", name: "Reviewer" },
+      });
     });
-
-    const result = expectResolved(await resolveExternalMessage(OMP_QUALIFIED_ID));
-    expect(result.speaker).toEqual({ kind: "agent", id: undefined, display_name: "OMP Sub-Agent" });
   });
 
-  it("returns null when the transcript no longer exists at its own recorded path", async () => {
-    // Nothing registered in mockOmpTranscriptsByPath for OMP_PATH.
-    const result = await resolveExternalMessage(OMP_QUALIFIED_ID);
-    expect(result).toBeNull();
-  });
+  it("returns the message with its window, container and source id intact, and null for a message the transcript does not hold", async () => {
+    await withOmpEnv(async (env) => {
+      const tree = await writeOmpTree(env.sessions, {
+        projectDir: "proj-window",
+        stem: ompStem(4),
+        main: ompMainSession({
+          messages: [
+            ompMessage("user", "window one", { id: "w1", timestamp: ompIso(1) }),
+            ompMessage("assistant", "window two", { id: "w2", timestamp: ompIso(2) }),
+            ompMessage("user", "window three", { id: "w3", timestamp: ompIso(3) }),
+            ompMessage("assistant", "window four", { id: "w4", timestamp: ompIso(4) }),
+          ],
+        }),
+      });
+      const imported = await importAllOmp(env);
+      await saveOmpState(env);
 
-  it("closure oracle: two distinct transcripts sharing a filename and a colliding native id round-trip to their own, distinct source events, never each other's", async () => {
-    const pathA = "/fake/root/a/Worker.jsonl";
-    const pathB = "/fake/root/b/Worker.jsonl";
-    const collidingNativeId = "m1"; // same native id in both transcripts, deliberately
+      const result = expectResolved(await resolveExternalMessage(ompIdOf(imported, "window two"), 1, 1));
 
-    mockOmpTranscriptsByPath.set(pathA, {
-      path: pathA,
-      provenance: { harness: "omp", mode: "delegated", agent_id: "sisyphus" },
-      messages: [{ id: collidingNativeId, role: "assistant" as const, content: "Content from transcript A", timestamp: NOW }],
-      firstMessageAt: NOW,
-      lastMessageAt: NOW,
+      expect(result).toEqual({
+        origin_kind: "omp",
+        source_id: qualifyOmpMessage(MACHINE, tree.rootFile, "w2"),
+        container: { kind: "session", id: tree.rootFile, display_name: basename(tree.rootFile) },
+        speaker: { kind: "agent", display_name: "OhMyPi" },
+        timestamp: ompIso(2),
+        content: "window two",
+        before: [expect.objectContaining({ content: "window one", source_id: qualifyOmpMessage(MACHINE, tree.rootFile, "w1"), timestamp: ompIso(1), speaker: { kind: "human", display_name: "Human" } })],
+        after: [expect.objectContaining({ content: "window three", source_id: qualifyOmpMessage(MACHINE, tree.rootFile, "w3"), timestamp: ompIso(3), speaker: { kind: "human", display_name: "Human" } })],
+      });
+      expect(await resolveExternalMessage(qualifyOmpMessage(MACHINE, tree.rootFile, "absent"))).toBeNull();
     });
-    mockOmpTranscriptsByPath.set(pathB, {
-      path: pathB,
-      provenance: { harness: "omp", mode: "delegated", agent_id: "beta" },
-      messages: [{ id: collidingNativeId, role: "assistant" as const, content: "Content from transcript B", timestamp: NOW }],
-      firstMessageAt: NOW,
-      lastMessageAt: NOW,
+  });
+
+  it("resolves two transcripts that share a file name and a native id to their own content and agent, and a path containing a colon", async () => {
+    await withOmpEnv(async (env) => {
+      for (const [n, projectDir, agent] of [[5, "proj-first", "architect"], [6, "proj:second", "debugger"]] as const) {
+        await writeOmpTree(env.sessions, {
+          projectDir,
+          stem: ompStem(n),
+          main: ompMainSession({ messages: [ompMessage("user", `root ${n}`, { id: "root", timestamp: ompIso(1) })] }),
+          children: { P: ompSubAgent({ agent, messages: [ompMessage("assistant", `content from ${projectDir}`, { id: "m1", timestamp: ompIso(2) })] }) },
+        });
+      }
+      const imported = await importAllOmp(env);
+      await saveOmpState(env);
+
+      const first = ompIdOf(imported, "content from proj-first");
+      const second = ompIdOf(imported, "content from proj:second");
+      expect(first).not.toBe(second);
+
+      const firstResult = expectResolved(await resolveExternalMessage(first));
+      const secondResult = expectResolved(await resolveExternalMessage(second));
+      expect(firstResult.content).toBe("content from proj-first");
+      expect(firstResult.speaker.display_name).toBe("Architect");
+      expect(secondResult.content).toBe("content from proj:second");
+      expect(secondResult.speaker.display_name).toBe("Debugger");
     });
-
-    const idA = qualifyOmpMessage(MACHINE, pathA, collidingNativeId);
-    const idB = qualifyOmpMessage(MACHINE, pathB, collidingNativeId);
-
-    // The qualified ids are distinct despite the identical filename and native id.
-    expect(idA).not.toBe(idB);
-
-    const resultA = expectResolved(await resolveExternalMessage(idA));
-    const resultB = expectResolved(await resolveExternalMessage(idB));
-
-    expect(resultA.content).toBe("Content from transcript A");
-    expect(resultA.speaker.display_name).toBe("Sisyphus");
-    expect(resultB.content).toBe("Content from transcript B");
-    expect(resultB.speaker.display_name).toBe("Beta");
   });
 
-  it("S1 fix: a transcript path containing a literal colon still round-trips -- the qualified id's session segment is percent-encoded, never truncated at the colon", async () => {
-    const colonPath = "/fake/root/a:b/Worker.jsonl";
-    mockOmpTranscriptsByPath.set(colonPath, {
-      path: colonPath,
-      provenance: { harness: "omp", mode: "delegated", agent_id: "sisyphus" },
-      messages: [{ id: "m1", role: "assistant" as const, content: "Content from a colon-bearing path", timestamp: NOW }],
-      firstMessageAt: NOW,
-      lastMessageAt: NOW,
+  it("refuses another machine's message with an error, never reading a transcript", async () => {
+    await withOmpEnv(async (env) => {
+      const file = await putFile(join(env.sessions, "proj", `${ompStem(7)}.jsonl`), OMP_GUARDED_TEXT);
+      ompOpens.stream = ompOpens.readFile = ompOpens.open = 0;
+
+      const result = await resolveExternalMessage(qualifyOmpMessage("other-machine", file, "m1"));
+
+      expect(result).toEqual({ error: expect.stringContaining("other-machine") });
+      expect(ompOpens.count).toBe(0);
     });
-
-    const qualifiedId = qualifyOmpMessage(MACHINE, colonPath, "m1");
-    // Pre-fix, this would have been "session: /fake/root/a, nativeId: b/Worker.jsonl:m1" --
-    // the session segment is now percent-encoded, so the colon inside the
-    // path never gets mistaken for the field separator.
-    expect(qualifiedId).not.toContain(`:${colonPath}:`);
-
-    const result = expectResolved(await resolveExternalMessage(qualifiedId));
-    expect(result.content).toBe("Content from a colon-bearing path");
   });
 
+  describe("refuses a path the sessions root does not vouch for, before any transcript content is opened", () => {
+    const refusals: Array<[string, (env: OmpEnv) => Promise<string>]> = [
+      ["a file outside the root", ({ dir }) => putFile(join(dir, "outside", "x.jsonl"), OMP_GUARDED_TEXT)],
+      ["a sibling directory sharing the root's name as a prefix", ({ sessions }) => putFile(join(`${sessions}-evil`, "proj", "x.jsonl"), OMP_GUARDED_TEXT)],
+      ["a symlinked file pointing outside the root", async ({ dir, sessions }) => {
+        const target = await putFile(join(dir, "outside", "target.jsonl"), OMP_GUARDED_TEXT);
+        await fsp.mkdir(join(sessions, "proj"), { recursive: true });
+        const link = join(sessions, "proj", "link.jsonl");
+        await fsp.symlink(target, link);
+        return link;
+      }],
+      ["a path through a symlinked directory pointing outside the root", async ({ dir, sessions }) => {
+        await putFile(join(dir, "outside", "dir", "x.jsonl"), OMP_GUARDED_TEXT);
+        await fsp.mkdir(sessions, { recursive: true });
+        await fsp.symlink(join(dir, "outside", "dir"), join(sessions, "linkdir"));
+        return join(sessions, "linkdir", "x.jsonl");
+      }],
+      ["a file that is not a .jsonl transcript", ({ sessions }) => putFile(join(sessions, "proj", "notes.txt"), OMP_GUARDED_TEXT)],
+      ["a .jsonl path that is not a regular file", async ({ sessions }) => {
+        const folder = join(sessions, "proj", "folder.jsonl");
+        await fsp.mkdir(folder, { recursive: true });
+        return folder;
+      }],
+    ];
 
-  it("S2 fix: a same-machine, OMP-shaped path that was never returned by listTranscripts() is refused WITHOUT ever calling readTranscript", async () => {
-    const unlistedPath = "/not/a/real/imported/transcript.jsonl";
-    // Deliberately NOT registered in mockOmpTranscriptsByPath, so
-    // listTranscripts() (backed by that same map) never returns it --
-    // but readTranscript is independently stubbed to prove it, too, is
-    // never actually invoked for this path, not merely that it happens
-    // to return null.
-    mockOmpReadTranscript.mockClear();
-    const qualifiedId = qualifyOmpMessage(MACHINE, unlistedPath, "m1");
+    it.each(refusals)("%s", async (_name, build) => {
+      await withOmpEnv(async (env) => {
+        const control = await putFile(join(env.sessions, "control", `${ompStem(8)}.jsonl`), OMP_GUARDED_TEXT);
+        const refused = await build(env);
 
-    const result = await resolveExternalMessage(qualifiedId);
+        // Saved-state reads cannot prove that the transcript stream observer is live.
+        ompOpens.stream = ompOpens.readFile = ompOpens.open = 0;
+        const ok = expectResolved(await resolveExternalMessage(qualifyOmpMessage(MACHINE, control, "m1")));
+        expect(ok.content).toBe("guarded content");
+        expect(ompOpens.stream).toBeGreaterThan(0);
 
-    expect(result).toBeNull();
-    expect(mockOmpReadTranscript).not.toHaveBeenCalled();
+        // The path gate refuses before loading state, so every content API stays idle.
+        ompOpens.stream = ompOpens.readFile = ompOpens.open = 0;
+        expect(await resolveExternalMessage(qualifyOmpMessage(MACHINE, refused, "m1"))).toBeNull();
+        expect(ompOpens.count).toBe(0);
+      });
+    });
   });
-  it("cross-machine: refuses with an error, never attempting to read a transcript from another machine", async () => {
-    const foreignId = qualifyOmpMessage("other-machine", OMP_PATH, OMP_MSG_ID);
-    const result = await resolveExternalMessage(foreignId);
-    expect(result).toEqual({ error: expect.stringContaining("other-machine") });
-    expect(mockOmpReadTranscript).not.toHaveBeenCalled();
+
+  it("resolves a transcript through a symlinked sessions root, and still refuses a symlink that leaves it", async () => {
+    await withOmpEnv(async (env) => {
+      const real = join(env.dir, "real-sessions");
+      await fsp.mkdir(dirname(env.sessions), { recursive: true });
+      await fsp.mkdir(real);
+      await fsp.symlink(real, env.sessions);
+      await writeOmpTree(real, {
+        projectDir: "proj-linked",
+        stem: ompStem(9),
+        main: ompMainSession({ messages: [ompMessage("user", "through the link", { id: "m1", timestamp: ompIso(1) })] }),
+      });
+      const imported = await importAllOmp(env);
+      await saveOmpState(env);
+      expect(imported).toHaveLength(1);
+
+      ompOpens.stream = ompOpens.readFile = ompOpens.open = 0;
+      const ok = expectResolved(await resolveExternalMessage(imported[0].message.id));
+      expect(ok.content).toBe("through the link");
+      expect(ok.speaker).toEqual({ kind: "human", display_name: "Human" });
+      expect(ompOpens.stream).toBeGreaterThan(0);
+
+      const outside = await putFile(join(env.dir, "outside", "target.jsonl"), OMP_GUARDED_TEXT);
+      await fsp.symlink(outside, join(real, "proj-linked", "escape.jsonl"));
+      ompOpens.stream = ompOpens.readFile = ompOpens.open = 0;
+      expect(await resolveExternalMessage(qualifyOmpMessage(MACHINE, join(env.sessions, "proj-linked", "escape.jsonl"), "m1"))).toBeNull();
+      expect(ompOpens.count).toBe(0);
+    });
   });
 });
 

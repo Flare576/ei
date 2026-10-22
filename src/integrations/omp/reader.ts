@@ -1,14 +1,19 @@
 import type { OmpMessage, OmpProvenance, OmpSession, OmpTranscriptRecord, OmpTree } from "./types.js";
-import type { join } from "path";
-import type { readdir, lstat } from "fs/promises";
+import type { join, relative, isAbsolute, sep } from "path";
+import type { readdir, lstat, stat, realpath } from "fs/promises";
 import type { existsSync, createReadStream, Dirent } from "fs";
 import type { createHash } from "crypto";
 
 const isBrowser = typeof document !== "undefined";
 
 let _join: typeof join;
+let _relative: typeof relative;
+let _isAbsolute: typeof isAbsolute;
+let _sep: typeof sep;
 let _readdir: typeof readdir;
 let _lstat: typeof lstat;
+let _stat: typeof stat;
+let _realpath: typeof realpath;
 let _existsSync: typeof existsSync;
 let _createReadStream: typeof createReadStream;
 let _createHash: typeof createHash;
@@ -34,31 +39,18 @@ async function ensureNodeModules(): Promise<boolean> {
   const cryptoMod = await import(/* @vite-ignore */ CRYPTO_MODULE);
 
   _join = pathMod.join;
+  _relative = pathMod.relative;
+  _isAbsolute = pathMod.isAbsolute;
+  _sep = pathMod.sep;
   _readdir = fsMod.readdir;
   _lstat = fsMod.lstat;
+  _stat = fsMod.stat;
+  _realpath = fsMod.realpath;
   _existsSync = fsSyncMod.existsSync;
   _createReadStream = fsSyncMod.createReadStream;
   _createHash = cryptoMod.createHash;
   _nodeModulesLoaded = true;
   return true;
-}
-
-/**
- * D1's verified slug algorithm (Spec §4.13): for a project path under the
- * user's home directory, strip the home prefix and replace every remaining
- * "/" with "-" (confirmed against this session's own live
- * `~/.omp/agent/sessions/-Projects-Personal-ei/` and sibling examples). For
- * a project path NOT under home, fall back to the full absolute path with
- * "/" replaced by "--" — one observed data point (`--private-tmp--`, for
- * `/private/tmp`), implemented defensively (never crashes or silently
- * misresolves) rather than asserted with the same confidence as the
- * home-relative case.
- */
-export function slugifyProjectPath(projectPath: string, home: string): string {
-  if (home && (projectPath === home || projectPath.startsWith(`${home}/`))) {
-    return projectPath.slice(home.length).replace(/\//g, "-");
-  }
-  return projectPath.replace(/\//g, "--");
 }
 
 /**
@@ -131,26 +123,12 @@ function extractText(content: unknown): string {
     .trim();
 }
 
+/** `~/.omp/agent/sessions`, from the current `HOME`. Only valid once the node modules are loaded. */
+function defaultSessionsRoot(): string {
+  return _join(process.env.HOME || "/", ".omp", "agent", "sessions");
+}
+
 export class OmpReader {
-  /**
-   * Every CD2+ `.jsonl` file under `sessionRoot` (default: this project's
-   * own `~/.omp/agent/sessions/<slug>/` directory), each with its computed
-   * CD and immediate-parent label. CD1 root session files are excluded —
-   * Non-Goal, the existing importers' handling of them is untouched.
-   * Non-`.jsonl` siblings (`.md`, `.log`, any other extension) are never
-   * even attempted (R2).
-   */
-  async listTranscripts(sessionRoot?: string): Promise<OmpTranscriptRecord[]> {
-    if (!(await ensureNodeModules())) return [];
-
-    const root = sessionRoot ?? _join(process.env.HOME || "/", ".omp", "agent", "sessions", slugifyProjectPath(process.cwd(), process.env.HOME ?? ""));
-    if (!_existsSync(root)) return [];
-
-    const records: OmpTranscriptRecord[] = [];
-    await this.walk(root, 0, records);
-    return records.sort((a, b) => a.path.localeCompare(b.path));
-  }
-
   /**
    * Every session tree under `sessionsRoot` (default `~/.omp/agent/sessions`).
    * Every directory directly under the root is a project directory and is
@@ -167,7 +145,7 @@ export class OmpReader {
   async listTrees(sessionsRoot?: string): Promise<OmpTree[]> {
     if (!(await ensureNodeModules())) return [];
 
-    const root = sessionsRoot ?? _join(process.env.HOME || "/", ".omp", "agent", "sessions");
+    const root = sessionsRoot ?? defaultSessionsRoot();
     if (!_existsSync(root)) return [];
 
     const trees: OmpTree[] = [];
@@ -224,37 +202,30 @@ export class OmpReader {
     return newest;
   }
 
-  private async walk(dir: string, depth: number, out: OmpTranscriptRecord[]): Promise<void> {
-    let entries: import("fs").Dirent[];
+  /**
+   * The safe-path gate for a transcript named by a caller: accepts only a
+   * regular file whose name ends in `.jsonl` and whose canonical path lies
+   * inside the canonical sessions root (`~/.omp/agent/sessions`; both sides
+   * resolved, so a symlinked root works and a link out of it is refused).
+   * Only stats and path resolution: no content is opened. Returns the
+   * canonical path to read, and whether the file is a tree's root file (a
+   * file directly inside a project directory) rather than a sub-agent
+   * transcript. `null` for anything else, including a missing root or file.
+   */
+  async locateTranscript(filePath: string): Promise<{ path: string; isRootFile: boolean } | null> {
+    if (!(await ensureNodeModules())) return null;
+
     try {
-      entries = await _readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      if (entry.name.startsWith(".")) continue;
-      const fullPath = _join(dir, entry.name);
-
-      if (entry.isDirectory()) {
-        await this.walk(fullPath, depth + 1, out);
-        continue;
+      const root = await _realpath(defaultSessionsRoot());
+      const file = await _realpath(filePath);
+      const relativePath = _relative(root, file);
+      if (relativePath === "" || relativePath === ".." || relativePath.startsWith(`..${_sep}`) || _isAbsolute(relativePath)) {
+        return null;
       }
-      // D9 (Beta review I4): reject any directory entry that is not a
-      // regular file — a FIFO, socket, or symlink named `*.jsonl` is
-      // skipped here, never opened or read, so it can never block and
-      // wedge the enabled sync worker indefinitely.
-      if (!entry.isFile()) continue;
-
-      if (!entry.name.endsWith(".jsonl")) continue; // R2/§4.13: non-.jsonl siblings ignored
-
-      // D2: CD is directory depth from sessionRoot, +1 — never dot-count.
-      // depth 0 (directly in sessionRoot) = CD1, the root session file,
-      // excluded; depth 1 = CD2; depth 2 = CD3; etc.
-      const cd = depth + 1;
-      if (cd <= 1) continue;
-
-      out.push({ path: fullPath, cd, label: labelFromFilename(entry.name) });
+      if (!file.endsWith(".jsonl") || !(await _stat(file)).isFile()) return null;
+      return { path: file, isRootFile: relativePath.split(_sep).length === 2 };
+    } catch {
+      return null;
     }
   }
 
@@ -279,7 +250,7 @@ export class OmpReader {
     if (!(await ensureNodeModules())) return null;
 
     // Re-assert regular-file identity immediately before the read, not
-    // only at directory-enumeration time — `walk`'s `Dirent.isFile()`
+    // only when the file was found — a directory listing's `isFile()`
     // check is a TOCTOU snapshot; a FIFO, socket, or symlink swapped in at
     // this exact path between enumeration and now is rejected here too,
     // via `lstat()` (never follows a symlink, unlike `stat()`), so it can

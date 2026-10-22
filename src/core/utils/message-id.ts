@@ -94,10 +94,17 @@ export function parseMessageId(id: string): ParsedMessageId {
   }
 
   if (parts[0] === "omp" && parts.length >= 4) {
+    let session: string
+    try {
+      session = decodeURIComponent(parts[2])
+    } catch {
+      // A malformed percent-escape names no path: not an omp id.
+      return { integration: "unknown", nativeId: id, raw: id }
+    }
     return {
       integration: "omp",
       machine: parts[1],
-      session: decodeURIComponent(parts[2]),
+      session,
       nativeId: parts.slice(3).join(":"),
       raw: id,
     }

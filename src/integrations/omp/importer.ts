@@ -14,6 +14,7 @@ import { convertToEiMessage, convertToPreMarkedEiMessage } from "../shared/messa
 import { getMachineId } from "../machine-id.js";
 import { MIN_SESSION_AGE_MS } from "../constants.js";
 import { OmpReader } from "./reader.js";
+import { agentNameOr, MAIN_SESSION_PERSONA, SUB_AGENT_FALLBACK_PERSONA } from "./agent-name.js";
 import type { OmpMessage, OmpProvenance, OmpSettings, OmpTree } from "./types.js";
 
 export interface OmpImportResult {
@@ -32,11 +33,6 @@ export interface OmpImporterOptions {
   /** Clock for the planning time and the quiet-tree guard; defaults to `Date.now`. */
   now?: () => number;
 }
-
-/** Persona for main-session messages that name no agent. */
-const MAIN_SESSION_PERSONA = "OhMyPi";
-/** Persona for a sub-agent transcript that names no agent. */
-const SUB_AGENT_FALLBACK_PERSONA = "task";
 
 /**
  * A block is the unit of work: one sub-agent transcript, or one persona's
@@ -78,12 +74,6 @@ function updateOmpSettings(stateManager: StateManager, patch: Partial<OmpSetting
       },
     },
   });
-}
-
-/** The sanitized agent name, or `fallback` when nothing usable is left of it. */
-function agentNameOr(raw: string | undefined, fallback: string): string {
-  const cleaned = stripControlChars(raw ?? "");
-  return resolveCanonicalAgent(cleaned).canonical ? cleaned : fallback;
 }
 
 /**

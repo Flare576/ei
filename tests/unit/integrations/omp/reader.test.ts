@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { OmpReader, slugifyProjectPath } from "../../../../src/integrations/omp/reader.js";
+import { OmpReader } from "../../../../src/integrations/omp/reader.js";
 import { qualifyOmpMessage } from "../../../../src/core/utils/message-id.js";
 import {
   ompHeader,
@@ -27,17 +27,31 @@ async function mkTmp(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "omp-test-"));
 }
 
+const ROOT_STEM = "2026-08-01T00-00-00-000Z_uuid1";
+
+/** Creates `<tmp>/project/<ROOT_STEM>.jsonl` and its sibling directory, and returns that directory. */
+async function mkTree(tmp: string): Promise<string> {
+  const projectDir = path.join(tmp, "project");
+  const sessionDir = path.join(projectDir, ROOT_STEM);
+  await fs.mkdir(sessionDir, { recursive: true });
+  await fs.writeFile(
+    path.join(projectDir, `${ROOT_STEM}.jsonl`),
+    `${messageLine("m1", "user", "root session content", "2026-08-01T00:00:00.000Z")}\n`
+  );
+  return sessionDir;
+}
+
 describe("OmpReader", () => {
-  it("returns empty when sessionRoot does not exist", async () => {
+  it("returns no trees when the sessions root does not exist", async () => {
     const reader = new OmpReader();
-    expect(await reader.listTranscripts("/nonexistent/omp/root")).toEqual([]);
+    expect(await reader.listTrees("/nonexistent/omp/root")).toEqual([]);
   });
 
-  it("returns empty when sessionRoot is an empty directory", async () => {
+  it("returns no trees when the sessions root is an empty directory", async () => {
     const tmp = await mkTmp();
     try {
       const reader = new OmpReader();
-      expect(await reader.listTranscripts(tmp)).toEqual([]);
+      expect(await reader.listTrees(tmp)).toEqual([]);
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });
     }
@@ -47,14 +61,8 @@ describe("OmpReader", () => {
     it("excludes the CD1 root session file; includes the flat zero-dot CD2 file and the nested one-dot CD3 file with correct computed CD and label", async () => {
       const tmp = await mkTmp();
       try {
-        // CD1: root session .jsonl, directly in sessionRoot — excluded.
-        await fs.writeFile(
-          path.join(tmp, "2026-08-01T00-00-00-000Z_uuid1.jsonl"),
-          `${messageLine("m1", "user", "root session content", "2026-08-01T00:00:00.000Z")}\n`
-        );
-
-        const sessionDir = path.join(tmp, "2026-08-01T00-00-00-000Z_uuid1");
-        await fs.mkdir(sessionDir, { recursive: true });
+        // CD1: the tree's root session file — never one of its transcripts.
+        const sessionDir = await mkTree(tmp);
 
         // CD2: flat, zero dots in filename.
         await fs.writeFile(
@@ -73,7 +81,9 @@ describe("OmpReader", () => {
         );
 
         const reader = new OmpReader();
-        const records = await reader.listTranscripts(tmp);
+        const trees = await reader.listTrees(tmp);
+        expect(trees).toHaveLength(1);
+        const records = trees[0].transcripts;
 
         expect(records).toHaveLength(2);
         expect(records.some((r) => r.path.endsWith("uuid1.jsonl"))).toBe(false);
@@ -95,42 +105,17 @@ describe("OmpReader", () => {
     });
   });
 
-  describe("R1/AT1 — slugifyProjectPath, D1's verified algorithm", () => {
-    it("home-relative path: strips the home prefix, replaces every remaining / with -", () => {
-      expect(slugifyProjectPath("/Users/flare576/Projects/Personal/ei", "/Users/flare576")).toBe(
-        "-Projects-Personal-ei"
-      );
-    });
-
-    it("exact home path collapses to an empty slug without crashing", () => {
-      expect(() => slugifyProjectPath("/Users/flare576", "/Users/flare576")).not.toThrow();
-      expect(slugifyProjectPath("/Users/flare576", "/Users/flare576")).toBe("");
-    });
-
-    it("non-home-relative path exercises the fallback without crashing (fallback exercised, not asserted against a second live example)", () => {
-      expect(() => slugifyProjectPath("/private/tmp", "/Users/flare576")).not.toThrow();
-      const slug = slugifyProjectPath("/private/tmp", "/Users/flare576");
-      expect(typeof slug).toBe("string");
-      expect(slug.length).toBeGreaterThan(0);
-    });
-  });
-
   describe("R2/AT2 — malformed and irrelevant files never crash enumeration", () => {
     it("readTranscript returns null for a malformed transcript without throwing, and the .md sibling is never attempted", async () => {
       const tmp = await mkTmp();
       try {
-        await fs.writeFile(
-          path.join(tmp, "2026-08-01T00-00-00-000Z_uuid2.jsonl"),
-          `${messageLine("m1", "user", "root", "2026-08-01T00:00:00.000Z")}\n`
-        );
-
-        const sessionDir = path.join(tmp, "2026-08-01T00-00-00-000Z_uuid2");
-        await fs.mkdir(sessionDir, { recursive: true });
+        const sessionDir = await mkTree(tmp);
         await fs.writeFile(path.join(sessionDir, "Broken.jsonl"), "not json at all\n{{{garbage\n");
         await fs.writeFile(path.join(sessionDir, "Broken.md"), "# some notes, not a transcript\n");
 
         const reader = new OmpReader();
-        const records = await reader.listTranscripts(tmp);
+        const [tree] = await reader.listTrees(tmp);
+        const records = tree.transcripts;
 
         expect(records).toHaveLength(1);
         expect(records[0].path.endsWith("Broken.jsonl")).toBe(true);
@@ -247,11 +232,10 @@ describe("OmpReader", () => {
   });
 
   describe("D9/R8/AT8(a) — non-regular filesystem entries are rejected before being opened", () => {
-    it("a symlink named *.jsonl is excluded from listTranscripts, and readTranscript is never even attempted against it", async () => {
+    it("a symlink named *.jsonl is excluded from listTrees, and readTranscript is never even attempted against it", async () => {
       const tmp = await mkTmp();
       try {
-        const sessionDir = path.join(tmp, "session");
-        await fs.mkdir(sessionDir, { recursive: true });
+        const sessionDir = await mkTree(tmp);
 
         const realPath = path.join(sessionDir, "RealTranscript.jsonl");
         await fs.writeFile(
@@ -264,10 +248,11 @@ describe("OmpReader", () => {
         await fs.symlink(realPath, linkPath);
 
         const reader = new OmpReader();
-        const records = await reader.listTranscripts(tmp);
+        const [tree] = await reader.listTrees(tmp);
+        const records = tree.transcripts;
 
         // The symlink is never listed at all (D9's isFile() gate), which is
-        // itself the proof it's never opened — listTranscripts never calls
+        // itself the proof it's never opened — listTrees never calls
         // readTranscript on anything, so an entry excluded from the returned
         // records can never reach a read attempt downstream.
         expect(records).toHaveLength(1);
@@ -276,7 +261,7 @@ describe("OmpReader", () => {
 
         // The scheduler remains usable immediately afterward — a second
         // enumeration against the same tree still succeeds promptly.
-        await expect(reader.listTranscripts(tmp)).resolves.toHaveLength(1);
+        expect((await reader.listTrees(tmp))[0].transcripts).toHaveLength(1);
       } finally {
         await fs.rm(tmp, { recursive: true, force: true });
       }
@@ -287,8 +272,7 @@ describe("OmpReader", () => {
     it("a file enumerated as regular then swapped to a FIFO before the read is rejected without blocking", async () => {
       const tmp = await mkTmp();
       try {
-        const sessionDir = path.join(tmp, "session");
-        await fs.mkdir(sessionDir, { recursive: true });
+        const sessionDir = await mkTree(tmp);
 
         const filePath = path.join(sessionDir, "Transcript.jsonl");
         await fs.writeFile(
@@ -298,7 +282,8 @@ describe("OmpReader", () => {
         );
 
         const reader = new OmpReader();
-        const records = await reader.listTranscripts(tmp);
+        const [tree] = await reader.listTrees(tmp);
+        const records = tree.transcripts;
         expect(records).toHaveLength(1);
         expect(records[0].path).toBe(filePath);
 
@@ -315,7 +300,7 @@ describe("OmpReader", () => {
 
         // The reader remains usable immediately afterward — enumeration
         // (D9's own isFile() gate) also never lists the FIFO.
-        await expect(reader.listTranscripts(tmp)).resolves.toHaveLength(0);
+        expect((await reader.listTrees(tmp))[0].transcripts).toHaveLength(0);
       } finally {
         await fs.rm(tmp, { recursive: true, force: true });
       }
@@ -324,8 +309,7 @@ describe("OmpReader", () => {
     it("a file enumerated as regular then swapped to a symlink before the read is rejected, even when the symlink's target is itself a regular file", async () => {
       const tmp = await mkTmp();
       try {
-        const sessionDir = path.join(tmp, "session");
-        await fs.mkdir(sessionDir, { recursive: true });
+        const sessionDir = await mkTree(tmp);
 
         const filePath = path.join(sessionDir, "Transcript.jsonl");
         await fs.writeFile(
@@ -335,7 +319,7 @@ describe("OmpReader", () => {
         );
 
         const reader = new OmpReader();
-        expect(await reader.listTranscripts(tmp)).toHaveLength(1);
+        expect((await reader.listTrees(tmp))[0].transcripts).toHaveLength(1);
 
         const elsewhere = path.join(tmp, "elsewhere.jsonl");
         await fs.writeFile(
@@ -347,7 +331,7 @@ describe("OmpReader", () => {
         await fs.symlink(elsewhere, filePath);
 
         // lstat() (never follows the symlink) rejects it outright — the
-        // SAME identity check `walk()` applies at enumeration time
+        // SAME identity check `listTrees` applies at enumeration time
         // (Dirent.isFile() also never follows a symlink), so a regular
         // file swapped for a symlink is rejected here regardless of what
         // the symlink points to.

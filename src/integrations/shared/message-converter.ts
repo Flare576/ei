@@ -24,13 +24,18 @@ export interface ConvertOptions {
 
 export const PARENT_AGENT_SPEAKER = "Parent agent";
 
+/** True for a user-role line the parent agent wrote: its attribution is `agent` or absent; `user` is the human's. */
+export function isParentAgentLine(msg: Pick<ConvertibleMessage, "role" | "attribution">): boolean {
+  return msg.role === "user" && msg.attribution !== "user";
+}
+
 export function convertToEiMessage(
   msg: ConvertibleMessage,
   sessionId: string,
   qualify: QualifyFn,
   options: ConvertOptions = {}
 ): Message {
-  const fromParent = options.parentSpeaker === true && msg.role === "user" && msg.attribution !== "user";
+  const fromParent = options.parentSpeaker === true && isParentAgentLine(msg);
   return {
     id: qualify(getMachineId(), sessionId, msg.id),
     role: msg.role === "user" && !fromParent ? "human" : "system",
