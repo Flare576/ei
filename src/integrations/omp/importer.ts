@@ -1,31 +1,72 @@
 import type { StateManager } from "../../core/state-manager.js";
 import type { Ei_Interface, Message } from "../../core/types.js";
-import { queuePersonaSignalScan, type ExtractionContext } from "../../core/orchestrators/human-extraction.js";
+import {
+  queueAllScans,
+  queuePersonaSignalScan,
+  type ExtractionContext,
+} from "../../core/orchestrators/human-extraction.js";
+import { queuePersonRewritePhase, queueTopicRewritePhase } from "../../core/orchestrators/ceremony.js";
 import { resolvePersonaLinkedPeople } from "../../core/utils/identifier-utils.js";
 import { ensureAgentPersona, resolveCanonicalAgent } from "../../core/personas/opencode-agent.js";
 import { qualifyOmpMessage } from "../../core/utils/message-id.js";
 import { stripControlChars } from "../../core/utils/message-refusal.js";
-import { convertToEiMessage } from "../shared/message-converter.js";
+import { convertToEiMessage, convertToPreMarkedEiMessage } from "../shared/message-converter.js";
 import { getMachineId } from "../machine-id.js";
+import { MIN_SESSION_AGE_MS } from "../constants.js";
 import { OmpReader } from "./reader.js";
-import type { OmpTranscriptRecord } from "./types.js";
+import type { OmpMessage, OmpProvenance, OmpSettings, OmpTree } from "./types.js";
 
 export interface OmpImportResult {
-  transcriptsProcessed: number;
+  treesCompleted: number;
+  blocksQueued: number;
   scansQueued: number;
-  personasCreated: string[];
 }
 
 export interface OmpImporterOptions {
   stateManager: StateManager;
   interface?: Ei_Interface;
-  /** Structural, not nominal — `OmpReader` itself, or any object exposing
-   * the same two methods (test fixtures inject the latter). */
-  reader?: Pick<OmpReader, "listTranscripts" | "readTranscript">;
+  /** Structural, not nominal: `OmpReader` itself, or any object exposing the
+   * same two methods (test fixtures inject the latter). */
+  reader?: Pick<OmpReader, "listTrees" | "readTranscript">;
   signal?: AbortSignal;
+  /** Clock for the planning time and the quiet-tree guard; defaults to `Date.now`. */
+  now?: () => number;
 }
 
-function updateProcessedState(stateManager: StateManager, processedSessions: Record<string, string>): void {
+/** Persona for main-session messages that name no agent. */
+const MAIN_SESSION_PERSONA = "OhMyPi";
+/** Persona for a sub-agent transcript that names no agent. */
+const SUB_AGENT_FALLBACK_PERSONA = "task";
+
+/**
+ * A block is the unit of work: one sub-agent transcript, or one persona's
+ * messages in a main session. `key` identifies it within its tree and is stable
+ * across a restart. `load` yields the block's messages and the agent they are
+ * filed under; `provenance` is present for sub-agent blocks only, and
+ * `hasIdentity` says whether the transcript recorded an agent at all.
+ */
+interface Block {
+  key: string;
+  kind: "main-session" | "sub-agent";
+  /** The transcript file: the message-ID session segment and the source tag. */
+  path: string;
+  load(): Promise<{
+    messages: OmpMessage[];
+    agentName: string;
+    hasIdentity: boolean;
+    provenance?: OmpProvenance;
+  } | null>;
+}
+
+interface Env {
+  stateManager: StateManager;
+  eiInterface?: Ei_Interface;
+  reader: Pick<OmpReader, "listTrees" | "readTranscript">;
+  signal?: AbortSignal;
+  result: OmpImportResult;
+}
+
+function updateOmpSettings(stateManager: StateManager, patch: Partial<OmpSettings>): void {
   const human = stateManager.getHuman();
   stateManager.setHuman({
     ...human,
@@ -33,177 +74,240 @@ function updateProcessedState(stateManager: StateManager, processedSessions: Rec
       ...human.settings,
       omp: {
         ...human.settings?.omp,
-        processed_sessions: processedSessions,
+        ...patch,
       },
     },
   });
 }
 
+/** The sanitized agent name, or `fallback` when nothing usable is left of it. */
+function agentNameOr(raw: string | undefined, fallback: string): string {
+  const cleaned = stripControlChars(raw ?? "");
+  return resolveCanonicalAgent(cleaned).canonical ? cleaned : fallback;
+}
+
 /**
- * D4 (structured like `importPiSessions`): reads the
- * `human.settings.omp.processed_sessions` checkpoint, skips every
- * already-processed CD2+ transcript, and for each new one persists its
- * converted messages into the resolved subject's own Persona state (D7)
- * before queuing Bolt 004's Scan/Extract classifier
- * (`queuePersonaSignalScan`) directly against the transcript's own
- * resolved subject — the sub-agent named by its `session_init.agent`
- * (D3) — since that subject is already known from the transcript itself
- * and never needs the generic mention-detection pass.
- *
- * A transcript is checkpointed as processed only once its Scan request has
- * actually been queued (Stint holistic review Bucket 1, finding I4,
- * 2026-08-11) — never merely because it was successfully read. A malformed
- * transcript (D5), a missing-`agent` transcript (D3's fail-closed case), or
- * a zero/multi-link subject (R7 discipline) all fail BEFORE queueing, so
- * none of them is checkpointed; each remains eligible for retry on the
- * next run once its own blocker resolves (e.g. a Person link is added).
- * D8: that checkpoint write is still durable per-record, immediately after
- * each transcript's own queue outcome is known, never batched until the
- * whole loop completes — a later record's read/resolution failure (caught
- * below, D8/R7) can never replay an earlier, already-queued record on
- * the next run.
+ * The tree's blocks in import order: main-session blocks first (one per
+ * persona, in order of first appearance), then sub-agent transcripts by
+ * first-message timestamp, ties by path. A transcript the reader rejects, or
+ * one with no messages, has no block.
  */
-export async function importOmpSessions(options: OmpImporterOptions): Promise<OmpImportResult> {
-  const { stateManager, interface: eiInterface, signal } = options;
-  const reader = options.reader ?? new OmpReader();
+async function planBlocks(reader: Env["reader"], tree: OmpTree): Promise<Block[]> {
+  const blocks: Block[] = [];
 
-  const result: OmpImportResult = {
-    transcriptsProcessed: 0,
-    scansQueued: 0,
-    personasCreated: [],
-  };
-
-  const records: OmpTranscriptRecord[] = await reader.listTranscripts();
-  if (signal?.aborted) return result;
-
-  const human = stateManager.getHuman();
-  const processedSessions = { ...(human.settings?.omp?.processed_sessions ?? {}) };
-  const extractionModel = human.settings?.omp?.extraction_model;
-
-  const newRecords = records.filter((r) => !processedSessions[r.path]);
-  if (newRecords.length === 0) {
-    console.log("[OMP] All CD2+ transcripts processed, nothing new to import");
-    return result;
-  }
-
-  for (const record of newRecords) {
-    if (signal?.aborted) break;
-
-    try {
-      const session = await reader.readTranscript(record.path);
-      if (!session || session.messages.length === 0) continue;
-
-      const rawAgentId = session.provenance.agent_id;
-      if (!rawAgentId) {
-        // D3: session_init/agent missing entirely — no subject persona can
-        // be resolved without inferring one, so this fails closed here,
-        // before the transcript ever reaches Bolt 004's classifier.
-        console.debug(`[OMP] ${stripControlChars(record.path)}: missing session_init.agent — skipping (no resolvable subject persona)`);
-        continue;
+  const root = await reader.readTranscript(tree.rootPath);
+  if (root) {
+    const rootName = tree.rootPath.slice(Math.max(tree.rootPath.lastIndexOf("/"), tree.rootPath.lastIndexOf("\\")) + 1);
+    const groups = new Map<string, { agentName: string; messages: OmpMessage[] }>();
+    for (const message of root.messages) {
+      const agentName = agentNameOr(message.agent, MAIN_SESSION_PERSONA);
+      const canonical = resolveCanonicalAgent(agentName).canonical;
+      let group = groups.get(canonical);
+      if (!group) {
+        group = { agentName, messages: [] };
+        groups.set(canonical, group);
       }
-      const agentId = stripControlChars(rawAgentId); // D10: sanitized before it can reach ensureAgentPersona
-
-      const { canonical } = resolveCanonicalAgent(agentId);
-      let subjectPersona = stateManager.persona_getByName(canonical);
-      if (!subjectPersona) {
-        subjectPersona = await ensureAgentPersona(agentId, {
-          stateManager,
-          interface: eiInterface,
-          reader: undefined,
-        });
-        result.personasCreated.push(agentId);
-      }
-
-      // R7 discipline (enumerate-all, never first-match): a subject with zero
-      // or more than one linked Person record has no single, unambiguous
-      // `subject_person_id` target — skip rather than guess or pick either.
-      const linkedPeople = resolvePersonaLinkedPeople(subjectPersona.id, stateManager.getHuman().people);
-      if (linkedPeople.length !== 1) {
-        if (linkedPeople.length > 1) {
-          console.warn(
-            `[OMP] ${subjectPersona.display_name} is linked to multiple person records — skipping persona-signal observation for ${stripControlChars(record.path)}`
-          );
-        } else {
-          console.debug(
-            `[OMP] ${subjectPersona.display_name} has no linked Person record yet — skipping persona-signal observation for ${stripControlChars(record.path)}`
-          );
-        }
-        continue;
-      }
-
-      // 2026-08-19 fix (message-locator round-trip): the qualified message
-      // ID's "session" segment must BE the transcript's own unique
-      // locator, not a lossy display label -- record.path (already the
-      // full unique discriminator `listTranscripts` sorts by) is the only
-      // field that both round-trips (resolveExternalMessage's own "omp"
-      // case reads a transcript straight back off this exact path) and
-      // never collides (two distinct transcripts always have distinct
-      // paths, even when they share a filename). The old
-      // `record.path.split("/").pop()` basename lost both properties:
-      // unresolvable, and two differently nested same-named files with
-      // colliding native ids produced identical qualified ids for
-      // genuinely distinct source events.
-      const sessionKey = record.path;
-      const messages: Message[] = session.messages.map((m) => convertToEiMessage(m, sessionKey, qualifyOmpMessage));
-
-      // D7 (Beta review I1, CRITICAL): persist the converted messages into
-      // the subject Persona's own state BEFORE queuing the scan.
-      // handlePersonaSignalScan's resolveMessageWindow resolves its analyze
-      // window against state.messages_get(subjectPersona.id), never
-      // against this importer-local array — a scan queued without this
-      // step could never find its source quote, so every prior
-      // "successful" scan produced zero observations. Mirrors
-      // importPiSessions's own append -> sort lifecycle exactly.
-      for (const eiMsg of messages) {
-        stateManager.messages_append(subjectPersona.id, eiMsg);
-      }
-      stateManager.messages_sort(subjectPersona.id);
-      eiInterface?.onMessageAdded?.(subjectPersona.id);
-
-      const allInState = stateManager.messages_get(subjectPersona.id);
-      const analyzeIds = new Set(messages.map((m) => m.id));
-      const analyzeStartIndex = allInState.findIndex((m) => analyzeIds.has(m.id));
-      const contextMsgs = analyzeStartIndex > 0 ? allInState.slice(0, analyzeStartIndex) : [];
-
-      const context: ExtractionContext = {
-        personaId: subjectPersona.id,
-        channelDisplayName: subjectPersona.display_name,
-        messages_context: contextMsgs,
-        messages_analyze: messages,
-        sources: [`omp:${getMachineId()}:${record.path}`],
-      };
-
-      // D3/D4: provenance is forwarded as-is, complete or not — Bolt 004's
-      // classifier decides whether it's enough to land an Agent-lens
-      // observation, never this importer.
-      queuePersonaSignalScan(context, subjectPersona, linkedPeople[0].id, stateManager, extractionModel, session.provenance);
-
-      // D8/I4 (Stint holistic review Bucket 1, 2026-08-11): checkpointed
-      // durably right here, only now that the Scan request has actually
-      // been queued — never earlier. A zero-link, missing-agent, or
-      // malformed transcript never reaches this line, so it stays
-      // eligible for retry once its own blocker resolves.
-      processedSessions[record.path] = new Date().toISOString();
-      updateProcessedState(stateManager, processedSessions);
-
-      result.scansQueued++;
-      result.transcriptsProcessed++;
-    } catch (err) {
-      // D8/R7 (Beta review I3): a per-record failure (e.g. a rejecting
-      // reader) must never be checkpointed as processed, so it stays
-      // eligible for retry on the next run, and must never roll back an
-      // earlier record's already-durable checkpoint write above.
-      console.warn(
-        `[OMP] ${stripControlChars(record.path)}: failed to process — will retry next run: ${err instanceof Error ? err.message : String(err)}`
-      );
+      group.messages.push(message);
+    }
+    for (const [canonical, group] of groups) {
+      blocks.push({
+        key: `${rootName}|${canonical}`,
+        kind: "main-session",
+        path: tree.rootPath,
+        load: async () => ({ messages: group.messages, agentName: group.agentName, hasIdentity: false }),
+      });
     }
   }
 
-  if (result.transcriptsProcessed > 0) {
-    console.log(
-      `[OMP] Import complete: ${result.transcriptsProcessed} CD2+ transcript(s) processed, ${result.scansQueued} scan(s) queued`
-    );
+  // Only the first-message time is kept while ordering, so a tree's transcripts
+  // are never all held in memory at once; each is read again when its block runs.
+  const siblingDir = tree.rootPath.slice(0, -".jsonl".length);
+  const subAgents: { path: string; firstMessageMs: number }[] = [];
+  for (const record of tree.transcripts) {
+    const session = await reader.readTranscript(record.path);
+    if (session?.firstMessageAt) subAgents.push({ path: record.path, firstMessageMs: Date.parse(session.firstMessageAt) });
+  }
+  subAgents.sort((a, b) => a.firstMessageMs - b.firstMessageMs || a.path.localeCompare(b.path));
+
+  for (const { path } of subAgents) {
+    blocks.push({
+      key: path.slice(siblingDir.length + 1),
+      kind: "sub-agent",
+      path,
+      load: async () => {
+        const session = await reader.readTranscript(path);
+        if (!session) return null;
+        const agentId = agentNameOr(session.provenance.agent_id, "");
+        return {
+          messages: session.messages,
+          agentName: agentId || SUB_AGENT_FALLBACK_PERSONA,
+          hasIdentity: agentId !== "",
+          provenance: session.provenance,
+        };
+      },
+    });
   }
 
+  return blocks;
+}
+
+/**
+ * Imports one tree's blocks, one at a time. Returns true when the call must end:
+ * a block's scans were queued (the next block waits for the queue to drain), the
+ * queue was busy, the import was aborted, or the tree finished having queued
+ * scans. Returns false only for a tree that finished with nothing queued, so the
+ * caller moves on to the next one.
+ *
+ * `plannedAtMs` bounds the window: with `W_prev` the tree's stored watermark
+ * (none: the beginning of time), messages at or before it are stored pre-marked
+ * (never extracted), messages after it and at or before `plannedAtMs` are
+ * extracted, later ones are left for a later pass. `plannedAtMs` becomes the
+ * watermark once every block has been handled. `done` holds the keys of blocks
+ * whose scans were already queued by an earlier call.
+ */
+async function importTree(env: Env, tree: OmpTree, plannedAtMs: number, done: string[]): Promise<boolean> {
+  const { stateManager, eiInterface, reader, signal, result } = env;
+  const plannedAt = new Date(plannedAtMs).toISOString();
+  const watermark = stateManager.getHuman().settings?.omp?.processed_sessions?.[tree.id];
+  const previousMs = watermark ? Date.parse(watermark) : -Infinity;
+
+  const blocks = await planBlocks(reader, tree);
+
+  for (const [index, block] of blocks.entries()) {
+    if (signal?.aborted) return true;
+    if (done.includes(block.key)) continue;
+
+    const loaded = await block.load();
+    if (!loaded) continue;
+
+    const before = loaded.messages.filter((m) => Date.parse(m.timestamp) <= previousMs);
+    const inWindow = loaded.messages.filter((m) => {
+      const ms = Date.parse(m.timestamp);
+      return ms > previousMs && ms <= plannedAtMs;
+    });
+    if (inWindow.length === 0) continue;
+
+    // One block per persona at a time: nothing starts while earlier scans are pending.
+    if (stateManager.queue_length() > 0) return true;
+
+    const persona = await ensureAgentPersona(loaded.agentName, {
+      stateManager,
+      interface: eiInterface,
+      creation: block.kind,
+    });
+
+    const external = stateManager.messages_get(persona.id).filter((m) => m.external === true);
+    if (external.length > 0) {
+      stateManager.messages_remove(persona.id, external.map((m) => m.id));
+    }
+
+    const convertOptions = { parentSpeaker: block.kind === "sub-agent" };
+    for (const message of before) {
+      stateManager.messages_append(persona.id, convertToPreMarkedEiMessage(message, block.path, qualifyOmpMessage, convertOptions));
+    }
+    const toAnalyze: Message[] = inWindow.map((m) => convertToEiMessage(m, block.path, qualifyOmpMessage, convertOptions));
+    for (const message of toAnalyze) {
+      stateManager.messages_append(persona.id, message);
+    }
+    stateManager.messages_sort(persona.id);
+    eiInterface?.onMessageAdded?.(persona.id);
+
+    const allInState = stateManager.messages_get(persona.id);
+    const analyzeIds = new Set(toAnalyze.map((m) => m.id));
+    const analyzeStartIndex = allInState.findIndex((m) => analyzeIds.has(m.id));
+    const context: ExtractionContext = {
+      personaId: persona.id,
+      channelDisplayName: persona.display_name,
+      messages_context: analyzeStartIndex > 0 ? allInState.slice(0, analyzeStartIndex) : [],
+      messages_analyze: toAnalyze,
+      sources: [`omp:${getMachineId()}:${block.path}`],
+    };
+
+    const extractionModel = stateManager.getHuman().settings?.omp?.extraction_model;
+    const queuedBefore = stateManager.queue_length();
+    queueAllScans(context, stateManager, { extraction_model: extractionModel, external_filter: "only" });
+
+    // A direct signal scan needs an agent the transcript actually names, an
+    // unarchived persona and exactly one linked Person; any of those missing
+    // skips only this scan.
+    if (block.kind === "sub-agent" && loaded.hasIdentity && !persona.is_archived) {
+      const linkedPeople = resolvePersonaLinkedPeople(persona.id, stateManager.getHuman().people);
+      if (linkedPeople.length === 1) {
+        queuePersonaSignalScan(context, persona, linkedPeople[0].id, stateManager, extractionModel, loaded.provenance);
+      }
+    }
+    result.scansQueued += stateManager.queue_length() - queuedBefore;
+    result.blocksQueued++;
+
+    // Recorded only now that the scans are queued, so a crash before this point redoes the block.
+    done = [...done, block.key];
+    updateOmpSettings(stateManager, { current_tree: { tree: tree.id, planned_at: plannedAt, done } });
+    console.log(`[OMP] Queued ${inWindow.length} message(s) from ${stripControlChars(block.key)}`);
+
+    if (index < blocks.length - 1) return true;
+    break;
+  }
+
+  // Every block has been handled. The rewrite phases follow a tree that queued
+  // scans (now, or before a restart); the watermark and the cursor clear together.
+  if (done.length > 0) {
+    queuePersonRewritePhase(stateManager);
+    queueTopicRewritePhase(stateManager);
+  }
+  const processedSessions = stateManager.getHuman().settings?.omp?.processed_sessions;
+  updateOmpSettings(stateManager, {
+    processed_sessions: { ...processedSessions, [tree.id]: plannedAt },
+    current_tree: undefined,
+  });
+  result.treesCompleted++;
+  return done.length > 0;
+}
+
+/** True while any file in the tree (its newest mtime) is younger than the quiet period. */
+function isActive(tree: OmpTree, nowMs: number): boolean {
+  return nowMs - Math.floor(tree.newestMtimeMs) < MIN_SESSION_AGE_MS;
+}
+
+/**
+ * Imports the session trees under the OMP sessions root, one block at a time.
+ *
+ * A call finishes trees that need nothing queued and returns as soon as a block
+ * queues scans, or a tree that queued some completes: the sync manager calls it
+ * again once the queue has drained, and it resumes from the `current_tree`
+ * cursor. Trees are taken oldest first by their newest file mtime; a tree whose
+ * newest mtime is at or before its watermark is skipped without opening a file,
+ * and a tree with any file younger than the quiet period waits for a later pass.
+ */
+export async function importOmpSessions(options: OmpImporterOptions): Promise<OmpImportResult> {
+  const { stateManager, interface: eiInterface, signal } = options;
+  const result: OmpImportResult = { treesCompleted: 0, blocksQueued: 0, scansQueued: 0 };
+  if (stateManager.getHuman().settings?.omp?.integration !== true) return result;
+
+  const reader = options.reader ?? new OmpReader();
+  const now = options.now ?? Date.now;
+  const env: Env = { stateManager, eiInterface, reader, signal, result };
+
+  const trees = await reader.listTrees();
+  if (signal?.aborted) return result;
+  trees.sort((a, b) => a.newestMtimeMs - b.newestMtimeMs);
+
+  // A tree in progress resumes first, with its original planning time.
+  const cursor = stateManager.getHuman().settings?.omp?.current_tree;
+  const resumed = cursor && trees.find((t) => t.id === cursor.tree);
+  if (resumed) {
+    if (isActive(resumed, now())) return result;
+    if (await importTree(env, resumed, Date.parse(cursor.planned_at), cursor.done)) return result;
+  }
+
+  for (const tree of trees) {
+    if (signal?.aborted) break;
+
+    const watermark = stateManager.getHuman().settings?.omp?.processed_sessions?.[tree.id];
+    if (watermark && Math.floor(tree.newestMtimeMs) <= Date.parse(watermark)) continue;
+
+    const plannedAtMs = now();
+    if (isActive(tree, plannedAtMs)) continue;
+    if (await importTree(env, tree, plannedAtMs, [])) break;
+  }
   return result;
 }
