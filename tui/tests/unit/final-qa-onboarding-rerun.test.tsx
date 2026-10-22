@@ -194,6 +194,7 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       cursor: false,
       codex: false,
       pi: false,
+      omp: false,
     });
 
     let onDismissCalled = false;
@@ -307,6 +308,7 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       cursor: false,
       codex: false,
       pi: false,
+      omp: false,
     });
     capturedEi = undefined;
     let mountOverlay: (() => void) | undefined;
@@ -413,6 +415,7 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       cursor: false,
       codex: false,
       pi: false,
+      omp: false,
     });
 
     const { renderOnce, mockInput, captureCharFrame, renderer } = await testRender(
@@ -473,6 +476,7 @@ describe("Final QA — /onboarding re-run on an already-configured instance", ()
       cursor: true,
       codex: false,
       pi: false,
+      omp: false,
     });
 
     const { renderOnce, mockInput, captureCharFrame, renderer } = await testRender(

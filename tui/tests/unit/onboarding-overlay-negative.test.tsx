@@ -113,6 +113,7 @@ describe("OnboardingOverlay — negative paths", () => {
       cursor: false,
       codex: false,
       pi: true,
+      omp: false,
     });
 
     let onDismissCalled = false;
@@ -152,7 +153,8 @@ describe("OnboardingOverlay — negative paths", () => {
       // flags rather than there being nothing to withhold in the first place.
       expect(frame).toContain("Claude Code");
       expect(frame).toContain("[✓] found");
-      expect(frame).toContain("Pi / OMP");
+      expect(frame).toContain("Pi:");
+      expect(frame).toContain("OMP:");
 
       // --- Decline the merged Install/Import confirm ('n' -> declined, no ConfirmOverlay involved) ---
       mockInput.pressKey("n");

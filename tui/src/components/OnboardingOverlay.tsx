@@ -22,13 +22,13 @@ type InstallOutcome =
   | { status: "ok" }
   | { status: "failed"; failures: string[] };
 
-/** Which of the four import-source integrations Ei found evidence of on this machine. */
+/** Which of the five import-source integrations Ei found evidence of on this machine. */
 export interface ImportSourceDetection {
   claudeCode: boolean;
   cursor: boolean;
   codex: boolean;
-  /** Combined Pi + OMP — HumanSettings has no separate `omp` field; both write to `pi.integration`. */
   pi: boolean;
+  omp: boolean;
 }
 
 export interface OnboardingOverlayProps {
@@ -77,7 +77,7 @@ async function commandExists(command: string): Promise<boolean> {
  * closest equivalent presence signal is the same `~/.claude.json` config
  * file installClaudeCode() itself edits.
  */
-async function defaultDetectImportSources(): Promise<ImportSourceDetection> {
+export async function defaultDetectImportSources(): Promise<ImportSourceDetection> {
   const home = process.env.HOME || homedir();
 
   const claudeCode = await Bun.file(join(home, ".claude.json")).exists();
@@ -113,7 +113,7 @@ async function defaultDetectImportSources(): Promise<ImportSourceDetection> {
     (await Bun.file(join(home, ".omp", "agent", "config.yml")).exists()) ||
     (await Bun.file(join(home, ".omp", "agent", "agent.db")).exists());
 
-  return { claudeCode, cursor, codex, pi: hasPi || hasOmp };
+  return { claudeCode, cursor, codex, pi: hasPi, omp: hasOmp };
 }
 
 export function OnboardingOverlay(props: OnboardingOverlayProps) {
@@ -207,6 +207,7 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
       if (detection.cursor) updates.cursor = { ...(settings?.cursor ?? {}), integration: true };
       if (detection.codex) updates.codex = { ...(settings?.codex ?? {}), integration: true };
       if (detection.pi) updates.pi = { ...(settings?.pi ?? {}), integration: true };
+      if (detection.omp) updates.omp = { ...(settings?.omp ?? {}), integration: true };
       if (Object.keys(updates).length > 0) await ei.updateSettings(updates);
     }
 
@@ -383,7 +384,7 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
                       </text>
                       <text> </text>
                       <Show
-                        when={detection().claudeCode || detection().cursor || detection().codex || detection().pi}
+                        when={detection().claudeCode || detection().cursor || detection().codex || detection().pi || detection().omp}
                         fallback={<text fg="#93a1a1">No supported coding tools detected on this machine.</text>}
                       >
                         <box flexDirection="row">
@@ -405,9 +406,15 @@ export function OnboardingOverlay(props: OnboardingOverlayProps) {
                           </text>
                         </box>
                         <box flexDirection="row">
-                          <text fg="#93a1a1">Pi / OMP: </text>
+                          <text fg="#93a1a1">Pi: </text>
                           <text fg={detection().pi ? "#859900" : "#586e75"}>
                             {detection().pi ? "[✓] found" : "[ ] not found"}
+                          </text>
+                        </box>
+                        <box flexDirection="row">
+                          <text fg="#93a1a1">OMP: </text>
+                          <text fg={detection().omp ? "#859900" : "#586e75"}>
+                            {detection().omp ? "[✓] found" : "[ ] not found"}
                           </text>
                         </box>
                       </Show>

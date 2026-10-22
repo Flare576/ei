@@ -140,6 +140,7 @@ describe("OnboardingOverlay — happy path", () => {
       cursor: false,
       codex: false,
       pi: true,
+      omp: false,
     });
 
     let onDismissCalled = false;
@@ -191,7 +192,8 @@ describe("OnboardingOverlay — happy path", () => {
       // same one-question gate) ---
       expect(frame).toContain("Claude Code");
       expect(frame).toContain("[✓] found");
-      expect(frame).toContain("Pi / OMP");
+      expect(frame).toContain("Pi:");
+      expect(frame).toContain("OMP:");
       expect(frame).toContain("Cursor");
       expect(frame).toContain("Codex");
 
@@ -241,6 +243,7 @@ describe("OnboardingOverlay — failed install", () => {
       cursor: false,
       codex: false,
       pi: false,
+      omp: false,
     });
 
     // Own dataPath (distinct from the happy-path test's testDataDir) so a
