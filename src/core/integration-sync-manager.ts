@@ -22,6 +22,8 @@ export class IntegrationSyncManager {
   private piImportInProgress = false;
   private lastOmpSync = 0;
   private ompImportInProgress = false;
+  /** The last OMP run queued a block and left its tree in progress: the next tick runs without waiting out the polling interval. */
+  private ompContinuation = false;
   private lastSlackSync = 0;
   private slackImportInProgress = false;
   private personaHistoryImportInProgress = false;
@@ -443,7 +445,7 @@ export class IntegrationSyncManager {
     const lastSync = omp?.last_sync ? new Date(omp.last_sync).getTime() : 0;
     const timeSinceSync = now - lastSync;
 
-    if (timeSinceSync < pollingInterval && this.lastOmpSync > 0) {
+    if (!this.ompContinuation && timeSinceSync < pollingInterval && this.lastOmpSync > 0) {
       return;
     }
 
@@ -471,14 +473,20 @@ export class IntegrationSyncManager {
         })
       )
       .then((result) => {
-        if (result.transcriptsProcessed > 0) {
+        if (result.blocksQueued > 0 || result.treesCompleted > 0) {
           console.log(
-            `[Processor] OMP sync complete: ${result.transcriptsProcessed} CD2+ transcript(s), ` +
-              `${result.scansQueued} scan(s) queued`
+            `[Processor] OMP sync complete: ${result.blocksQueued} block(s), ` +
+              `${result.scansQueued} scan(s) queued, ${result.treesCompleted} tree(s) completed`
           );
         }
+        // The next tick skips the interval gate only when this run queued a block and left the tree
+        // in progress; a run that made no progress (a tree held back by the quiet guard, say) waits
+        // out the polling interval like any other.
+        this.ompContinuation =
+          result.blocksQueued > 0 && this.stateManager.getHuman().settings?.omp?.current_tree !== undefined;
       })
       .catch((err) => {
+        this.ompContinuation = false;
         console.warn(`[Processor] OMP sync failed:`, err);
       })
       .finally(() => {
