@@ -21,6 +21,8 @@ describe("OMP transcript generator", () => {
       ompTranscriptText(
         ompSubAgent({
           agent: "reviewer",
+          systemPrompt: ["first part", "second part"],
+          parentSession: "/x/root.jsonl",
           messages: [
             ompMessage("user", "assignment", { attribution: "agent" }),
             ompMessage("assistant", "done"),
@@ -32,8 +34,13 @@ describe("OMP transcript generator", () => {
     );
 
     expect(entries.map((e) => e.type)).toEqual(["session", "session_init", "message", "message", "message", "message"]);
-    expect(entries[0].parentSession).toEqual(expect.any(String));
-    expect(entries[1]).toMatchObject({ agent: "reviewer", systemPrompt: expect.anything(), task: expect.any(String) });
+    expect(entries[0]).toMatchObject({ type: "session", version: 3, parentSession: "/x/root.jsonl" });
+    expect(entries[1]).toMatchObject({
+      agent: "reviewer",
+      systemPrompt: ["first part", "second part"],
+      task: expect.any(String),
+      tools: expect.any(Array),
+    });
 
     const [assignment, , human, bare] = entries.slice(2);
     expect(assignment.message.attribution).toBe("agent");
@@ -41,14 +48,17 @@ describe("OMP transcript generator", () => {
     expect(human.message.steering).toBe(true);
     expect("attribution" in bare.message).toBe(false);
     for (const e of entries) expect("attribution" in e).toBe(false);
+    expect(assignment.message.content).toEqual([{ type: "text", text: "assignment" }]);
+    expect(assignment.message.timestamp).toBe(Date.parse(assignment.timestamp));
   });
 
   it("main-session transcript: the persona agent sits at the outer entry.agent, never inside the message", () => {
     const entries = parse(
       ompTranscriptText(
         ompMainSession({
+          cwd: "/does/not/exist",
           messages: [
-            ompMessage("user", "hello", { agent: "sisyphus" }),
+            ompMessage("user", "hello", { agent: "sisyphus", attribution: "user" }),
             ompMessage("assistant", "hi", { agent: "reviewer" }),
             ompMessage("user", "no persona"),
           ],
@@ -56,15 +66,15 @@ describe("OMP transcript generator", () => {
       )
     );
 
+    expect(entries[0]).toMatchObject({ type: "session", cwd: "/does/not/exist" });
     expect(entries.map((e) => e.type)).toEqual(["session", "message", "message", "message"]);
     expect("parentSession" in entries[0]).toBe(false);
     expect(entries[1].agent).toBe("sisyphus");
     expect(entries[2].agent).toBe("reviewer");
     expect("agent" in entries[3]).toBe(false);
-    for (const e of entries.slice(1)) {
-      expect("agent" in e.message).toBe(false);
-      expect("attribution" in e.message).toBe(false);
-    }
+    for (const e of entries.slice(1)) expect("agent" in e.message).toBe(false);
+    expect(entries[1].message.attribution).toBe("user");
+    expect("attribution" in entries[3].message).toBe(false);
   });
 
   it("fills id, parentId and timestamp by position; id: null leaves the entry id-less", () => {

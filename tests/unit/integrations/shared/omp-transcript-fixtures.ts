@@ -4,16 +4,19 @@ import * as path from "node:path";
 /**
  * Generates OMP session transcripts at test time, in the shape the OMP producer writes:
  *
- *  - Line 1 is the `session` header; a sub-agent's header carries `parentSession`.
+ *  - The `session` header comes first (real files usually put a fixed-width `title` record before it; add one as
+ *    a verbatim string line when a test needs it). A sub-agent's header carries `parentSession`.
  *  - A sub-agent transcript has `session_init` (`agent`, `systemPrompt` as string or string[], `task`, `tools`);
  *    `agent` is absent on files that predate the field.
- *  - Every user-role message of a sub-agent carries `attribution` on `entry.message` ("agent" for the parent,
- *    "user" for a human typing to the sub-agent); a main-session message carries the persona `agent` on the
- *    outer entry, next to `id`/`parentId`/`timestamp`, and no `attribution`.
+ *  - A user-role message carries `attribution` on `entry.message` ("agent" for the parent, "user" for a human
+ *    typing to a sub-agent or to the main session); leave it off to build a line that has none. A main-session
+ *    message carries the persona `agent` on the outer entry, next to `id`/`parentId`/`timestamp`.
  *  - Nested files: `<stem>.jsonl`, `<stem>/<P>.jsonl`, `<stem>/<P>/<P>.<C>.jsonl` (the file stem is the dotted id).
  *
  * Nothing here is copied from a real session. Pass `id: null` to a message to leave `id` off the entry, and a
- * string where a line is expected to write that text verbatim (blank, malformed or truncated lines).
+ * string where a line is expected to write that text verbatim (blank, malformed or truncated lines). The
+ * `ompSubAgent` and `ompMainSession` wrappers use one fixed header id; build the header with `ompHeader` to give
+ * a tree its own `id`, `cwd` or `parentSession`.
  */
 
 export type OmpLine = Record<string, unknown> | string;
