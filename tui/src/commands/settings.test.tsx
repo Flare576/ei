@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { settingsCommand } from "./settings";
+import { settingsToYAML } from "../util/yaml-serializers";
 import type { CommandContext } from "./registry";
 import type { EiContextValue } from "../context/ei";
 import type { CliRenderer } from "@opentui/core";
@@ -143,5 +144,158 @@ describe("settingsCommand - conversation_model validation (T8)", () => {
 
     expect(overlayCalled).toBe(true);
     expect(updateCalled).toBe(false);
+  });
+});
+
+/** Like fakeEditorFor, but the editor stays open (and says so) until release() is called. */
+function heldEditorFor(content: string): {
+  editorCmd: string;
+  waitUntilOpen: () => Promise<void>;
+  release: () => void;
+  cleanup: () => void;
+} {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "held-editor-"));
+  const srcFile = path.join(dir, "edited.yaml");
+  const startedFile = path.join(dir, "started");
+  const gateFile = path.join(dir, "gate");
+  fs.writeFileSync(srcFile, content, "utf-8");
+  return {
+    editorCmd: `bash -c 'touch "${startedFile}"; while [ ! -e "${gateFile}" ]; do sleep 0.02; done; cp "${srcFile}" "$1"' --`,
+    waitUntilOpen: async () => {
+      for (let i = 0; i < 200 && !fs.existsSync(startedFile); i++) await delay(25);
+      if (!fs.existsSync(startedFile)) throw new Error("editor never opened");
+    },
+    release: () => fs.writeFileSync(gateFile, ""),
+    cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
+  };
+}
+
+describe("settingsCommand - omp save while the editor is open", () => {
+  const earlier = "2026-10-20T10:00:00.000Z";
+  const later = "2026-10-20T11:00:00.000Z";
+  const ompAccount: ProviderAccount = {
+    ...account,
+    models: [
+      { id: "model-guid-1", name: "claude-haiku-4-5" },
+      { id: "model-guid-2", name: "claude-sonnet-4-5" },
+    ],
+  };
+
+  let originalEditor: string | undefined;
+  let cleanupEditor: (() => void) | null = null;
+
+  beforeEach(() => {
+    originalEditor = process.env.EDITOR;
+  });
+
+  afterEach(() => {
+    if (originalEditor !== undefined) process.env.EDITOR = originalEditor;
+    else delete process.env.EDITOR;
+    cleanupEditor?.();
+    cleanupEditor = null;
+  });
+
+  function seededState(): HumanEntity {
+    return makeHuman({
+      accounts: [ompAccount],
+      pi: { integration: true },
+      omp: {
+        integration: false,
+        polling_interval_ms: 120000,
+        extraction_model: "model-guid-1",
+        last_sync: earlier,
+        processed_sessions: { "tree-a": earlier },
+        current_tree: { tree: "tree-b", planned_at: earlier, done: ["blk-1"] },
+      },
+    });
+  }
+
+  /** Opens /settings on `initial` with `edit` applied to the generated YAML and holds the editor open
+   * while `whileOpen` produces the stored state the importer would have written meanwhile (stored
+   * states are replaced, never mutated, as the real store does), then releases the editor, waits for
+   * the save and returns what was stored. */
+  async function saveWhileEditorOpen(
+    initial: HumanEntity,
+    edit: (yaml: string) => string,
+    whileOpen: (stored: HumanEntity) => HumanEntity
+  ): Promise<HumanEntity> {
+    const editor = heldEditorFor(edit(settingsToYAML(initial.settings, [ompAccount])));
+    cleanupEditor = editor.cleanup;
+    process.env.EDITOR = editor.editorCmd;
+
+    let stored = initial;
+    const ctx = makeContext(initial, async (updates) => {
+      stored = { ...stored, settings: { ...stored.settings, ...updates } };
+    });
+    ctx.ei.getHuman = async () => stored;
+    const done = settingsCommand.execute([], ctx);
+    await editor.waitUntilOpen();
+    stored = whileOpen(stored);
+    editor.release();
+    await done;
+    return stored;
+  }
+
+  test("keeps the importer progress made while the editor was open and applies the toggle edit", async () => {
+    const saved = await saveWhileEditorOpen(
+      seededState(),
+      (yaml) => yaml.replace("omp:\n  integration: false", "omp:\n  integration: true"),
+      (stored) => ({
+        ...stored,
+        settings: {
+          ...stored.settings,
+          omp: {
+            ...stored.settings?.omp,
+            last_sync: later,
+            processed_sessions: { "tree-a": earlier, "tree-b": later },
+            current_tree: { tree: "tree-c", planned_at: later, done: [] },
+          },
+        },
+      })
+    );
+
+    const omp = saved.settings?.omp;
+    expect(omp?.integration).toBe(true);
+    expect(omp?.current_tree).toEqual({ tree: "tree-c", planned_at: later, done: [] });
+    expect(omp?.processed_sessions).toEqual({ "tree-a": earlier, "tree-b": later });
+    expect(omp?.last_sync).toBe(later);
+    expect(omp?.polling_interval_ms).toBe(120000);
+    expect(omp?.extraction_model).toBe("model-guid-1");
+    expect(saved.settings?.pi?.integration).toBe(true);
+  });
+
+  test("a cursor cleared while the editor was open stays cleared after the save", async () => {
+    const saved = await saveWhileEditorOpen(
+      seededState(),
+      (yaml) => yaml.replace("omp:\n  integration: false", "omp:\n  integration: true"),
+      (stored) => {
+        const { current_tree: _cleared, ...rest } = stored.settings!.omp!;
+        return { ...stored, settings: { ...stored.settings, omp: rest } };
+      }
+    );
+
+    const omp = saved.settings?.omp;
+    expect(omp?.integration).toBe(true);
+    expect(omp?.current_tree).toBeUndefined();
+    expect(omp?.processed_sessions).toEqual({ "tree-a": earlier });
+    expect(omp?.last_sync).toBe(earlier);
+  });
+
+  test("applies edited integration, polling_interval_ms and extraction_model", async () => {
+    const saved = await saveWhileEditorOpen(
+      seededState(),
+      (yaml) =>
+        yaml.replace(
+          /^(omp:\n  integration: )false\n  polling_interval_ms: 2m\n  extraction_model: [^\n]*/m,
+          "$1true\n  polling_interval_ms: 5m\n  extraction_model: Anthropic:claude-sonnet-4-5"
+        ),
+      (stored) => stored
+    );
+
+    const omp = saved.settings?.omp;
+    expect(omp?.integration).toBe(true);
+    expect(omp?.polling_interval_ms).toBe(300000);
+    expect(omp?.extraction_model).toBe("model-guid-2");
+    expect(omp?.current_tree).toEqual({ tree: "tree-b", planned_at: earlier, done: ["blk-1"] });
   });
 });
