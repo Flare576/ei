@@ -48,6 +48,7 @@ This exists because the alternative was observed directly: *"I really wish we ha
 | [038](ADR-038-persona-signals-supersede-the-reflection-critic.md) | Attributed Persona Signals Replace the Reflection Critic and Its Append-Only Log | Accepted | 2026-08-11 | Current |
 | [039](ADR-039-signal-resolution-status-only-separate-identity-tools.md) | Signal Resolution Is Status-Only; Identity Editing Is a Separate Native Tool Set | Accepted | 2026-09-11 | Current |
 | [040](ADR-040-tool-calls-and-thinking-are-persisted-for-human-display-only.md) | Tool Calls and Thinking Are Persisted With the Message for Human Display Only | Accepted | 2026-10-13 | Current |
+| [041](ADR-041-omp-is-its-own-integration-over-the-whole-session-tree.md) | OMP Is Its Own Integration, Imported as One Pipeline Over the Whole Session Tree | Accepted | 2026-10-13 | Current |
 
 ## Conventions
 
