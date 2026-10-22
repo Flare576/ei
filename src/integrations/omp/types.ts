@@ -15,8 +15,8 @@ import type { AgentProvenance } from "../../core/utils/persona-signal-lens.js";
 // ============================================================================
 
 /**
- * One CD2+ transcript file located under a session directory, as returned
- * by `listTranscripts` — before its content has been parsed. `cd` is
+ * One CD2+ transcript file located under a session tree's sibling directory, as returned
+ * by `listTrees` — before its content has been parsed. `cd` is
  * computed from directory depth (D2), never from the filename's own
  * dot-count. `label` is read off the filename's last dot-segment (the
  * segment after the final `.`, or the whole stem for a CD2 file with no

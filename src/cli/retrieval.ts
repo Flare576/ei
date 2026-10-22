@@ -3,7 +3,7 @@ import type { PersonaEntity } from "../core/types/entities.js";
 import type { PersonaTrait, PersonaTopic, PersonIdentifier } from "../core/types/data-items.js";
 import { decodeAllEmbeddings } from "../storage/embeddings";
 import { crossFind } from "../core/utils/index.ts";
-import { join } from "path";
+import { basename, join } from "path";
 import { readFile } from "fs/promises";
 import { getEmbeddingService, findTopK } from "../core/embedding-service";
 import { parseMessageId, qualifyOpenCodeMessage, qualifyClaudeCodeMessage, qualifyCursorMessage, qualifyCodexMessage, qualifyPiMessage, qualifyOmpMessage } from "../core/utils/message-id.js";
@@ -22,7 +22,9 @@ import { CODEX_PERSONA_NAME } from "../integrations/codex/types.js";
 import type { PiMessage } from "../integrations/pi/types.js";
 import { PI_PERSONA_NAME } from "../integrations/pi/types.js";
 import type { OmpMessage } from "../integrations/omp/types.js";
-import { resolveCanonicalAgent } from "../core/personas/opencode-agent.js";
+import { agentPersonaName, MAIN_SESSION_PERSONA, SUB_AGENT_FALLBACK_PERSONA } from "../integrations/omp/agent-name.js";
+import { isParentAgentLine, PARENT_AGENT_SPEAKER } from "../integrations/shared/message-converter.js";
+import { matchAgentPersona } from "../core/personas/opencode-agent.js";
 
 const STATE_FILE = "state.json";
 const BACKUP_FILE = "state.backup.json";
@@ -854,45 +856,63 @@ export async function resolveExternalMessage(
         // already flagged, and deliberately deferred, an existing
         // conflation between them elsewhere in the pi/ importer — this
         // resolver must not add a new one). `parsed.session` is the
-        // transcript's own full path (the importer's qualified-id fix).
+        // transcript's own full path, already decoded by `parseMessageId`.
         const { OmpReader } = await import("../integrations/omp/reader.js");
         const reader = new OmpReader();
-        // 2026-08-20 fix (S2, .sisyphus/reviews/session-fixes-review/beta-code-review.md):
-        // a same-machine check alone is NOT sufficient before reading an
-        // arbitrary caller-supplied path -- `readTranscript` only verifies
-        // file-safety (regular file, non-symlink, size limit), never that
-        // the path is actually an eligible OMP transcript (under the
-        // session root, `.jsonl`, CD2+). Without this, a same-machine
-        // qualified ID naming ANY locally-readable, OMP-shaped JSONL file
-        // could be read and returned through the public `ei_fetch_message`/
-        // `ei --id` surface, regardless of whether it was ever actually
-        // imported. Resolving against `listTranscripts()`'s own returned
-        // set (the exact same discovery the importer itself uses) closes
-        // that gap: only a transcript this project would ACTUALLY import
-        // is ever readable through this resolver.
-        const eligiblePaths = new Set((await reader.listTranscripts()).map(r => r.path));
-        if (!eligiblePaths.has(parsed.session!)) return null;
-        const session = await reader.readTranscript(parsed.session!);
+        // A same-machine check alone is not enough before reading a
+        // caller-supplied path: the path must be a `.jsonl` regular file
+        // inside the sessions root, wherever the process runs from. The
+        // reader's gate decides that from stats alone, before any content is
+        // opened; `readTranscript` then still re-checks regular-file identity
+        // and is the only source of message ids, so a line-number id means the
+        // same line here as at import.
+        const located = await reader.locateTranscript(parsed.session!);
+        if (!located) return null;
+        const session = await reader.readTranscript(located.path);
         if (!session) return null;
         const idx = session.messages.findIndex(m => m.id === parsed.nativeId);
         if (idx === -1) return null;
 
-        // Speaker identity comes from THIS transcript's own resolved
-        // sub-agent (same canonicalization the importer uses to name its
-        // Persona), never a shared/generic name — an OMP transcript with
-        // no resolvable agent was never imported in the first place
-        // (importOmpSessions's own D3 fail-closed guard), so this is a
-        // defensive fallback for a direct probe, not an expected path.
-        const agentDisplayName = session.provenance.agent_id
-          ? resolveCanonicalAgent(session.provenance.agent_id).canonical
-          : "OMP Sub-Agent";
+        // Speakers are what the importer stored for the same line. A tree's
+        // root file is the main session: the assistant is the agent each
+        // message names. Any other file is a sub-agent transcript: the
+        // assistant is the agent its `session_init` names, and a user line is
+        // the parent agent's unless attributed to the human. An assistant is
+        // named by the persona the importer filed the line under, found in
+        // saved state with the importer's own match rule; with no state or no
+        // such persona it is the agent's canonical name.
+        let personas: PersonaEntity[] = [];
+        try {
+          personas = Object.values((await loadLatestState())?.personas ?? {}).map((p) => p.entity);
+        } catch {
+          // No readable state: canonical names.
+        }
+        const assistantName = (raw: string | undefined, fallback: string): string => {
+          const canonical = agentPersonaName(raw, fallback);
+          return matchAgentPersona(personas, canonical)?.display_name ?? canonical;
+        };
+        const subAgentName = assistantName(session.provenance.agent_id, SUB_AGENT_FALLBACK_PERSONA);
+        const speakerOf = (m: OmpMessage): ResolvedMessageSpeaker => {
+          if (located.isRootFile) {
+            return externalSpeaker(m.role, undefined, assistantName(m.agent, MAIN_SESSION_PERSONA));
+          }
+          return isParentAgentLine(m)
+            ? { kind: "agent", display_name: PARENT_AGENT_SPEAKER }
+            : externalSpeaker(m.role, undefined, subAgentName);
+        };
 
-        const container: ResolvedMessageContainer = { kind: "session", id: parsed.session!, display_name: agentDisplayName };
+        // The container is named by the transcript's file name: nothing about
+        // a project or a working directory is read or shown.
+        const container: ResolvedMessageContainer = {
+          kind: "session",
+          id: parsed.session!,
+          display_name: basename(located.path),
+        };
         const toOmp = (m: OmpMessage): ResolvedMessage => ({
           origin_kind: "omp",
           source_id: qualifyOmpMessage(parsed.machine!, parsed.session!, m.id),
           container,
-          speaker: externalSpeaker(m.role, undefined, agentDisplayName),
+          speaker: speakerOf(m),
           timestamp: m.timestamp,
           content: m.content,
           before: [],
