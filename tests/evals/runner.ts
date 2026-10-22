@@ -1,6 +1,7 @@
 import { writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import { hydratePromptPlaceholders } from "../../src/prompts/message-utils.js";
+import { KNOWN_MODEL_LIMITS } from "../../src/core/constants/known-model-limits.js";
 import type { Message } from "../../src/core/types/llm.js";
 
 export function hydratePrompt(
@@ -133,6 +134,8 @@ function resolveProvider(): { baseURL: string; model: string; authHeader: string
 }
 
 const PROVIDER = resolveProvider();
+// Same list the app uses: a model that rejects `temperature` (a 400) is sent none.
+const SEND_TEMPERATURE = KNOWN_MODEL_LIMITS[PROVIDER.model]?.temperature_disabled !== true;
 
 interface LLMCallOptions {
   tools?: unknown[];
@@ -170,7 +173,7 @@ async function callLLM(system: string, user: string, options: LLMCallOptions = {
   const body: Record<string, unknown> = {
     model: PROVIDER.model,
     messages,
-    temperature: 0.7,
+    ...(SEND_TEMPERATURE && { temperature: 0.7 }),
     ...options.extraBody,
   };
   if (options.tools?.length) body.tools = options.tools;
