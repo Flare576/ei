@@ -22,9 +22,15 @@ export function resolveCanonicalAgent(agentName: string): { canonical: string; a
   // names end up stored verbatim in OpenCode's SQLite message rows and come back to us here.
   // \p{Z} alone does NOT catch \u200B (Unicode category Cf, not Zs), so we must be explicit.
   agentName = agentName.replace(/^[\p{Z}\u200B\u200C\u200D\u2060\uFEFF]+|[\p{Z}\u200B\u200C\u200D\u2060\uFEFF]+$/gu, "");
+
+  // Strip a single-letter prefix ("s-architect") before any lookup so the alias table and
+  // the formatting below see the bare name; the original ID is still returned as an alias.
+  const originalId = agentName;
+  agentName = agentName.replace(/^[A-Za-z]-(?=[\s\S])/, "");
+
   for (const [canonical, variants] of Object.entries(AGENT_ALIASES)) {
     if (variants.includes(agentName)) {
-      return { canonical, aliases: variants };
+      return { canonical, aliases: variants.includes(originalId) ? [...variants] : [...variants, originalId] };
     }
   }
 
@@ -35,7 +41,7 @@ export function resolveCanonicalAgent(agentName: string): { canonical: string; a
   name = name.replace(/-/g, " ");
   const canonical = name.replace(/\b\w/g, (c) => c.toUpperCase());
 
-  return { canonical, aliases: [agentName] };
+  return { canonical, aliases: [originalId] };
 }
 
 export async function ensureAgentPersona(
