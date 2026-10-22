@@ -641,29 +641,7 @@ describe("resolveExternalMessage — codex", () => {
 // --- pi ----------------------------------------------------------------
 
 describe("resolveExternalMessage — pi", () => {
-  it("resolves a pi message with a per-message agent, using it for both speaker.id and display_name", async () => {
-    mockPiGetMessageById.mockResolvedValue({
-      message: { id: PI_MSG_ID, sessionId: PI_SESSION_ID, role: "assistant", content: "Hi from reviewer agent", timestamp: NOW, agent: "reviewer" },
-      before: [],
-      after: [],
-      session: { id: PI_SESSION_ID, title: "My Pi Session", cwd: "/tmp/proj", firstMessageAt: NOW, lastMessageAt: NOW, messages: [] },
-    });
-
-    const result = await resolveExternalMessage(PI_QUALIFIED_ID);
-
-    expect(result).toEqual({
-      origin_kind: "pi",
-      source_id: PI_QUALIFIED_ID,
-      container: { kind: "session", id: PI_SESSION_ID, display_name: "My Pi Session" },
-      speaker: { kind: "agent", id: "reviewer", display_name: "reviewer" },
-      timestamp: NOW,
-      content: "Hi from reviewer agent",
-      before: [],
-      after: [],
-    });
-  });
-
-  it("falls back to the fixed Pi persona name when no per-message agent is present", async () => {
+  it("uses the fixed Pi persona name for the assistant role", async () => {
     mockPiGetMessageById.mockResolvedValue({
       message: { id: PI_MSG_ID, sessionId: PI_SESSION_ID, role: "assistant", content: "vanilla pi", timestamp: NOW },
       before: [],
@@ -675,9 +653,9 @@ describe("resolveExternalMessage — pi", () => {
     expect(result.speaker).toEqual({ kind: "agent", display_name: "Pi" });
   });
 
-  it("T8: maps user role to speaker.kind human, with no speaker.id, even when a per-message agent is present", async () => {
+  it("T8: maps user role to speaker.kind human, with no speaker.id", async () => {
     mockPiGetMessageById.mockResolvedValue({
-      message: { id: PI_MSG_ID, sessionId: PI_SESSION_ID, role: "user", content: "Hi from the human", timestamp: NOW, agent: "reviewer" },
+      message: { id: PI_MSG_ID, sessionId: PI_SESSION_ID, role: "user", content: "Hi from the human", timestamp: NOW },
       before: [],
       after: [],
       session: { id: PI_SESSION_ID, title: "My Pi Session", cwd: "/tmp/proj", firstMessageAt: NOW, lastMessageAt: NOW, messages: [] },

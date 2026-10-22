@@ -20,16 +20,11 @@ import {
   type IPiReader,
 } from "./types.js";
 import { MIN_SESSION_AGE_MS, TWELVE_HOURS_MS } from "../constants.js";
-import {
-  ensureAgentPersona,
-  resolveCanonicalAgent,
-} from "../../core/personas/opencode-agent.js";
 
 export interface PiImportResult {
   sessionsProcessed: number;
   messagesImported: number;
   personaCreated: boolean;
-  personasCreated: string[];
   extractionScansQueued: number;
 }
 
@@ -65,7 +60,7 @@ function ensurePiPersona(
     id: crypto.randomUUID(),
     display_name: PI_PERSONA_NAME,
     entity: "system",
-    aliases: ["pi", "pi coding agent", "omp", "oh-my-pi"],
+    aliases: ["pi", "pi coding agent"],
     short_description: "Pi - minimal terminal coding harness",
     long_description:
       "Pi is a minimal terminal coding harness. Covers both vanilla Pi (earendil-works/pi) and the oh-my-pi fork (omp), which share the same JSONL session format.",
@@ -111,13 +106,6 @@ function updateProcessedState(stateManager: StateManager, session: PiSession): v
   });
 }
 
-async function isPiRunning(): Promise<boolean> {
-  return (
-    (await isProcessRunning("pi")) ||
-    (await isProcessRunning("omp"))
-  );
-}
-
 export async function importPiSessions(options: PiImporterOptions): Promise<PiImportResult> {
   const { stateManager, interface: eiInterface, signal } = options;
   const reader = options.reader ?? new PiReader();
@@ -126,7 +114,6 @@ export async function importPiSessions(options: PiImporterOptions): Promise<PiIm
     sessionsProcessed: 0,
     messagesImported: 0,
     personaCreated: false,
-    personasCreated: [],
     extractionScansQueued: 0,
   };
 
@@ -136,7 +123,7 @@ export async function importPiSessions(options: PiImporterOptions): Promise<PiIm
   const human = stateManager.getHuman();
   const processedSessions = human.settings?.pi?.processed_sessions ?? {};
   const now = Date.now();
-  const toolRunning = await isPiRunning();
+  const toolRunning = await isProcessRunning("pi");
 
   let targetSession: PiSession | null = null;
 
@@ -173,142 +160,56 @@ export async function importPiSessions(options: PiImporterOptions): Promise<PiIm
 
   if (signal?.aborted) return result;
 
-  const hasAgentAttribution = messages.some((m) => m.agent != null);
+  const personaExistedBefore = stateManager.persona_getByName(PI_PERSONA_NAME) !== null;
+  const persona = ensurePiPersona(stateManager, eiInterface);
+  result.personaCreated = !personaExistedBefore;
 
-  if (!hasAgentAttribution) {
-    // ─── Single-persona path (vanilla Pi / OMP without active agent) ────────
-    const personaExistedBefore = stateManager.persona_getByName(PI_PERSONA_NAME) !== null;
-    const persona = ensurePiPersona(stateManager, eiInterface);
-    result.personaCreated = !personaExistedBefore;
+  const existingMsgs = stateManager.messages_get(persona.id);
+  const externalIds = existingMsgs.filter((m) => m.external === true).map((m) => m.id);
+  if (externalIds.length > 0) {
+    stateManager.messages_remove(persona.id, externalIds);
+  }
 
-    const existingMsgs = stateManager.messages_get(persona.id);
-    const externalIds = existingMsgs.filter((m) => m.external === true).map((m) => m.id);
-    if (externalIds.length > 0) {
-      stateManager.messages_remove(persona.id, externalIds);
-    }
+  const cutoffIso = processedSessions[targetSession.id] ?? null;
+  const cutoffMs = cutoffIso ? new Date(cutoffIso).getTime() : null;
+  const toAnalyze: Message[] = [];
 
-    const cutoffIso = processedSessions[targetSession.id] ?? null;
-    const cutoffMs = cutoffIso ? new Date(cutoffIso).getTime() : null;
-    const toAnalyze: Message[] = [];
+  for (const msg of messages) {
+    const msgMs = new Date(msg.timestamp).getTime();
+    const isOld = cutoffMs !== null && msgMs < cutoffMs;
+    const eiMsg = isOld
+      ? convertToPreMarkedEiMessage(msg, targetSession.id, qualify)
+      : convertToEiMessage(msg, targetSession.id, qualify);
 
-    for (const msg of messages) {
-      const msgMs = new Date(msg.timestamp).getTime();
-      const isOld = cutoffMs !== null && msgMs < cutoffMs;
-      const eiMsg = isOld
-        ? convertToPreMarkedEiMessage(msg, targetSession.id, qualify)
-        : convertToEiMessage(msg, targetSession.id, qualify);
+    stateManager.messages_append(persona.id, eiMsg);
+    result.messagesImported++;
+    if (!isOld) toAnalyze.push(eiMsg);
+  }
 
-      stateManager.messages_append(persona.id, eiMsg);
-      result.messagesImported++;
-      if (!isOld) toAnalyze.push(eiMsg);
-    }
+  stateManager.messages_sort(persona.id);
+  eiInterface?.onMessageAdded?.(persona.id);
 
-    stateManager.messages_sort(persona.id);
-    eiInterface?.onMessageAdded?.(persona.id);
+  if (toAnalyze.length > 0 && !signal?.aborted) {
+    const allInState = stateManager.messages_get(persona.id);
+    const analyzeIds = new Set(toAnalyze.map((m) => m.id));
+    const analyzeStartIndex = allInState.findIndex((m) => analyzeIds.has(m.id));
+    const contextMsgs = analyzeStartIndex > 0 ? allInState.slice(0, analyzeStartIndex) : [];
 
-    if (toAnalyze.length > 0 && !signal?.aborted) {
-      const allInState = stateManager.messages_get(persona.id);
-      const analyzeIds = new Set(toAnalyze.map((m) => m.id));
-      const analyzeStartIndex = allInState.findIndex((m) => analyzeIds.has(m.id));
-      const contextMsgs = analyzeStartIndex > 0 ? allInState.slice(0, analyzeStartIndex) : [];
+    const context: ExtractionContext = {
+      personaId: persona.id,
+      channelDisplayName: persona.display_name,
+      messages_context: contextMsgs,
+      messages_analyze: toAnalyze,
+      sources: [`pi:${getMachineId()}:${targetSession.id}`],
+    };
 
-      const context: ExtractionContext = {
-        personaId: persona.id,
-        channelDisplayName: persona.display_name,
-        messages_context: contextMsgs,
-        messages_analyze: toAnalyze,
-        sources: [`pi:${getMachineId()}:${targetSession.id}`],
-      };
-
-      queuePersonRewritePhase(stateManager);
-      queueTopicRewritePhase(stateManager);
-      queueAllScans(context, stateManager, {
-        extraction_model: human.settings?.pi?.extraction_model,
-        external_filter: "only",
-      });
-      result.extractionScansQueued += 4;
-    }
-  } else {
-    // ─── Multi-agent path (OMP sessions with agent attribution) ─────────────
-    const byPersonaId = new Map<string, { persona: NonNullable<ReturnType<typeof stateManager.persona_getByName>>; msgs: typeof messages; agentName: string }>();
-
-    for (const msg of messages) {
-      const agentName = msg.agent ?? PI_PERSONA_NAME;
-      let persona = stateManager.persona_getByName(agentName);
-      if (!persona) {
-        const { canonical } = resolveCanonicalAgent(agentName);
-        persona = stateManager.persona_getByName(canonical);
-      }
-      if (!persona) {
-        persona = await ensureAgentPersona(agentName, {
-          stateManager,
-          interface: eiInterface,
-          reader: undefined,
-        });
-        result.personasCreated.push(agentName);
-      }
-      const bucket = byPersonaId.get(persona.id);
-      if (bucket) {
-        bucket.msgs.push(msg);
-      } else {
-        byPersonaId.set(persona.id, { persona, msgs: [msg], agentName });
-      }
-    }
-
-    const cutoffIso = processedSessions[targetSession.id] ?? null;
-    const cutoffMs = cutoffIso ? new Date(cutoffIso).getTime() : null;
-    let anyPersonaHasChanges = false;
-
-    for (const [, { persona, msgs: agentMsgs }] of byPersonaId) {
-      const existingMsgs = stateManager.messages_get(persona.id);
-      const externalIds = existingMsgs.filter((m) => m.external === true).map((m) => m.id);
-      if (externalIds.length > 0) {
-        stateManager.messages_remove(persona.id, externalIds);
-      }
-
-      const toAnalyze: Message[] = [];
-      for (const msg of agentMsgs) {
-        const msgMs = new Date(msg.timestamp).getTime();
-        const isOld = cutoffMs !== null && msgMs < cutoffMs;
-        const eiMsg = isOld
-          ? convertToPreMarkedEiMessage(msg, targetSession.id, qualify)
-          : convertToEiMessage(msg, targetSession.id, qualify);
-
-        stateManager.messages_append(persona.id, eiMsg);
-        result.messagesImported++;
-        if (!isOld) toAnalyze.push(eiMsg);
-      }
-
-      stateManager.messages_sort(persona.id);
-      eiInterface?.onMessageAdded?.(persona.id);
-
-      if (toAnalyze.length > 0 && !signal?.aborted) {
-        const allInState = stateManager.messages_get(persona.id);
-        const analyzeIds = new Set(toAnalyze.map((m) => m.id));
-        const analyzeStartIndex = allInState.findIndex((m) => analyzeIds.has(m.id));
-        const contextMsgs = analyzeStartIndex > 0 ? allInState.slice(0, analyzeStartIndex) : [];
-
-        const context: ExtractionContext = {
-          personaId: persona.id,
-          channelDisplayName: persona.display_name,
-          messages_context: contextMsgs,
-          messages_analyze: toAnalyze,
-          sources: [`pi:${getMachineId()}:${targetSession.id}`],
-        };
-
-        anyPersonaHasChanges = true;
-        queueAllScans(context, stateManager, {
-          extraction_model: human.settings?.pi?.extraction_model,
-          external_filter: "only",
-        });
-        result.extractionScansQueued += 4;
-      }
-    }
-
-    if (anyPersonaHasChanges && !signal?.aborted) {
-      queuePersonRewritePhase(stateManager);
-      queueTopicRewritePhase(stateManager);
-    }
+    queuePersonRewritePhase(stateManager);
+    queueTopicRewritePhase(stateManager);
+    queueAllScans(context, stateManager, {
+      extraction_model: human.settings?.pi?.extraction_model,
+      external_filter: "only",
+    });
+    result.extractionScansQueued += 4;
   }
 
   result.sessionsProcessed = 1;
