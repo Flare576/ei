@@ -97,6 +97,8 @@ EVAL_MODEL=qwen/qwen3.6-35b-a3b EVAL_NO_THINKING=1 npm run test:evals -- topic-s
 LOCAL_LLM_BASE_URL=http://192.168.68.117:1234/v1 EVAL_MODEL=google/gemma-4-26b-a4b EVAL_NO_THINKING=1 npm run test:evals -- topic-scan
 ```
 
+The eval runner omits `temperature` from requests when the selected model (`EVAL_MODEL`) is marked `temperature_disabled` in the app's own `KNOWN_MODEL_LIMITS` list (`src/core/constants/known-model-limits.ts`); some models, such as the 5-5 Haiku, Sonnet and Opus models, reject it with a 400. So when a new model rejects temperature, fix it by marking it there — the runner has no separate list.
+
 ## Adding a new eval case
 
 1. Add message fixtures near the top of the `.eval.ts` file

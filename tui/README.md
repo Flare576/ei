@@ -2,7 +2,7 @@
 
 Ei TUI is built with OpenTUI and SolidJS.
 
-Coding tool integrations (OpenCode, Claude Code, Cursor, Codex): enable via `/settings` · export data via [CLI](../src/cli/README.md)
+Coding tool integrations ([supported tools](#coding-tool-integrations)): enable via `/settings` · export data via [CLI](../src/cli/README.md)
 
 ## What do you want to do?
 
@@ -41,7 +41,7 @@ bunx ei-tui
 
 ## Coding Tool Integrations
 
-Enable any or all six in `/settings`. They work independently and feed into the same knowledge base.
+Enable any or all of them in `/settings`. They work independently and feed into the same knowledge base.
 
 | Tool | Settings key | Session data location |
 |------|-------------|----------------------|
@@ -54,7 +54,7 @@ Enable any or all six in `/settings`. They work independently and feed into the 
 
 Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider.
 
-All six tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `bunx ei-tui` and step through the onboarding wizard (or re-run it anytime with `/onboarding`) to wire up context injection everywhere it's detected. MCP itself is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](../src/cli/README.md#mcp-server) for manual MCP setup.
+All of these tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `bunx ei-tui` and step through the onboarding wizard (or re-run it anytime with `/onboarding`) to wire up context injection everywhere it's detected. MCP itself is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](../src/cli/README.md#mcp-server) for manual MCP setup.
 
 ## Slack Integration
 

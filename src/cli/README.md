@@ -45,6 +45,7 @@ ei --id "claudecode:my-machine:session-uuid:message-uuid"
 ei --id "cursor:my-machine:composer-uuid:bubble-uuid"
 ei --id "codex:my-machine:thread-uuid:evt_42"
 ei --id "pi:my-machine:session-uuid:session-uuid/entry-id"
+ei --id "omp:my-machine:%2Fhome%2Fme%2F.omp%2Fagent%2Fsessions%2Fproject%2F2026-01-01T00-00-00-000Z_0123abcd.jsonl:entry-id"
 ```
 
 A quote's `id` and its `message_id` are different addresses: `id` identifies the quote record itself (what `ei --id` resolves, and what `ei fix quote`, `ei relink quote`, and `ei remove quote` take), while `message_id` identifies the *source message* it was lifted from — nullable, and shared by several quotes lifted from the same message, and what `ei create quote` quotes *from*. Pipe `message_id` to `ei --id` to read the original conversation; use `id` when you mean one specific quote.
