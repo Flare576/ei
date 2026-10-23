@@ -213,14 +213,16 @@ queue scans would take days.)
   `yield` tool call, so a completion marker exists, but it marks a pause, not an end.) The cost is
   latency: what a sub-agent learned during a long run reaches Ei after the tree settles.
 - **Crash resume**: a persisted cursor `settings.omp.current_tree = { tree: <root UUID>, planned_at:
-  <T_plan ISO>, done: [<block key>, …] }`, where a block key identifies one block: the transcript's path
-  relative to the tree directory for a sub-agent block, and `<root file name>|<canonical persona name>` for
-  each main-session block (a main session yields one block per persona, §3, so the file alone is not a unique
-  key). The key is stable across a restart. A block is added to `done` once its scans are queued — the
-  queue is itself persisted, so those scans survive a restart — and the cursor is cleared in the same
-  `setHuman` call that writes the tree's watermark. Only one tree is in progress at a time, so the
-  cursor is bounded by that one tree: `done` holds one key per queued block of the tree in progress (a
-  skipped block is never listed) and is cleared with the cursor. On restart the importer resumes
+  <T_plan ISO>, done: [<member key>, …] }`, where a member key identifies one unit of handled work: the
+  transcript's path relative to the tree directory for a sub-agent transcript, and `<root file
+  name>|<canonical agent name>` for each canonical agent name a main session holds. A persona is never what
+  is recorded, because which names group under one persona can change between ticks (an alias added to a
+  stored persona, a rename); the keys are stable across a restart, and each plan excludes only the members
+  already in `done`, so a group that grows never counts an unhandled member as handled. A member is added to
+  `done` once its scans are queued — the queue is itself persisted, so those scans survive a restart — and
+  the cursor is cleared in the same `setHuman` call that writes the tree's watermark. Only one tree is in
+  progress at a time, so the cursor is bounded by that one tree: `done` holds one key per queued member of
+  the tree in progress (a member with nothing to import is never listed) and is cleared with the cursor. On restart the importer resumes
   that tree with its original `planned_at` rather than re-planning, once the tree has been quiet for the guard's window.
 
 ### 5. Who is speaking, and which persona it becomes
