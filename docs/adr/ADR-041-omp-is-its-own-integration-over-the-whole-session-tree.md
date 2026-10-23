@@ -175,13 +175,28 @@ Every block, sub-agent blocks included, gets the same extraction scans (facts, t
 no scan is skipped or reduced for a sub-agent block, and no eligibility rule or hardcoded agent list is
 added for extraction. (Signal-scan eligibility, §6, is separate.)
 
-The poll interval governs how often Ei *looks* for new work, not how fast it drains known work: after a
-block queues scans and leaves its tree in progress, the next block starts as soon as the queue drains,
-without waiting out the interval. A tree's last block ends that run: the next *valid* tree is found on the
-next poll, where a valid tree is one with something to import. A tree with nothing to import (every block
-skipped or unreadable) is marked complete and the pass moves straight on to the next valid tree instead of
-using up the poll. (At the default 60 s interval and one tree with work per poll, a backlog of a few
-thousand trees that each queue scans would take days.)
+**Pacing, and how it differs from the other importers.** Every other importer imports one whole session per
+poll. OMP imports one *block* at a time, and a tree has many blocks, so its pacing is deliberately different:
+
+- The poll interval (`settings.omp.polling_interval_ms`) gates the start of a pass and the start of each
+  *tree*. It does not gate the blocks of a tree that is already in progress: after a block queues scans and
+  leaves its tree in progress, the next block starts as soon as the queue drains, without waiting out the
+  interval. Ei looks for new trees on the interval and drains a known tree as fast as the LLM allows.
+- The real throttle is the queue itself. The importer never starts a block while anything is queued, so at
+  most one block's scans are ever waiting, and one tree is in progress at a time. A tree's blocks are one
+  session's worth of fan-out, no more.
+- An OMP backlog therefore keeps the LLM (a local model server in particular) continuously busy instead of
+  idling out the remainder of each interval between blocks. Native conversation is not starved: queued
+  conversational messages take priority over extraction work. The first run of a large backlog still takes a
+  long time (at the default 60 s interval and one tree with work per poll, a few thousand trees that each
+  queue scans would take days), but it never queues in bulk.
+- A tree's last block ends the run: the next *valid* tree is found on the next poll, where a valid tree is
+  one with something to import. A tree with nothing to import (every block skipped or unreadable) is marked
+  complete and the pass moves straight on to the next valid tree instead of using up the poll.
+- This is a deliberate departure from "one unit of work per interval" and is recorded as an experiment. The
+  bypass is a single flag in the scheduler (`ompContinuation` in `core/integration-sync-manager.ts`); making
+  the interval gate every block as well means removing that flag and its two assignments, with no change to
+  the importer.
 
 ### 4. Progress is a watermark per tree, keyed by root session UUID
 
