@@ -63,7 +63,7 @@ function ensurePiPersona(
     aliases: ["pi", "pi coding agent"],
     short_description: "Pi - minimal terminal coding harness",
     long_description:
-      "Pi is a minimal terminal coding harness. Covers both vanilla Pi (earendil-works/pi) and the oh-my-pi fork (omp), which share the same JSONL session format.",
+      "Pi is a minimal terminal coding harness. Covers vanilla Pi (earendil-works/pi) and its JSONL session format.",
     group_primary: PI_GROUP,
     groups_visible: [PI_GROUP],
     traits: seedTraits,
