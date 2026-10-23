@@ -378,6 +378,8 @@ its source event must be **refused at write time** rather than stored with a los
 locator must encode the **traversal path** to the transcript, not its dot-name, for the same reason CD is
 depth-based (item 8) — a dot-name is a display label, not an address.
 
+**Settled by ADR-041 section 7:** OMP message ids use the `omp:` form, with a stable line-number identifier for entries that have no id.
+
 **(d) Whether the human ever saw it — partly decided, presentation deferred with item 9.** The distinction
 is already recoverable at read time and is not left to inference: CD2+ material carries `harness`,
 `agent_id`, `agent_definition_ref`, `definition_revision`, and `mode: "delegated"`, and lives in the

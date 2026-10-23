@@ -102,6 +102,8 @@ resolve that inconsistency. It is flagged here explicitly so it isn't silently "
 inconsistency the next time someone touches `src/integrations/pi/` — if it's worth splitting, that
 is its own future ADR and issue, not a drive-by rename riding on this one.
 
+**Resolved by ADR-041:** OMP is its own integration, separate from Pi, so the Pi/OMP persona question above is settled there.
+
 ## Alternatives Considered
 
 ### Alternative A: Rename `claudecode` → `claude`, one vendor-level integration for Chat + CoWork + Code
