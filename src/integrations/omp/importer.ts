@@ -36,18 +36,25 @@ export interface OmpImporterOptions {
 
 /**
  * A block is the unit of work: one sub-agent transcript, or one persona's
- * messages in a main session. `key` identifies it within its tree and is stable
- * across a restart. `load` yields the block's messages and the agent they are
- * filed under; `provenance` is present for sub-agent blocks only, and
- * `hasIdentity` says whether the transcript recorded an agent at all.
+ * messages in a main session. `key` is the block's current label, used in logs
+ * (a main-session label carries the persona's display name, so it can change
+ * between runs). `members` are the stable units a crash cursor records as
+ * handled: a sub-agent transcript is its own member (its member and its key are
+ * the same string), and a main-session block's members are the canonical agent
+ * names it holds, so a persona is never what is recorded as handled. `load`
+ * yields the block's messages, the member each belongs to when that is not the
+ * block's own key, and the agent they are filed under; `provenance` is present for sub-agent blocks only, and `hasIdentity`
+ * says whether the transcript recorded an agent at all.
  */
 interface Block {
   key: string;
+  members: string[];
   kind: "main-session" | "sub-agent";
   /** The transcript file: the message-ID session segment and the source tag. */
   path: string;
   load(): Promise<{
     messages: OmpMessage[];
+    memberOf?: (message: OmpMessage) => string;
     agentName: string;
     hasIdentity: boolean;
     provenance?: OmpProvenance;
@@ -88,8 +95,9 @@ function updateOmpSettings(stateManager: StateManager, patch: Partial<OmpSetting
  * persona an earlier unmatched group's creation will install (its first
  * canonical name, with the aliases that name resolves to), and joins that
  * persona's group; otherwise it starts a new group. A resumed plan, with those
- * personas now stored, therefore groups the same way. The block key uses the
- * persona's display name, or the group's first canonical name. Planning only
+ * personas now stored, groups the same way unless a persona was edited meanwhile;
+ * either way the cursor records members, not groups, so no message is skipped.
+ * The block key uses the persona's display name, or the group's first canonical name. Planning only
  * reads personas; it creates none.
  */
 async function planBlocks({ reader, stateManager }: Env, tree: OmpTree): Promise<Block[]> {
@@ -98,7 +106,8 @@ async function planBlocks({ reader, stateManager }: Env, tree: OmpTree): Promise
   const root = await reader.readTranscript(tree.rootPath);
   if (root) {
     const rootName = tree.rootPath.slice(Math.max(tree.rootPath.lastIndexOf("/"), tree.rootPath.lastIndexOf("\\")) + 1);
-    type Group = { name: string; agentName: string; messages: OmpMessage[] };
+    type Group = { name: string; agentName: string; messages: OmpMessage[]; members: Set<string> };
+    const memberByMessage = new Map<OmpMessage, string>();
     const candidates: { display_name: string; aliases?: string[]; group?: Group }[] = stateManager
       .persona_getAll()
       .map((p) => ({ display_name: p.display_name, aliases: p.aliases }));
@@ -111,23 +120,32 @@ async function planBlocks({ reader, stateManager }: Env, tree: OmpTree): Promise
         const { canonical, aliases } = resolveCanonicalAgent(agentName);
         const match = matchAgentPersona(candidates, canonical);
         if (match) {
-          match.group ??= { name: match.display_name, agentName, messages: [] };
+          match.group ??= { name: match.display_name, agentName, messages: [], members: new Set() };
           group = match.group;
         } else {
-          group = { name: canonical, agentName, messages: [] };
+          group = { name: canonical, agentName, messages: [], members: new Set() };
           candidates.push({ display_name: canonical, aliases, group });
         }
         if (!groups.includes(group)) groups.push(group);
         byAgentName.set(agentName, group);
       }
+      const member = `${rootName}|${resolveCanonicalAgent(agentName).canonical}`;
+      group.members.add(member);
+      memberByMessage.set(message, member);
       group.messages.push(message);
     }
     for (const group of groups) {
       blocks.push({
         key: `${rootName}|${group.name}`,
+        members: [...group.members],
         kind: "main-session",
         path: tree.rootPath,
-        load: async () => ({ messages: group.messages, agentName: group.agentName, hasIdentity: false }),
+        load: async () => ({
+          messages: group.messages,
+          memberOf: (message) => memberByMessage.get(message)!,
+          agentName: group.agentName,
+          hasIdentity: false,
+        }),
       });
     }
   }
@@ -145,6 +163,7 @@ async function planBlocks({ reader, stateManager }: Env, tree: OmpTree): Promise
   for (const { path } of subAgents) {
     blocks.push({
       key: path.slice(siblingDir.length + 1),
+      members: [path.slice(siblingDir.length + 1)],
       kind: "sub-agent",
       path,
       load: async () => {
@@ -175,8 +194,11 @@ async function planBlocks({ reader, stateManager }: Env, tree: OmpTree): Promise
  * (none: the beginning of time), messages at or before it are stored pre-marked
  * (never extracted), messages after it and at or before `plannedAtMs` are
  * extracted, later ones are left for a later pass. `plannedAtMs` becomes the
- * watermark once every block has been handled. `done` holds the keys of blocks
- * whose scans were already queued by an earlier call.
+ * watermark once every block has been handled. `done` holds the members (see
+ * `Block`) whose scans an earlier call already queued: only those are excluded
+ * from new work, however the persona groups look now, and a handled member's
+ * in-window messages stay in a block that also holds unhandled ones as
+ * already-marked context.
  */
 async function importTree(env: Env, tree: OmpTree, plannedAtMs: number, done: string[]): Promise<boolean> {
   const { stateManager, eiInterface, signal, result } = env;
@@ -188,17 +210,20 @@ async function importTree(env: Env, tree: OmpTree, plannedAtMs: number, done: st
 
   for (const [index, block] of blocks.entries()) {
     if (signal?.aborted) return true;
-    if (done.includes(block.key)) continue;
+    if (block.members.every((member) => done.includes(member))) continue;
 
     const loaded = await block.load();
     if (!loaded) continue;
 
     const before = loaded.messages.filter((m) => Date.parse(m.timestamp) <= previousMs);
+    const memberOf = (m: OmpMessage) => loaded.memberOf?.(m) ?? block.key;
     const inWindow = loaded.messages.filter((m) => {
       const ms = Date.parse(m.timestamp);
       return ms > previousMs && ms <= plannedAtMs;
     });
-    if (inWindow.length === 0) continue;
+    const handled = inWindow.filter((m) => done.includes(memberOf(m)));
+    const pending = inWindow.filter((m) => !done.includes(memberOf(m)));
+    if (pending.length === 0) continue;
 
     // One block per persona at a time: nothing starts while earlier scans are pending.
     if (stateManager.queue_length() > 0) return true;
@@ -215,10 +240,10 @@ async function importTree(env: Env, tree: OmpTree, plannedAtMs: number, done: st
     }
 
     const convertOptions = { parentSpeaker: block.kind === "sub-agent" };
-    for (const message of before) {
+    for (const message of [...before, ...handled]) {
       stateManager.messages_append(persona.id, convertToPreMarkedEiMessage(message, block.path, qualifyOmpMessage, convertOptions));
     }
-    const toAnalyze: Message[] = inWindow.map((m) => convertToEiMessage(m, block.path, qualifyOmpMessage, convertOptions));
+    const toAnalyze: Message[] = pending.map((m) => convertToEiMessage(m, block.path, qualifyOmpMessage, convertOptions));
     for (const message of toAnalyze) {
       stateManager.messages_append(persona.id, message);
     }
@@ -253,9 +278,9 @@ async function importTree(env: Env, tree: OmpTree, plannedAtMs: number, done: st
     result.blocksQueued++;
 
     // Recorded only now that the scans are queued, so a crash before this point redoes the block.
-    done = [...done, block.key];
+    done = [...done, ...new Set(pending.map(memberOf))];
     updateOmpSettings(stateManager, { current_tree: { tree: tree.id, planned_at: plannedAt, done } });
-    console.log(`[OMP] Queued ${inWindow.length} message(s) from ${stripControlChars(block.key)}`);
+    console.log(`[OMP] Queued ${pending.length} message(s) from ${stripControlChars(block.key)}`);
 
     if (index < blocks.length - 1) return true;
     break;

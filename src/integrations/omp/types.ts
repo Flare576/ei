@@ -105,8 +105,10 @@ export interface OmpSettings {
   /**
    * The tree being imported block by block, written after each block's scans are
    * queued and cleared in the same write that records the tree's watermark.
-   * `planned_at` is the pass's original planning time; `done` lists the keys of
-   * blocks whose scans were queued (a skipped block is never listed).
+   * `planned_at` is the pass's original planning time; `done` lists the members
+   * whose scans were queued: a sub-agent transcript's key, or a main-session
+   * canonical agent name with its transcript (never a persona, whose grouping can
+   * change); a member with nothing to import is never listed.
    */
   current_tree?: { tree: string; planned_at: string; done: string[] };
 }
