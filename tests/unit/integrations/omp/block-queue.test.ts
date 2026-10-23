@@ -8,6 +8,7 @@ import { StateManager } from "../../../../src/core/state-manager.js";
 import { ensureAgentPersona } from "../../../../src/core/personas/opencode-agent.js";
 import { ContextStatus, type Message } from "../../../../src/core/types.js";
 import * as ceremony from "../../../../src/core/orchestrators/ceremony.js";
+import * as extraction from "../../../../src/core/orchestrators/human-extraction.js";
 import { createMockStorage } from "../../../helpers/mock-storage.js";
 import { ompHeader, ompMessage, ompSubAgent, writeOmpTree } from "../shared/omp-transcript-fixtures.js";
 
@@ -309,6 +310,243 @@ describe("OMP block queue and restart", () => {
     expect((await run(PLAN + 3_600_000)).treesCompleted).toBe(1);
     expect(append.mock.calls.map(([, m]) => m.content)).toEqual(["second persona", "descendant"]);
     expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+  });
+
+  // Tested by `Beta` — 2026-10-22
+  it("files main-session names that are aliases of one stored persona in a single block", async () => {
+    const quality = await ensureAgentPersona("Quality", { stateManager: sm });
+    expect(sm.persona_update(quality.id, { aliases: ["reviewer", "auditor"] })).toBe(true);
+    const personasBefore = sm.persona_getAll().map((p) => p.id);
+    expect(sm.persona_getAll().some((p) => p.display_name === "Reviewer")).toBe(false);
+    expect(sm.persona_getAll().some((p) => p.display_name === "Auditor")).toBe(false);
+    const contents = ["first", "second", "third", "fourth"];
+    const agents = ["reviewer", "auditor", "reviewer", "auditor"];
+    await writeOmpTree(root, {
+      stem: `quality_${TREE}`,
+      main: [ompHeader({ id: TREE }), ...contents.map((text, i) =>
+        ompMessage("assistant", text, { agent: agents[i], id: `quality-${i}`, timestamp: iso(PLAN - 2 * 86_400_000 + (i + 1) * 60_000) }))],
+      mtime: new Date("2026-08-02T00:00:00.000Z"),
+    });
+    const scans = vi.spyOn(extraction, "queueAllScans");
+    const remove = vi.spyOn(sm, "messages_remove");
+    const append = vi.spyOn(sm, "messages_append");
+
+    expect(await run()).toEqual({ blocksQueued: 1, treesCompleted: 1, scansQueued: expect.any(Number) });
+    expect(sm.queue_length()).toBeGreaterThan(0);
+    expect(scans).toHaveBeenCalledTimes(1);
+    expect(scans.mock.calls[0][0].personaId).toBe(quality.id);
+    expect(scans.mock.calls[0][0].messages_analyze.map((m) => m.content)).toEqual(contents);
+    expect(externalText(sm, quality.id)).toEqual(contents);
+    expect(append.mock.calls.map(([, m]) => m.content)).toEqual(contents);
+    expect(remove).not.toHaveBeenCalled();
+
+    expect(await run()).toEqual({ blocksQueued: 0, treesCompleted: 0, scansQueued: 0 });
+    drain(sm);
+    expect(await run()).toEqual({ blocksQueued: 0, treesCompleted: 0, scansQueued: 0 });
+    expect(scans).toHaveBeenCalledTimes(1);
+    expect(append).toHaveBeenCalledTimes(4);
+    expect(remove).not.toHaveBeenCalled();
+    expect(externalText(sm, quality.id)).toEqual(contents);
+    expect(sm.persona_getAll().map((p) => p.id)).toEqual(personasBefore);
+    expect(sm.persona_getAll().some((p) => p.display_name === "Reviewer")).toBe(false);
+    expect(sm.persona_getAll().some((p) => p.display_name === "Auditor")).toBe(false);
+  });
+
+  it("groups differently-spelled names of one unstored persona into one block and keeps another persona separate", async () => {
+    const written = await writeOmpTree(root, {
+      stem: `spellings_${TREE}`,
+      main: [ompHeader({ id: TREE }),
+        ompMessage("assistant", "spelled lower", { agent: "reviewer", id: "m1", timestamp: iso(PLAN - 2 * 86_400_000 + 60_000) }),
+        ompMessage("assistant", "spelled title", { agent: "Reviewer", id: "m2", timestamp: iso(PLAN - 2 * 86_400_000 + 120_000) }),
+        ompMessage("assistant", "spelled upper", { agent: "REVIEWER", id: "m3", timestamp: iso(PLAN - 2 * 86_400_000 + 180_000) }),
+        ompMessage("assistant", "worker only", { agent: "worker", id: "m4", timestamp: iso(PLAN - 2 * 86_400_000 + 240_000) })],
+      children: { A: ompSubAgent({ agent: "other", messages: [ompMessage("assistant", "child work", { id: "c1", timestamp: iso(PLAN - 2 * 86_400_000 + 300_000) })] }) },
+      mtime: new Date("2026-08-02T00:00:00.000Z"),
+    });
+    const base = path.basename(written.rootFile);
+    expect(sm.persona_getByName("Reviewer")).toBeNull();
+    expect(sm.persona_getByName("Worker")).toBeNull();
+    const scans = vi.spyOn(extraction, "queueAllScans");
+
+    expect((await run()).blocksQueued).toBe(1);
+    const reviewer = sm.persona_getByName("Reviewer")!;
+    expect(reviewer).not.toBeNull();
+    expect(scans.mock.calls[0][0].messages_analyze.map((m) => m.content)).toEqual(["spelled lower", "spelled title", "spelled upper"]);
+    expect(externalText(sm, reviewer.id)).toEqual(["spelled lower", "spelled title", "spelled upper"]);
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`]);
+    expect(sm.persona_getByName("Worker")).toBeNull();
+
+    drain(sm);
+    expect((await run(PLAN + 3_600_000)).blocksQueued).toBe(1);
+    const worker = sm.persona_getByName("Worker")!;
+    expect(worker).not.toBeNull();
+    expect(worker.id).not.toBe(reviewer.id);
+    expect(externalText(sm, worker.id)).toEqual(["worker only"]);
+    expect(externalText(sm, reviewer.id)).toEqual(["spelled lower", "spelled title", "spelled upper"]);
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`, `${base}|Worker`]);
+
+    drain(sm);
+    expect((await run(PLAN + 3_600_000)).treesCompleted).toBe(1);
+    expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+    expect(sm.getHuman().settings?.omp?.current_tree).toBeUndefined();
+  });
+
+  it("resumes after a newly created first main persona without redoing its block", async () => {
+    const written = await writeOmpTree(root, {
+      stem: `restart-spellings_${TREE}`,
+      main: [ompHeader({ id: TREE }),
+        ompMessage("assistant", "spelled lower", { agent: "reviewer", id: "m1", timestamp: iso(PLAN - 2 * 86_400_000 + 60_000) }),
+        ompMessage("assistant", "spelled title", { agent: "Reviewer", id: "m2", timestamp: iso(PLAN - 2 * 86_400_000 + 120_000) }),
+        ompMessage("assistant", "spelled upper", { agent: "REVIEWER", id: "m3", timestamp: iso(PLAN - 2 * 86_400_000 + 180_000) }),
+        ompMessage("assistant", "worker only", { agent: "worker", id: "m4", timestamp: iso(PLAN - 2 * 86_400_000 + 240_000) })],
+      children: { A: ompSubAgent({ agent: "Other", messages: [ompMessage("assistant", "child work", { id: "c1", timestamp: iso(PLAN - 2 * 86_400_000 + 300_000) })] }) },
+      mtime: new Date("2026-08-02T00:00:00.000Z"),
+    });
+    const base = path.basename(written.rootFile);
+    expect(sm.persona_getByName("Reviewer")).toBeNull();
+    const scans = vi.spyOn(extraction, "queueAllScans");
+    const realSetHuman = sm.setHuman.bind(sm);
+    const crash = vi.spyOn(sm, "setHuman").mockImplementation((human) => {
+      realSetHuman(human);
+      if (human.settings?.omp?.current_tree?.done.length === 1) throw new Error("crash after first main persona");
+    });
+    await expect(run()).rejects.toThrow("crash after first main persona");
+    crash.mockRestore();
+    const cursor = structuredClone(sm.getHuman().settings?.omp?.current_tree);
+    expect(cursor?.done).toEqual([`${base}|Reviewer`]);
+    expect(cursor?.planned_at).toBe(iso(PLAN));
+    const reviewer = sm.persona_getByName("Reviewer")!;
+    expect(reviewer).not.toBeNull();
+    expect(externalText(sm, reviewer.id)).toEqual(["spelled lower", "spelled title", "spelled upper"]);
+    expect(scans).toHaveBeenCalledTimes(1);
+    expect(scans.mock.calls[0][0].personaId).toBe(reviewer.id);
+    expect(scans.mock.calls[0][0].messages_analyze.map((m) => m.content)).toEqual(["spelled lower", "spelled title", "spelled upper"]);
+    drain(sm);
+
+    const remove = vi.spyOn(sm, "messages_remove");
+    const append = vi.spyOn(sm, "messages_append");
+    expect((await run(PLAN + 3_600_000)).blocksQueued).toBe(1);
+    const current = sm.getHuman().settings?.omp?.current_tree;
+    expect(current?.planned_at).toBe(iso(PLAN));
+    expect(current?.done).toHaveLength(2);
+    expect(current?.done[0]).toBe(`${base}|Reviewer`);
+    expect(current?.done[1]).not.toBe(current?.done[0]);
+    const worker = sm.persona_getByName("Worker")!;
+    expect(worker).not.toBeNull();
+    expect(remove.mock.calls.some(([id]) => id === reviewer.id)).toBe(false);
+    expect(append.mock.calls.map(([, m]) => m.content)).toEqual(["worker only"]);
+    expect(scans).toHaveBeenCalledTimes(2);
+    expect(scans.mock.calls[1][0].personaId).toBe(worker.id);
+    expect(externalText(sm, reviewer.id)).toEqual(["spelled lower", "spelled title", "spelled upper"]);
+
+    drain(sm);
+    expect((await run(PLAN + 3_600_000)).treesCompleted).toBe(1);
+    expect(append.mock.calls.map(([, m]) => m.content)).toEqual(["worker only", "child work"]);
+    expect(scans).toHaveBeenCalledTimes(3);
+    expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+  });
+
+  it("files one block for names made aliases by creating the persona and does not redo it after a restart", async () => {
+    await writeOmpTree(root, {
+      stem: `creation-alias_${TREE}`,
+      main: [ompHeader({ id: TREE }),
+        ompMessage("assistant", "plain sisyphus words", { agent: "sisyphus", id: "s1", timestamp: iso(PLAN - 2 * 86_400_000 + 60_000) }),
+        ompMessage("assistant", "ultraworker words", { agent: "sisyphus-ultraworker", id: "s2", timestamp: iso(PLAN - 2 * 86_400_000 + 120_000) })],
+      mtime: new Date("2026-08-02T00:00:00.000Z"),
+    });
+    const findSisyphus = (manager: StateManager) => manager.persona_getAll().find((p) => p.display_name === "Sisyphus");
+    expect(findSisyphus(sm)).toBeUndefined();
+    const personasBefore = sm.persona_getAll().map((p) => p.id);
+    const scans = vi.spyOn(extraction, "queueAllScans");
+
+    const first = await run();
+    expect(first.blocksQueued).toBe(1);
+    expect(first.treesCompleted).toBe(1);
+    expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+    expect(sm.getHuman().settings?.omp?.current_tree).toBeUndefined();
+    expect(sm.queue_length()).toBeGreaterThan(0);
+    const sisyphus = findSisyphus(sm);
+    expect(sisyphus).toBeDefined();
+    expect(sm.persona_getAll().map((p) => p.id).filter((id) => !personasBefore.includes(id))).toEqual([sisyphus!.id]);
+    expect(sisyphus!.aliases).toContain("Sisyphus Ultraworker");
+    expect(externalText(sm, sisyphus!.id)).toEqual(["plain sisyphus words", "ultraworker words"]);
+    expect(scans).toHaveBeenCalledTimes(1);
+    expect(scans.mock.calls[0][0].personaId).toBe(sisyphus!.id);
+    expect(scans.mock.calls[0][0].messages_analyze.map((m) => m.content)).toEqual(["plain sisyphus words", "ultraworker words"]);
+    drain(sm);
+
+    const snapshot = structuredClone(sm.getStorageState());
+    const storage = createMockStorage();
+    storage.load = vi.fn(async () => structuredClone(snapshot));
+    const restarted = new StateManager();
+    await restarted.initialize(storage);
+    const remove = vi.spyOn(restarted, "messages_remove");
+    const append = vi.spyOn(restarted, "messages_append");
+    const second = await importOmpSessions({ stateManager: restarted, reader, now: () => PLAN + 3_600_000 });
+    expect(second.blocksQueued).toBe(0);
+    expect(second.scansQueued).toBe(0);
+    expect(restarted.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+    const restored = findSisyphus(restarted);
+    expect(restored).toBeDefined();
+    expect(restored!.id).toBe(sisyphus!.id);
+    expect(externalText(restarted, restored!.id)).toEqual(["plain sisyphus words", "ultraworker words"]);
+    expect(append).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(scans).toHaveBeenCalledTimes(1);
+    expect(scans.mock.calls.flatMap(([args]) => args.messages_analyze.map((m) => m.content))).toEqual(["plain sisyphus words", "ultraworker words"]);
+  });
+
+  it("creates a separate persona for a main-session name that only partially matches an existing one", async () => {
+    const codeReviewer = await ensureAgentPersona("code-reviewer", { stateManager: sm });
+    expect(codeReviewer.display_name).toBe("Code Reviewer");
+    const aliasesBefore = [...(sm.persona_getById(codeReviewer.id)!.aliases ?? [])];
+    const messagesBefore = structuredClone(sm.messages_get(codeReviewer.id));
+    const countBefore = sm.persona_getAll().length;
+    expect(sm.persona_getAll().some((p) => p.display_name === "Reviewer")).toBe(false);
+    await writeOmpTree(root, {
+      stem: `partial_${TREE}`,
+      main: [ompHeader({ id: TREE }),
+        ompMessage("assistant", "review one", { agent: "reviewer", id: "p1", timestamp: iso(PLAN - 2 * 86_400_000 + 60_000) }),
+        ompMessage("assistant", "review two", { agent: "reviewer", id: "p2", timestamp: iso(PLAN - 2 * 86_400_000 + 120_000) })],
+      mtime: new Date("2026-08-02T00:00:00.000Z"),
+    });
+    const scans = vi.spyOn(extraction, "queueAllScans");
+
+    expect((await run()).blocksQueued).toBe(1);
+    const reviewer = sm.persona_getAll().find((p) => p.display_name === "Reviewer")!;
+    expect(reviewer).toBeDefined();
+    expect(reviewer.id).not.toBe(codeReviewer.id);
+    expect(sm.persona_getAll()).toHaveLength(countBefore + 1);
+    expect(sm.persona_getById(codeReviewer.id)!.display_name).toBe("Code Reviewer");
+    expect(sm.persona_getById(codeReviewer.id)!.aliases).toEqual(aliasesBefore);
+    expect(sm.messages_get(codeReviewer.id)).toEqual(messagesBefore);
+    expect(externalText(sm, reviewer.id)).toEqual(["review one", "review two"]);
+    expect(scans).toHaveBeenCalledTimes(1);
+    expect(scans.mock.calls[0][0].personaId).toBe(reviewer.id);
+  });
+
+  it("creates no persona while planning main-session blocks that are all skipped", async () => {
+    setPrevious();
+    await writeOmpTree(root, {
+      stem: `skipped-main_${TREE}`,
+      main: [ompHeader({ id: TREE }), ompMessage("assistant", "old reviewer work", { agent: "reviewer", id: "old", timestamp: OLD })],
+      mtime: new Date("2026-08-02T00:00:00.000Z"),
+    });
+    expect(sm.persona_getByName("Reviewer")).toBeNull();
+    const personasBefore = sm.persona_getAll().map((p) => p.id);
+    const add = vi.spyOn(sm, "persona_add");
+    const append = vi.spyOn(sm, "messages_append");
+    const remove = vi.spyOn(sm, "messages_remove");
+    const scans = vi.spyOn(extraction, "queueAllScans");
+
+    expect(await run()).toEqual({ blocksQueued: 0, treesCompleted: 1, scansQueued: 0 });
+    expect(add).not.toHaveBeenCalled();
+    expect(sm.persona_getByName("Reviewer")).toBeNull();
+    expect(sm.persona_getAll().map((p) => p.id)).toEqual(personasBefore);
+    expect(append).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(scans).not.toHaveBeenCalled();
+    expect(sm.queue_length()).toBe(0);
   });
 
   it("does not record a block as done if its scan enqueue crashes", async () => {

@@ -280,4 +280,205 @@ describe("IntegrationSyncManager OMP tree scheduling", () => {
     expect(ompSettings()?.last_sync).toBeUndefined();
     expect(sm.messages_get("beta-persona")).toHaveLength(0);
   });
+
+  it("keeps an omp.integration pause saved while the rolling backup was in flight, and imports nothing", async () => {
+    const human = sm.getHuman();
+    sm.setHuman({
+      ...human,
+      settings: {
+        ...human.settings,
+        backup: { enabled: true, interval_ms: 1_000 },
+        omp: { integration: true, polling_interval_ms: POLLING_INTERVAL_MS },
+      },
+    });
+    let releaseBackup!: () => void;
+    const backupDone = new Promise<void>((resolve) => {
+      releaseBackup = resolve;
+    });
+    const storage = { ...createMockStorage(), saveRollingBackup: vi.fn((): Promise<void> => backupDone) };
+    const manager = new IntegrationSyncManager(sm, true, storage, new AbortController(), {} as Ei_Interface);
+    const listTrees = vi.spyOn(OmpReader.prototype, "listTrees");
+    const messagesAppend = vi.spyOn(sm, "messages_append");
+
+    const tick = manager.checkAll(sm.getHuman(), wallNow);
+    try {
+      await vi.waitFor(() => expect(storage.saveRollingBackup).toHaveBeenCalledTimes(1), { timeout: 4000, interval: 10 });
+      const live = sm.getHuman();
+      sm.setHuman({
+        ...live,
+        settings: { ...live.settings, omp: { integration: false, polling_interval_ms: POLLING_INTERVAL_MS } },
+      });
+    } finally {
+      releaseBackup();
+      await tick;
+    }
+    await waitForIdleImport(manager);
+
+    expect(ompSettings()?.integration).toBe(false);
+    expect(ompSettings()?.last_sync).toBeUndefined();
+    expect(ompSettings()?.current_tree).toBeUndefined();
+    expect(ompSettings()?.processed_sessions).toBeUndefined();
+    expect(listTrees).not.toHaveBeenCalled();
+    expect(messagesAppend).not.toHaveBeenCalled();
+    expect(sm.queue_length()).toBe(0);
+    expect(externalContents(sm, "beta-persona")).toEqual([]);
+  });
+
+  it("keeps progress and model saved while the rolling backup was in flight, changing only last_sync", async () => {
+    const [tree] = await new OmpReader().listTrees();
+    expect(tree).toBeDefined();
+    // A fresh descendant keeps the quiet-tree guard deferring the tree, so the importer itself cannot alter progress.
+    await fs.utimes(descendantPath, new Date(), new Date());
+
+    const olderWatermark = "2026-01-01T00:00:00.000Z";
+    const newerWatermark = "2026-02-02T00:00:00.000Z";
+    const human = sm.getHuman();
+    sm.setHuman({
+      ...human,
+      settings: {
+        ...human.settings,
+        backup: { enabled: true, interval_ms: 1_000 },
+        omp: {
+          integration: true,
+          polling_interval_ms: POLLING_INTERVAL_MS,
+          extraction_model: "Old:model",
+          processed_sessions: { [tree.id]: olderWatermark },
+          current_tree: { tree: tree.id, planned_at: olderWatermark, done: ["stale-block"] },
+        },
+      },
+    });
+    let releaseBackup!: () => void;
+    const backupDone = new Promise<void>((resolve) => {
+      releaseBackup = resolve;
+    });
+    const storage = { ...createMockStorage(), saveRollingBackup: vi.fn((): Promise<void> => backupDone) };
+    const manager = new IntegrationSyncManager(sm, true, storage, new AbortController(), {} as Ei_Interface);
+    const listTrees = vi.spyOn(OmpReader.prototype, "listTrees");
+
+    const tick = manager.checkAll(sm.getHuman(), wallNow);
+    try {
+      await vi.waitFor(() => expect(storage.saveRollingBackup).toHaveBeenCalledTimes(1), { timeout: 4000, interval: 10 });
+      const live = sm.getHuman();
+      sm.setHuman({
+        ...live,
+        settings: {
+          ...live.settings,
+          omp: {
+            integration: true,
+            polling_interval_ms: POLLING_INTERVAL_MS,
+            extraction_model: "New:model",
+            processed_sessions: { [tree.id]: newerWatermark },
+          },
+        },
+      });
+    } finally {
+      releaseBackup();
+      await tick;
+    }
+    await waitForIdleImport(manager);
+
+    expect(listTrees).toHaveBeenCalledTimes(1);
+    expect(ompSettings()).toEqual({
+      integration: true,
+      polling_interval_ms: POLLING_INTERVAL_MS,
+      extraction_model: "New:model",
+      processed_sessions: { [tree.id]: newerWatermark },
+      last_sync: expect.any(String),
+    });
+    expect(Number.isNaN(Date.parse(ompSettings()!.last_sync!))).toBe(false);
+    expect(sm.queue_length()).toBe(0);
+    expect(externalContents(sm, "beta-persona")).toEqual([]);
+  });
+
+  it("imports the first block normally after an unchanged rolling backup completes", async () => {
+    const human = sm.getHuman();
+    sm.setHuman({
+      ...human,
+      settings: {
+        ...human.settings,
+        backup: { enabled: true, interval_ms: 1_000 },
+        omp: { integration: true, polling_interval_ms: POLLING_INTERVAL_MS },
+      },
+    });
+    let releaseBackup!: () => void;
+    const backupDone = new Promise<void>((resolve) => {
+      releaseBackup = resolve;
+    });
+    const storage = { ...createMockStorage(), saveRollingBackup: vi.fn((): Promise<void> => backupDone) };
+    const manager = new IntegrationSyncManager(sm, true, storage, new AbortController(), {} as Ei_Interface);
+
+    const tick = manager.checkAll(sm.getHuman(), wallNow);
+    try {
+      await vi.waitFor(() => expect(storage.saveRollingBackup).toHaveBeenCalledTimes(1), { timeout: 4000, interval: 10 });
+      expect(sm.getHuman().settings?.backup?.last_backup).toBe(new Date(wallNow).toISOString());
+    } finally {
+      releaseBackup();
+      await tick;
+    }
+    await vi.waitFor(
+      () => {
+        expect(sm.queue_length()).toBeGreaterThan(0);
+        expect(ompSettings()?.current_tree?.done).toHaveLength(1);
+      },
+      { timeout: 4000, interval: 10 }
+    );
+    await waitForIdleImport(manager);
+
+    expect(externalContents(sm, "beta-persona")).toEqual(["first block question", "first block answer"]);
+    expect(ompSettings()?.integration).toBe(true);
+    expect(ompSettings()?.last_sync).toBeDefined();
+    expect(ompSettings()?.processed_sessions).toBeUndefined();
+    expect(ompSettings()?.current_tree).toBeDefined();
+  });
+
+  it("honors a longer polling interval saved while the rolling backup was in flight", async () => {
+    await fs.utimes(descendantPath, new Date(), new Date());
+    const human = sm.getHuman();
+    sm.setHuman({
+      ...human,
+      settings: { ...human.settings, omp: { integration: true, polling_interval_ms: 1_000 } },
+    });
+    let releaseBackup!: () => void;
+    const backupDone = new Promise<void>((resolve) => {
+      releaseBackup = resolve;
+    });
+    const storage = { ...createMockStorage(), saveRollingBackup: vi.fn((): Promise<void> => backupDone) };
+    const manager = new IntegrationSyncManager(sm, true, storage, new AbortController(), {} as Ei_Interface);
+    const listTrees = vi.spyOn(OmpReader.prototype, "listTrees");
+
+    // Prime: a quiet-deferred import with no progress, so the same manager has synced once and has no continuation.
+    await manager.checkAll(sm.getHuman(), wallNow);
+    await waitForIdleImport(manager);
+    expect(listTrees).toHaveBeenCalledTimes(1);
+    expect(manager["ompContinuation"]).toBe(false);
+    expect(sm.queue_length()).toBe(0);
+    const firstSync = ompSettings()?.last_sync;
+    expect(firstSync).toBeDefined();
+
+    // Backup is due now; the short interval has elapsed since the first sync.
+    const afterPrime = sm.getHuman();
+    sm.setHuman({
+      ...afterPrime,
+      settings: { ...afterPrime.settings, backup: { enabled: true, interval_ms: 1_000 } },
+    });
+    const tick = manager.checkAll(sm.getHuman(), Date.parse(firstSync!) + 5_000);
+    try {
+      await vi.waitFor(() => expect(storage.saveRollingBackup).toHaveBeenCalledTimes(1), { timeout: 4000, interval: 10 });
+      const live = sm.getHuman();
+      sm.setHuman({
+        ...live,
+        settings: { ...live.settings, omp: { integration: true, polling_interval_ms: 60_000, last_sync: firstSync } },
+      });
+    } finally {
+      releaseBackup();
+      await tick;
+    }
+    await waitForIdleImport(manager);
+
+    expect(listTrees).toHaveBeenCalledTimes(1);
+    expect(ompSettings()?.last_sync).toBe(firstSync);
+    expect(ompSettings()?.polling_interval_ms).toBe(60_000);
+    expect(sm.queue_length()).toBe(0);
+    expect(externalContents(sm, "beta-persona")).toEqual([]);
+  });
 });
