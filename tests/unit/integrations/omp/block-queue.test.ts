@@ -9,6 +9,7 @@ import { ensureAgentPersona } from "../../../../src/core/personas/opencode-agent
 import { ContextStatus, type Message } from "../../../../src/core/types.js";
 import * as ceremony from "../../../../src/core/orchestrators/ceremony.js";
 import * as extraction from "../../../../src/core/orchestrators/human-extraction.js";
+import type { ExtractionContext } from "../../../../src/core/orchestrators/human-extraction.js";
 import { createMockStorage } from "../../../helpers/mock-storage.js";
 import { ompHeader, ompMessage, ompSubAgent, writeOmpTree } from "../shared/omp-transcript-fixtures.js";
 
@@ -248,7 +249,8 @@ describe("OMP block queue and restart", () => {
   });
 
   it("resumes after a checkpointed block with the original plan and never re-wipes a completed block", async () => {
-    await threeBlocks();
+    const written = await threeBlocks();
+    const base = path.basename(written.rootFile);
     const realSetHuman = sm.setHuman.bind(sm);
     const crash = vi.spyOn(sm, "setHuman").mockImplementation((human) => {
       realSetHuman(human);
@@ -257,13 +259,13 @@ describe("OMP block queue and restart", () => {
     await expect(run()).rejects.toThrow("crash after first checkpoint");
     const cursor = structuredClone(sm.getHuman().settings?.omp?.current_tree);
     expect(cursor?.planned_at).toBe(iso(PLAN));
-    expect(cursor?.done).toHaveLength(1);
+    expect(cursor?.done).toEqual([`${base}|Worker`]);
     crash.mockRestore();
     drain(sm);
     const writes = vi.spyOn(sm, "setHuman");
     const append = vi.spyOn(sm, "messages_append");
     expect((await run(PLAN + 3_600_000)).blocksQueued).toBe(1);
-    expect(sm.getHuman().settings?.omp?.current_tree?.done).toHaveLength(2);
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Worker`, "A.jsonl"]);
     expect(append.mock.calls.map(([, m]) => m.content)).toEqual(["first child"]);
     drain(sm);
     expect((await run(PLAN + 3_600_000)).treesCompleted).toBe(1);
@@ -276,7 +278,7 @@ describe("OMP block queue and restart", () => {
   });
 
   it("keeps two main-session persona keys distinct and stable across fresh importer invocations", async () => {
-    await writeOmpTree(root, {
+    const written = await writeOmpTree(root, {
       stem: `main-personas_${TREE}`, main: [ompHeader({ id: TREE }),
         ompMessage("assistant", "first persona", { agent: "worker", id: "worker-main" }),
         ompMessage("assistant", "second persona", { agent: "reviewer", id: "reviewer-main" })],
@@ -290,16 +292,15 @@ describe("OMP block queue and restart", () => {
     });
     await expect(run()).rejects.toThrow("crash between main personas");
     crash.mockRestore();
-    const firstKey = sm.getHuman().settings?.omp?.current_tree?.done[0];
+    const base = path.basename(written.rootFile);
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Worker`]);
     const worker = sm.persona_getByName("Worker")!;
     drain(sm);
     const remove = vi.spyOn(sm, "messages_remove");
     const append = vi.spyOn(sm, "messages_append");
     expect((await run(PLAN + 3_600_000)).blocksQueued).toBe(1);
     const keys = sm.getHuman().settings?.omp?.current_tree?.done ?? [];
-    expect(keys).toHaveLength(2);
-    expect(new Set(keys).size).toBe(2);
-    expect(keys[0]).toBe(firstKey);
+    expect(keys).toEqual([`${base}|Worker`, `${base}|Reviewer`]);
     expect(externalText(sm, worker.id)).toEqual(["first persona"]);
     const reviewer = sm.persona_getByName("Reviewer");
     expect(reviewer).not.toBeNull();
@@ -373,7 +374,7 @@ describe("OMP block queue and restart", () => {
     expect(reviewer).not.toBeNull();
     expect(scans.mock.calls[0][0].messages_analyze.map((m) => m.content)).toEqual(["spelled lower", "spelled title", "spelled upper"]);
     expect(externalText(sm, reviewer.id)).toEqual(["spelled lower", "spelled title", "spelled upper"]);
-    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`]);
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`, `${base}|REVIEWER`]);
     expect(sm.persona_getByName("Worker")).toBeNull();
 
     drain(sm);
@@ -383,7 +384,7 @@ describe("OMP block queue and restart", () => {
     expect(worker.id).not.toBe(reviewer.id);
     expect(externalText(sm, worker.id)).toEqual(["worker only"]);
     expect(externalText(sm, reviewer.id)).toEqual(["spelled lower", "spelled title", "spelled upper"]);
-    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`, `${base}|Worker`]);
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`, `${base}|REVIEWER`, `${base}|Worker`]);
 
     drain(sm);
     expect((await run(PLAN + 3_600_000)).treesCompleted).toBe(1);
@@ -408,12 +409,12 @@ describe("OMP block queue and restart", () => {
     const realSetHuman = sm.setHuman.bind(sm);
     const crash = vi.spyOn(sm, "setHuman").mockImplementation((human) => {
       realSetHuman(human);
-      if (human.settings?.omp?.current_tree?.done.length === 1) throw new Error("crash after first main persona");
+      if (human.settings?.omp?.current_tree?.done.length === 2) throw new Error("crash after first main persona");
     });
     await expect(run()).rejects.toThrow("crash after first main persona");
     crash.mockRestore();
     const cursor = structuredClone(sm.getHuman().settings?.omp?.current_tree);
-    expect(cursor?.done).toEqual([`${base}|Reviewer`]);
+    expect(cursor?.done).toEqual([`${base}|Reviewer`, `${base}|REVIEWER`]);
     expect(cursor?.planned_at).toBe(iso(PLAN));
     const reviewer = sm.persona_getByName("Reviewer")!;
     expect(reviewer).not.toBeNull();
@@ -428,9 +429,7 @@ describe("OMP block queue and restart", () => {
     expect((await run(PLAN + 3_600_000)).blocksQueued).toBe(1);
     const current = sm.getHuman().settings?.omp?.current_tree;
     expect(current?.planned_at).toBe(iso(PLAN));
-    expect(current?.done).toHaveLength(2);
-    expect(current?.done[0]).toBe(`${base}|Reviewer`);
-    expect(current?.done[1]).not.toBe(current?.done[0]);
+    expect(current?.done).toEqual([`${base}|Reviewer`, `${base}|REVIEWER`, `${base}|Worker`]);
     const worker = sm.persona_getByName("Worker")!;
     expect(worker).not.toBeNull();
     expect(remove.mock.calls.some(([id]) => id === reviewer.id)).toBe(false);
@@ -549,10 +548,257 @@ describe("OMP block queue and restart", () => {
     expect(sm.queue_length()).toBe(0);
   });
 
+  // Tested by `Beta` — 2026-10-22
+  function spyScans(): ExtractionContext[] {
+    const real = extraction.queueAllScans;
+    const contexts: ExtractionContext[] = [];
+    vi.spyOn(extraction, "queueAllScans").mockImplementation((context, state, options) => {
+      contexts.push(structuredClone(context));
+      real(context, state, options);
+    });
+    return contexts;
+  }
+
+  const contents = (messages: Message[]) => messages.map((m) => m.content);
+  const marks = (m: Message) => [m.f, m.t, m.p, m.e];
+  const EARLY = PLAN - 2 * 86_400_000;
+
+  async function reviewerThenAuditor(): Promise<string> {
+    const written = await writeOmpTree(root, {
+      stem: `members_${TREE}`,
+      main: [ompHeader({ id: TREE }),
+        ompMessage("assistant", "reviewer words", { agent: "reviewer", id: "r1", timestamp: iso(EARLY + 60_000) }),
+        ompMessage("assistant", "auditor words", { agent: "auditor", id: "a1", timestamp: iso(EARLY + 120_000) })],
+      mtime: new Date("2026-08-02T00:00:00.000Z"),
+    });
+    return path.basename(written.rootFile);
+  }
+
+  it("analyzes a member made an alias of a handled persona once, keeping the handled member as premarked context", async () => {
+    const base = await reviewerThenAuditor();
+    expect(sm.persona_getByName("Reviewer")).toBeNull();
+    expect(sm.persona_getByName("Auditor")).toBeNull();
+    const contexts = spyScans();
+
+    expect(await run()).toEqual({ blocksQueued: 1, treesCompleted: 0, scansQueued: expect.any(Number) });
+    const reviewer = sm.persona_getByName("Reviewer")!;
+    expect(reviewer).not.toBeNull();
+    expect(sm.persona_getByName("Auditor")).toBeNull();
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0].personaId).toBe(reviewer.id);
+    expect(contents(contexts[0].messages_analyze)).toEqual(["reviewer words"]);
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`]);
+    expect(sm.getHuman().settings?.omp?.current_tree?.planned_at).toBe(iso(PLAN));
+    drain(sm);
+
+    expect(reviewer.aliases).toEqual(["reviewer"]);
+    expect(sm.persona_update(reviewer.id, { aliases: ["reviewer", "auditor"] })).toBe(true);
+    const personasBefore = sm.persona_getAll().map((p) => p.id);
+    const append = vi.spyOn(sm, "messages_append");
+    expect(await run(PLAN + 3_600_000)).toEqual({ blocksQueued: 1, treesCompleted: 1, scansQueued: expect.any(Number) });
+
+    expect(sm.persona_getAll().map((p) => p.id)).toEqual(personasBefore);
+    expect(sm.persona_getByName("Auditor")!.id).toBe(reviewer.id);
+    expect(contexts).toHaveLength(2);
+    expect(contexts[1].personaId).toBe(reviewer.id);
+    expect(contents(contexts[1].messages_analyze)).toEqual(["auditor words"]);
+    expect(contexts[1].messages_analyze.map(marks)).toEqual([[undefined, undefined, undefined, undefined]]);
+    expect(contents(contexts[1].messages_context)).toEqual(["reviewer words"]);
+    expect(contexts[1].messages_context.map(marks)).toEqual([[true, true, true, true]]);
+    expect(contexts.flatMap((c) => contents(c.messages_analyze))).toEqual(["reviewer words", "auditor words"]);
+    expect(append.mock.calls.map(([, m]) => m.content)).toEqual(["reviewer words", "auditor words"]);
+    expect(externalText(sm, reviewer.id)).toEqual(["reviewer words", "auditor words"]);
+    // queueAllScans pre-marks the analyzed message's f/t/p flags when it queues (the queued handlers are not run here).
+    const auditor = sm.messages_get(reviewer.id).find((m) => m.content === "auditor words")!;
+    expect([auditor.f, auditor.t, auditor.p]).toEqual([true, true, true]);
+    expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+    expect(sm.getHuman().settings?.omp?.current_tree).toBeUndefined();
+    drain(sm);
+
+    const writes = vi.spyOn(sm, "setHuman");
+    const remove = vi.spyOn(sm, "messages_remove");
+    const appended = append.mock.calls.length;
+    expect(await run(PLAN + 7_200_000)).toEqual({ blocksQueued: 0, treesCompleted: 0, scansQueued: 0 });
+    expect(contexts).toHaveLength(2);
+    expect(append).toHaveBeenCalledTimes(appended);
+    expect(remove).not.toHaveBeenCalled();
+    expect(writes).not.toHaveBeenCalled();
+    expect(sm.queue_length()).toBe(0);
+  });
+
+  it("queues a separate member as its own block when no alias is added", async () => {
+    const base = await reviewerThenAuditor();
+    const contexts = spyScans();
+
+    expect((await run()).blocksQueued).toBe(1);
+    const reviewer = sm.persona_getByName("Reviewer")!;
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`]);
+    drain(sm);
+
+    const remove = vi.spyOn(sm, "messages_remove");
+    const append = vi.spyOn(sm, "messages_append");
+    expect(await run(PLAN + 3_600_000)).toEqual({ blocksQueued: 1, treesCompleted: 1, scansQueued: expect.any(Number) });
+    const auditor = sm.persona_getByName("Auditor")!;
+    expect(auditor).not.toBeNull();
+    expect(auditor.id).not.toBe(reviewer.id);
+    expect(contexts).toHaveLength(2);
+    expect(contexts[1].personaId).toBe(auditor.id);
+    expect(contents(contexts[1].messages_analyze)).toEqual(["auditor words"]);
+    expect(contexts[1].messages_context).toEqual([]);
+    expect(contexts.flatMap((c) => contents(c.messages_analyze))).toEqual(["reviewer words", "auditor words"]);
+    expect(externalText(sm, reviewer.id)).toEqual(["reviewer words"]);
+    expect(externalText(sm, auditor.id)).toEqual(["auditor words"]);
+    expect(remove.mock.calls.some(([id]) => id === reviewer.id)).toBe(false);
+    expect(append.mock.calls.map(([, m]) => m.content)).toEqual(["auditor words"]);
+    expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+    expect(sm.getHuman().settings?.omp?.current_tree).toBeUndefined();
+    drain(sm);
+
+    const writes = vi.spyOn(sm, "setHuman");
+    expect(await run(PLAN + 7_200_000)).toEqual({ blocksQueued: 0, treesCompleted: 0, scansQueued: 0 });
+    expect(contexts).toHaveLength(2);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(writes).not.toHaveBeenCalled();
+    expect(sm.queue_length()).toBe(0);
+  });
+
+  it("records only pending members of an enlarged group and keeps handled and out-of-window messages out of analysis", async () => {
+    setPrevious();
+    const written = await writeOmpTree(root, {
+      stem: `enlarged_${TREE}`,
+      main: [ompHeader({ id: TREE }),
+        ompMessage("assistant", "tester before", { agent: "tester", id: "t0", timestamp: OLD }),
+        ompMessage("assistant", "reviewer in window", { agent: "reviewer", id: "r1", timestamp: iso(EARLY + 60_000) }),
+        ompMessage("assistant", "auditor in window", { agent: "auditor", id: "a1", timestamp: iso(EARLY + 120_000) }),
+        ompMessage("assistant", "inspector in window", { agent: "inspector", id: "i1", timestamp: iso(EARLY + 180_000) }),
+        ompMessage("assistant", "tester after plan", { agent: "tester", id: "t1", timestamp: iso(PLAN + 30 * 60_000) })],
+      mtime: new Date("2026-08-02T00:00:00.000Z"),
+    });
+    const base = path.basename(written.rootFile);
+    const contexts = spyScans();
+
+    expect((await run()).blocksQueued).toBe(1);
+    const reviewer = sm.persona_getByName("Reviewer")!;
+    expect(contents(contexts[0].messages_analyze)).toEqual(["reviewer in window"]);
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`]);
+    drain(sm);
+
+    expect(sm.persona_update(reviewer.id, { aliases: ["reviewer", "auditor", "inspector", "tester"] })).toBe(true);
+    const writes = vi.spyOn(sm, "setHuman");
+    const append = vi.spyOn(sm, "messages_append");
+    expect(await run(PLAN + 3_600_000)).toEqual({ blocksQueued: 1, treesCompleted: 1, scansQueued: expect.any(Number) });
+
+    expect(contexts).toHaveLength(2);
+    expect(contexts[1].personaId).toBe(reviewer.id);
+    expect(contents(contexts[1].messages_context)).toEqual(["tester before", "reviewer in window"]);
+    expect(contexts[1].messages_context.map(marks)).toEqual([[true, true, true, true], [true, true, true, true]]);
+    expect(contents(contexts[1].messages_analyze)).toEqual(["auditor in window", "inspector in window"]);
+    expect(contexts[1].messages_analyze.map(marks)).toEqual([[undefined, undefined, undefined, undefined], [undefined, undefined, undefined, undefined]]);
+    expect(contexts.flatMap((c) => contents(c.messages_analyze))).toEqual(["reviewer in window", "auditor in window", "inspector in window"]);
+    expect(append.mock.calls.map(([, m]) => m.content).sort()).toEqual(["auditor in window", "inspector in window", "reviewer in window", "tester before"]);
+    expect(externalText(sm, reviewer.id)).toEqual(["tester before", "reviewer in window", "auditor in window", "inspector in window"]);
+    const checkpoints = writes.mock.calls.map(([h]) => h.settings?.omp?.current_tree?.done).filter((d) => d !== undefined);
+    expect(checkpoints).toEqual([[`${base}|Reviewer`, `${base}|Auditor`, `${base}|Inspector`]]);
+    expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+    expect(sm.getHuman().settings?.omp?.current_tree).toBeUndefined();
+    drain(sm);
+
+    expect(await run(PLAN + 7_200_000)).toEqual({ blocksQueued: 0, treesCompleted: 0, scansQueued: 0 });
+    expect(contexts).toHaveLength(2);
+    expect(sm.queue_length()).toBe(0);
+  });
+
+  it("does not redo a handled member whose persona display name changes between ticks", async () => {
+    const base = await reviewerThenAuditor();
+    const contexts = spyScans();
+
+    expect((await run()).blocksQueued).toBe(1);
+    const reviewer = sm.persona_getByName("Reviewer")!;
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`]);
+    drain(sm);
+
+    expect(sm.persona_update(reviewer.id, { display_name: "Reviewer Prime" })).toBe(true);
+    expect(sm.persona_getById(reviewer.id)!.aliases).toEqual(["reviewer"]);
+    const remove = vi.spyOn(sm, "messages_remove");
+    const append = vi.spyOn(sm, "messages_append");
+    expect(await run(PLAN + 3_600_000)).toEqual({ blocksQueued: 1, treesCompleted: 1, scansQueued: expect.any(Number) });
+
+    const auditor = sm.persona_getByName("Auditor")!;
+    expect(auditor).not.toBeNull();
+    expect(auditor.id).not.toBe(reviewer.id);
+    expect(contexts).toHaveLength(2);
+    expect(contexts[1].personaId).toBe(auditor.id);
+    expect(contexts.flatMap((c) => contents(c.messages_analyze))).toEqual(["reviewer words", "auditor words"]);
+    expect(remove.mock.calls.some(([id]) => id === reviewer.id)).toBe(false);
+    expect(append.mock.calls.map(([, m]) => m.content)).toEqual(["auditor words"]);
+    expect(externalText(sm, reviewer.id)).toEqual(["reviewer words"]);
+    expect(externalText(sm, auditor.id)).toEqual(["auditor words"]);
+    expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+    expect(sm.getHuman().settings?.omp?.current_tree).toBeUndefined();
+    drain(sm);
+
+    expect(await run(PLAN + 7_200_000)).toEqual({ blocksQueued: 0, treesCompleted: 0, scansQueued: 0 });
+    expect(contexts).toHaveLength(2);
+  });
+
+  it("skips an enlarged group with no pending member and runs the next block", async () => {
+    const written = await writeOmpTree(root, {
+      stem: `no-pending_${TREE}`,
+      main: [ompHeader({ id: TREE }),
+        ompMessage("assistant", "reviewer in window", { agent: "reviewer", id: "r1", timestamp: iso(EARLY + 60_000) }),
+        ompMessage("assistant", "tester after plan", { agent: "tester", id: "t1", timestamp: iso(PLAN + 30 * 60_000) }),
+        ompMessage("assistant", "worker in window", { agent: "worker", id: "w1", timestamp: iso(EARLY + 120_000) })],
+      mtime: new Date("2026-08-02T00:00:00.000Z"),
+    });
+    const base = path.basename(written.rootFile);
+    const contexts = spyScans();
+
+    expect((await run()).blocksQueued).toBe(1);
+    const reviewer = sm.persona_getByName("Reviewer")!;
+    expect(sm.persona_getByName("Worker")).toBeNull();
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Reviewer`]);
+    drain(sm);
+
+    expect(sm.persona_update(reviewer.id, { aliases: ["reviewer", "tester"] })).toBe(true);
+    const writes = vi.spyOn(sm, "setHuman");
+    const remove = vi.spyOn(sm, "messages_remove");
+    const append = vi.spyOn(sm, "messages_append");
+    expect(await run(PLAN + 3_600_000)).toEqual({ blocksQueued: 1, treesCompleted: 1, scansQueued: expect.any(Number) });
+
+    const worker = sm.persona_getByName("Worker");
+    expect(worker).not.toBeNull();
+    expect(worker!.id).not.toBe(reviewer.id);
+    expect(contexts).toHaveLength(2);
+    expect(contexts[1].personaId).toBe(worker!.id);
+    expect(contexts.flatMap((c) => contents(c.messages_analyze))).toEqual(["reviewer in window", "worker in window"]);
+    expect(remove.mock.calls.some(([id]) => id === reviewer.id)).toBe(false);
+    expect(append.mock.calls.some(([id]) => id === reviewer.id)).toBe(false);
+    expect(append.mock.calls.map(([, m]) => m.content)).toEqual(["worker in window"]);
+    expect(externalText(sm, reviewer.id)).toEqual(["reviewer in window"]);
+    expect(externalText(sm, worker!.id)).toEqual(["worker in window"]);
+    const checkpoints = writes.mock.calls.map(([h]) => h.settings?.omp?.current_tree?.done).filter((d) => d !== undefined);
+    expect(checkpoints).toEqual([[`${base}|Reviewer`, `${base}|Worker`]]);
+    expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBe(iso(PLAN));
+    expect(sm.getHuman().settings?.omp?.current_tree).toBeUndefined();
+    drain(sm);
+
+    expect(await run(PLAN + 7_200_000)).toEqual({ blocksQueued: 0, treesCompleted: 0, scansQueued: 0 });
+    expect(contexts).toHaveLength(2);
+    expect(sm.queue_length()).toBe(0);
+  });
+
   it("does not record a block as done if its scan enqueue crashes", async () => {
-    await threeBlocks();
-    const enqueue = vi.spyOn(sm, "queue_enqueue").mockImplementationOnce(() => { throw new Error("scan queue unavailable"); });
+    const written = await threeBlocks();
+    const base = path.basename(written.rootFile);
+    const cursors: unknown[] = [];
+    const writes = vi.spyOn(sm, "setHuman");
+    const enqueue = vi.spyOn(sm, "queue_enqueue").mockImplementationOnce(() => {
+      cursors.push(structuredClone(sm.getHuman().settings?.omp?.current_tree));
+      throw new Error("scan queue unavailable");
+    });
     await expect(run()).rejects.toThrow("scan queue unavailable");
+    expect(cursors).toEqual([undefined]);
+    expect(writes.mock.calls.every(([h]) => (h.settings?.omp?.current_tree?.done ?? []).length === 0)).toBe(true);
     expect(sm.getHuman().settings?.omp?.current_tree?.done ?? []).toEqual([]);
     expect(sm.getHuman().settings?.omp?.processed_sessions?.[TREE]).toBeUndefined();
     expect(sm.queue_length()).toBe(0);
@@ -562,5 +808,6 @@ describe("OMP block queue and restart", () => {
     const worker = sm.persona_getByName("Worker")!;
     expect(externalText(sm, worker.id)).toEqual(["main block"]);
     expect(sm.getHuman().settings?.omp?.current_tree?.done).toHaveLength(1);
+    expect(sm.getHuman().settings?.omp?.current_tree?.done).toEqual([`${base}|Worker`]);
   });
 });
