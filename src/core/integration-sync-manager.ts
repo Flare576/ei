@@ -116,12 +116,14 @@ export class IntegrationSyncManager {
       await this.checkAndSyncPi(human, now);
     }
 
+    // Earlier steps await (the rolling backup awaits storage), so the tick-start snapshot can be
+    // stale by now: the OMP step reads the live settings so a save made meanwhile is honored.
     if (
       this.isTUI &&
-      human.settings?.omp?.integration &&
+      this.stateManager.getHuman().settings?.omp?.integration &&
       this.stateManager.queue_length() === 0
     ) {
-      await this.checkAndSyncOmp(human, now);
+      await this.checkAndSyncOmp(now);
     }
 
     if (
@@ -435,12 +437,12 @@ export class IntegrationSyncManager {
       });
   }
 
-  private async checkAndSyncOmp(human: HumanEntity, now: number): Promise<void> {
+  private async checkAndSyncOmp(now: number): Promise<void> {
     if (this.ompImportInProgress) {
       return;
     }
 
-    const omp = human.settings?.omp;
+    const omp = this.stateManager.getHuman().settings?.omp;
     const pollingInterval = omp?.polling_interval_ms ?? DEFAULT_OMP_POLLING_MS;
     const lastSync = omp?.last_sync ? new Date(omp.last_sync).getTime() : 0;
     const timeSinceSync = now - lastSync;
@@ -457,7 +459,7 @@ export class IntegrationSyncManager {
       settings: {
         ...currentHuman.settings,
         omp: {
-          ...omp,
+          ...currentHuman.settings?.omp,
           last_sync: syncTimestamp,
         },
       },
