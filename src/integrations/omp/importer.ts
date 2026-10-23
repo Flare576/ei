@@ -7,7 +7,7 @@ import {
 } from "../../core/orchestrators/human-extraction.js";
 import { queuePersonRewritePhase, queueTopicRewritePhase } from "../../core/orchestrators/ceremony.js";
 import { resolvePersonaLinkedPeople } from "../../core/utils/identifier-utils.js";
-import { ensureAgentPersona, resolveCanonicalAgent } from "../../core/personas/opencode-agent.js";
+import { ensureAgentPersona, matchAgentPersona, resolveCanonicalAgent } from "../../core/personas/opencode-agent.js";
 import { qualifyOmpMessage } from "../../core/utils/message-id.js";
 import { stripControlChars } from "../../core/utils/message-refusal.js";
 import { convertToEiMessage, convertToPreMarkedEiMessage } from "../shared/message-converter.js";
@@ -81,27 +81,50 @@ function updateOmpSettings(stateManager: StateManager, patch: Partial<OmpSetting
  * persona, in order of first appearance), then sub-agent transcripts by
  * first-message timestamp, ties by path. A transcript the reader rejects, or
  * one with no messages, has no block.
+ *
+ * Main-session messages group by the persona they will be filed under. Agent
+ * names are taken in order of first appearance, as the blocks will run: a name
+ * matches exactly (display name, then alias) either a stored persona or the
+ * persona an earlier unmatched group's creation will install (its first
+ * canonical name, with the aliases that name resolves to), and joins that
+ * persona's group; otherwise it starts a new group. A resumed plan, with those
+ * personas now stored, therefore groups the same way. The block key uses the
+ * persona's display name, or the group's first canonical name. Planning only
+ * reads personas; it creates none.
  */
-async function planBlocks(reader: Env["reader"], tree: OmpTree): Promise<Block[]> {
+async function planBlocks({ reader, stateManager }: Env, tree: OmpTree): Promise<Block[]> {
   const blocks: Block[] = [];
 
   const root = await reader.readTranscript(tree.rootPath);
   if (root) {
     const rootName = tree.rootPath.slice(Math.max(tree.rootPath.lastIndexOf("/"), tree.rootPath.lastIndexOf("\\")) + 1);
-    const groups = new Map<string, { agentName: string; messages: OmpMessage[] }>();
+    type Group = { name: string; agentName: string; messages: OmpMessage[] };
+    const candidates: { display_name: string; aliases?: string[]; group?: Group }[] = stateManager
+      .persona_getAll()
+      .map((p) => ({ display_name: p.display_name, aliases: p.aliases }));
+    const groups: Group[] = [];
+    const byAgentName = new Map<string, Group>();
     for (const message of root.messages) {
       const agentName = agentNameOr(message.agent, MAIN_SESSION_PERSONA);
-      const canonical = resolveCanonicalAgent(agentName).canonical;
-      let group = groups.get(canonical);
+      let group = byAgentName.get(agentName);
       if (!group) {
-        group = { agentName, messages: [] };
-        groups.set(canonical, group);
+        const { canonical, aliases } = resolveCanonicalAgent(agentName);
+        const match = matchAgentPersona(candidates, canonical);
+        if (match) {
+          match.group ??= { name: match.display_name, agentName, messages: [] };
+          group = match.group;
+        } else {
+          group = { name: canonical, agentName, messages: [] };
+          candidates.push({ display_name: canonical, aliases, group });
+        }
+        if (!groups.includes(group)) groups.push(group);
+        byAgentName.set(agentName, group);
       }
       group.messages.push(message);
     }
-    for (const [canonical, group] of groups) {
+    for (const group of groups) {
       blocks.push({
-        key: `${rootName}|${canonical}`,
+        key: `${rootName}|${group.name}`,
         kind: "main-session",
         path: tree.rootPath,
         load: async () => ({ messages: group.messages, agentName: group.agentName, hasIdentity: false }),
@@ -156,12 +179,12 @@ async function planBlocks(reader: Env["reader"], tree: OmpTree): Promise<Block[]
  * whose scans were already queued by an earlier call.
  */
 async function importTree(env: Env, tree: OmpTree, plannedAtMs: number, done: string[]): Promise<boolean> {
-  const { stateManager, eiInterface, reader, signal, result } = env;
+  const { stateManager, eiInterface, signal, result } = env;
   const plannedAt = new Date(plannedAtMs).toISOString();
   const watermark = stateManager.getHuman().settings?.omp?.processed_sessions?.[tree.id];
   const previousMs = watermark ? Date.parse(watermark) : -Infinity;
 
-  const blocks = await planBlocks(reader, tree);
+  const blocks = await planBlocks(env, tree);
 
   for (const [index, block] of blocks.entries()) {
     if (signal?.aborted) return true;
