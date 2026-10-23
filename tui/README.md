@@ -41,7 +41,7 @@ bunx ei-tui
 
 ## Coding Tool Integrations
 
-Enable any or all four in `/settings`. They work independently and feed into the same knowledge base.
+Enable any or all six in `/settings`. They work independently and feed into the same knowledge base.
 
 | Tool | Settings key | Session data location |
 |------|-------------|----------------------|
@@ -49,11 +49,12 @@ Enable any or all four in `/settings`. They work independently and feed into the
 | Claude Code | `claudeCode.integration: true` | `~/.claude/projects/` (JSONL files) |
 | Cursor | `cursor.integration: true` | `~/Library/Application Support/Cursor/User/` (macOS)<br>`%APPDATA%\Cursor\User\` (Windows)<br>`~/.config/Cursor/User/` (Linux) |
 | Codex | `codex.integration: true` | `~/.codex/state_*.sqlite` + `~/.codex/sessions/` rollout JSONL files |
-| Pi / OMP | `pi.integration: true` | `~/.pi/agent/sessions/` (Pi) or `~/.omp/agent/sessions/` (oh-my-pi) — JSONL files |
+| Pi | `pi.integration: true` | `~/.pi/agent/sessions/` — JSONL files |
+| OMP | `omp.integration: true` | `~/.omp/agent/sessions/` — JSONL files |
 
 Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider.
 
-All four tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `bunx ei-tui` and step through the onboarding wizard (or re-run it anytime with `/onboarding`) to wire up context injection everywhere it's detected. MCP itself is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](../src/cli/README.md#mcp-server) for manual MCP setup.
+All six tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `bunx ei-tui` and step through the onboarding wizard (or re-run it anytime with `/onboarding`) to wire up context injection everywhere it's detected. MCP itself is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](../src/cli/README.md#mcp-server) for manual MCP setup.
 
 ## Slack Integration
 

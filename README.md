@@ -35,7 +35,7 @@ I built a [Sync](#what-does-sync-do) feature for this - it works using an encryp
 
 Ei can import sessions from your coding tools and extract what you've been working on — pulling out facts, topics, and context that persist across sessions. Enable any combination; they work independently and feed into the same knowledge base.
 
-Supported tools: OpenCode, Claude Code, Cursor, Codex, and Pi/OMP. Full setup in the [TUI README → Coding Tool Integrations](./tui/README.md#coding-tool-integrations).
+Supported tools: OpenCode, Claude Code, Cursor, Codex, Pi, and OMP. Full setup in the [TUI README → Coding Tool Integrations](./tui/README.md#coding-tool-integrations).
 
 Agents aren't read-only anymore. Run `bunx ei-tui` — the onboarding wizard walks you through setup and installs Ei's skills for your detected coding tools, plus two hooks per tool: one that injects relevant memory before each prompt, and one that tells the agent which Ei persona it *is* at session start. Four of the skills write, each walking the agent through explicit confirmation before every write: `ei-curate` corrects bad extracted data, splits merged records, and repoints mis-attributed quotes; `ei-persona` creates or directs a persona's identity (display name, traits, topics); `ei-rewrite` slims a Person or Topic record that's grown into a catch-all, redistributing the overflow instead of discarding it; and `ei-manage-signals` walks a coding agent through resolving its own open signals — read your current identity, talk it through with the human, write the agreed change in full, then clear the signal.
 
