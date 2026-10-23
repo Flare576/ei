@@ -177,9 +177,11 @@ added for extraction. (Signal-scan eligibility, §6, is separate.)
 
 The poll interval governs how often Ei *looks* for new work, not how fast it drains known work: after a
 block queues scans and leaves its tree in progress, the next block starts as soon as the queue drains,
-without waiting out the interval. A tree's last block ends that run: the next tree is found on the next
-poll. (At the default 60 s interval and one tree per poll, a backlog of a few thousand trees that each
-queue scans would take days.)
+without waiting out the interval. A tree's last block ends that run: the next *valid* tree is found on the
+next poll, where a valid tree is one with something to import. A tree with nothing to import (every block
+skipped or unreadable) is marked complete and the pass moves straight on to the next valid tree instead of
+using up the poll. (At the default 60 s interval and one tree with work per poll, a backlog of a few
+thousand trees that each queue scans would take days.)
 
 ### 4. Progress is a watermark per tree, keyed by root session UUID
 
@@ -288,6 +290,10 @@ What OMP adds to the existing signal pipeline for tree blocks:
   (`handlers/human-extraction.ts`).
 - **Promotion** is un-archiving the persona in the existing archived-persona view. It is forward-only:
   earlier blocks were already wiped and the tree watermark has passed them.
+- **Considered and not built, recorded for later.** Options weighed and left out for promotion: a count or
+  notice of how many archived-persona blocks were skipped, a back-scan of earlier blocks when a persona is
+  promoted, a lighter "signals on" flag short of un-archiving, and refusing to import until a Person is
+  linked. Any of them can be revisited if forward-only promotion proves too quiet.
 - **Person link.** The direct scan needs a `subject_person_id` (a required field of
   `PersonaObservation`). That is a precondition of the direct scan only: a missing or ambiguous link
   skips that scan for the block and never blocks import or extraction. Removing the field is ADR-038
@@ -331,7 +337,7 @@ What OMP adds to the existing signal pipeline for tree blocks:
 
 ### 9. Settings and onboarding
 
-- `tui/src/util/yaml-settings.ts` gains an `omp` block mirroring `pi`: the YAML shape (`integration`,
+- This adds OMP to settings and onboarding. `tui/src/util/yaml-settings.ts` gains an `omp` block mirroring `pi`: the YAML shape (`integration`,
   `polling_interval_ms`, `extraction_model`, and the shown `last_sync`), settings → YAML, and YAML →
   settings, which starts from the original object's `omp` block so every runtime-managed field
   (`last_sync`, `processed_sessions`, and the cursor) is carried through and `/settings` never wipes it. The
