@@ -16,9 +16,25 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 - **Pantheon's `P-Sisyphus` agent id now resolves to the existing `Sisyphus` persona.** Pi/OMP
   sessions attributed to `P-Sisyphus` were creating a separate `P Sisyphus` persona on import;
   `p-sisyphus`/`P-Sisyphus` are now `Sisyphus` aliases alongside the other OpenCode variants.
+- **`/settings` saves keep importer progress made while the editor was open.** Saving no longer
+  rolls an importer's progress back to what it was when the editor opened.
+- **The eval runner no longer sends `temperature` to models that reject it.**
+
+### Changed
+
+- **A single-letter prefix and a hyphen on an agent name now fold into the bare name.** For every
+  integration's persona lookup, `s-architect` resolves like `architect`.
+- **Pi now reads only `~/.pi`.** OMP sessions are no longer picked up through the Pi integration.
+- **Stored `pi:` message ids that belong to OMP sessions no longer resolve.** OMP ids now start
+  with `omp:`, and `ei --id omp:...` resolves from any directory.
 
 ### Added
 
+- **OMP (oh-my-pi) is its own integration.** It has its own `omp.integration` setting in
+  `/settings` and its own onboarding entry, separate from Pi. Its importer reads whole session
+  trees, including sub-agent transcripts, block by block with a per-tree watermark; the first run
+  imports every tree from the beginning. Sub-agent lines written by the parent agent are stored as
+  system messages from "Parent agent"; the human's own lines stay the human's.
 - **See which tools a persona called to answer you.** A persona message whose turn called tools
   now carries an icon: 🔧 when every call went to a tool classified as read-only (it only reads or
   looks something up), 🧧 when at least one call went to a tool classified as a write — one that
