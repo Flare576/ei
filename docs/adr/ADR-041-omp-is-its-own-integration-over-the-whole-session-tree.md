@@ -306,9 +306,10 @@ What OMP adds to the existing signal pipeline for tree blocks:
 - **Promotion** is un-archiving the persona in the existing archived-persona view. It is forward-only:
   earlier blocks were already wiped and the tree watermark has passed them.
 - **Considered and not built, recorded for later.** Options weighed and left out for promotion: a count or
-  notice of how many archived-persona blocks were skipped, a back-scan of earlier blocks when a persona is
-  promoted, a lighter "signals on" flag short of un-archiving, and refusing to import until a Person is
-  linked. Any of them can be revisited if forward-only promotion proves too quiet.
+  notice of new sub-agent personas seen, so a user could tell which are worth promoting; a back-scan of
+  earlier blocks when a persona is promoted; a lighter "signals on" flag short of un-archiving; and
+  warning or refusing promotion until a Person is linked. Any of them can be revisited if forward-only
+  promotion proves too quiet.
 - **Person link.** The direct scan needs a `subject_person_id` (a required field of
   `PersonaObservation`). That is a precondition of the direct scan only: a missing or ambiguous link
   skips that scan for the block and never blocks import or extraction. Removing the field is ADR-038
