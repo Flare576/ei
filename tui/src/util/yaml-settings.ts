@@ -13,6 +13,7 @@ import type { OmpSettings } from "../../../src/integrations/omp/types.js";
 import type { SlackSettings, SlackAuth } from "../../../src/integrations/slack/types.js";
 import { modelGuidToDisplay, displayToModelGuid } from "./yaml-shared.js";
 import { parseDuration, formatDuration } from "./duration.js";
+import { assertPositiveSetting, assertHeartbeatSetting } from "../../../src/core/settings-validation.js";
 
 interface EditableSettingsData {
   conversation_model?: string | null;
@@ -192,9 +193,11 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   const nullToUndefined = <T>(value: T | null | undefined): T | undefined =>
     value === null ? undefined : value;
 
-  const parseMsDuration = (value: string | null | undefined, fallback: number): number | undefined => {
+  const parseMsDuration = (value: string | null | undefined, fallback: number, field: string, assertValid: (field: string, ms: number) => void = assertPositiveSetting): number | undefined => {
     if (value == null) return undefined;
-    return parseDuration(value) ?? fallback;
+    const ms = parseDuration(value) ?? fallback;
+    assertValid(field, ms);
+    return ms;
   };
 
   const displayToGuid = (display: string | null | undefined): string | undefined => {
@@ -218,7 +221,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   if (data.opencode) {
     opencode = {
       integration: nullToUndefined(data.opencode.integration),
-      polling_interval_ms: parseMsDuration(data.opencode.polling_interval_ms, 60000),
+      polling_interval_ms: parseMsDuration(data.opencode.polling_interval_ms, 60000, "opencode.polling_interval_ms"),
       last_sync: original?.opencode?.last_sync,
       extraction_point: original?.opencode?.extraction_point,
       processed_sessions: original?.opencode?.processed_sessions,
@@ -230,7 +233,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   if (data.claudeCode) {
     claudeCode = {
       integration: nullToUndefined(data.claudeCode.integration),
-      polling_interval_ms: parseMsDuration(data.claudeCode.polling_interval_ms, 60000),
+      polling_interval_ms: parseMsDuration(data.claudeCode.polling_interval_ms, 60000, "claudeCode.polling_interval_ms"),
       last_sync: original?.claudeCode?.last_sync,
       extraction_point: original?.claudeCode?.extraction_point,
       processed_sessions: original?.claudeCode?.processed_sessions,
@@ -242,7 +245,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   if (data.cursor) {
     cursor = {
       integration: nullToUndefined(data.cursor.integration),
-      polling_interval_ms: parseMsDuration(data.cursor.polling_interval_ms, 60000),
+      polling_interval_ms: parseMsDuration(data.cursor.polling_interval_ms, 60000, "cursor.polling_interval_ms"),
       last_sync: original?.cursor?.last_sync,
       extraction_point: original?.cursor?.extraction_point,
       processed_sessions: original?.cursor?.processed_sessions,
@@ -253,7 +256,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   if (data.codex) {
     codex = {
       integration: nullToUndefined(data.codex.integration),
-      polling_interval_ms: parseMsDuration(data.codex.polling_interval_ms, 60000),
+      polling_interval_ms: parseMsDuration(data.codex.polling_interval_ms, 60000, "codex.polling_interval_ms"),
       last_sync: original?.codex?.last_sync,
       extraction_point: original?.codex?.extraction_point,
       processed_sessions: original?.codex?.processed_sessions,
@@ -265,7 +268,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
   if (data.pi) {
     pi = {
       integration: nullToUndefined(data.pi.integration),
-      polling_interval_ms: parseMsDuration(data.pi.polling_interval_ms, 60000),
+      polling_interval_ms: parseMsDuration(data.pi.polling_interval_ms, 60000, "pi.polling_interval_ms"),
       last_sync: original?.pi?.last_sync,
       extraction_point: original?.pi?.extraction_point,
       processed_sessions: original?.pi?.processed_sessions,
@@ -278,7 +281,7 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     omp = {
       ...original?.omp,
       integration: nullToUndefined(data.omp.integration),
-      polling_interval_ms: parseMsDuration(data.omp.polling_interval_ms, 60000),
+      polling_interval_ms: parseMsDuration(data.omp.polling_interval_ms, 60000, "omp.polling_interval_ms"),
       extraction_model: displayToGuid(data.omp.extraction_model),
     };
   }
@@ -299,17 +302,18 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     }
     slack = {
       ...original?.slack,
-      polling_interval_ms: parseMsDuration(data.slack.polling_interval_ms, 60000),
+      polling_interval_ms: parseMsDuration(data.slack.polling_interval_ms, 60000, "slack.polling_interval_ms"),
       workspaces: Object.keys(parsedWorkspaces).length > 0 ? parsedWorkspaces : original?.slack?.workspaces,
     };
   }
 
   let backup: import('../../../src/core/types.js').BackupConfig | undefined;
   if (data.backup) {
+    assertPositiveSetting("backup.max_backups", nullToUndefined(data.backup.max_backups));
     backup = {
       enabled: nullToUndefined(data.backup.enabled),
       max_backups: nullToUndefined(data.backup.max_backups),
-      interval_ms: parseMsDuration(data.backup.interval_ms, 3600000),
+      interval_ms: parseMsDuration(data.backup.interval_ms, 3600000, "backup.interval_ms"),
       last_backup: original?.backup?.last_backup,
     };
   }
@@ -321,8 +325,8 @@ export function settingsFromYAML(yamlContent: string, original: HumanSettings | 
     oneshot_model: displayToGuid(data.oneshot_model),
     rewrite_model: displayToGuid(data.rewrite_model),
     name_display: nullToUndefined(data.name_display),
-    default_heartbeat_ms: parseMsDuration(data.default_heartbeat_ms, 1800000),
-    default_context_window_ms: parseMsDuration(data.default_context_window_ms, 28800000),
+    default_heartbeat_ms: parseMsDuration(data.default_heartbeat_ms, 1800000, "default_heartbeat_ms", assertHeartbeatSetting),
+    default_context_window_ms: parseMsDuration(data.default_context_window_ms, 28800000, "default_context_window_ms"),
     message_min_count: nullToUndefined(data.message_min_count),
     message_max_age_days: nullToUndefined(data.message_max_age_days),
     ceremony,

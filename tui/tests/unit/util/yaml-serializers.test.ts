@@ -2,6 +2,8 @@ import { test, expect, describe } from "bun:test";
 import { 
   personaToYAML, 
   personaFromYAML, 
+  newPersonaToYAML,
+  newPersonaFromYAML,
   humanToYAML, 
   humanFromYAML,
   contextToYAML,
@@ -953,7 +955,7 @@ describe("round-trip serialization", () => {
 
   test("round-trips all new configurable settings fields", () => {
     const settings: HumanSettings = {
-      default_heartbeat_ms: 120000,
+      default_heartbeat_ms: 600000,
       default_context_window_ms: 4 * 3600000,
       message_min_count: 100,
       message_max_age_days: 7,
@@ -961,7 +963,7 @@ describe("round-trip serialization", () => {
     };
     const yaml = settingsToYAML(settings, []);
     const result = settingsFromYAML(yaml, settings, []);
-    expect(result.default_heartbeat_ms).toBe(120000);
+    expect(result.default_heartbeat_ms).toBe(600000);
     expect(result.default_context_window_ms).toBe(4 * 3600000);
     expect(result.message_min_count).toBe(100);
     expect(result.message_max_age_days).toBe(7);
@@ -1675,5 +1677,120 @@ describe("settingsToYAML / settingsFromYAML - omp integration toggle", () => {
     expect(withoutOmp).not.toContain("omp:");
 
     expect(settingsFromYAML(withoutOmp, settings, accounts).omp).toEqual(settings.omp);
+  });
+});
+
+// GitHub #103: durations / counts where 0 has no sentinel meaning must fail
+// loudly (naming the field) instead of being stored.
+describe("settingsFromYAML - non-positive durations and counts are rejected (#103)", () => {
+  const yamlWith = (base: HumanSettings | undefined, mutate: (y: string) => string) =>
+    mutate(settingsToYAML(base ?? {}, []));
+  const seeded: HumanSettings = {
+    default_heartbeat_ms: 1800000,
+    default_context_window_ms: 28800000,
+    message_min_count: 5,
+    message_max_age_days: 14,
+    opencode: { integration: false, polling_interval_ms: 60000 },
+    claudeCode: { integration: false, polling_interval_ms: 60000 },
+    cursor: { integration: false, polling_interval_ms: 60000 },
+    codex: { integration: false, polling_interval_ms: 60000 },
+    pi: { integration: false, polling_interval_ms: 60000 },
+    omp: { integration: false, polling_interval_ms: 60000 },
+    slack: { polling_interval_ms: 60000 },
+    backup: { enabled: true, max_backups: 24, interval_ms: 3600000 },
+  };
+
+  test("unmodified seeded settings still parse", () => {
+    expect(() => settingsFromYAML(settingsToYAML(seeded, []), seeded, [])).not.toThrow();
+  });
+
+  const durationCases: Array<[string, RegExp]> = [
+    ["default_heartbeat_ms", /^(default_heartbeat_ms: ).*$/m],
+    ["default_context_window_ms", /^(default_context_window_ms: ).*$/m],
+    ["opencode.polling_interval_ms", /^(opencode:\n(?:  .*\n)*?  polling_interval_ms: ).*$/m],
+    ["claudeCode.polling_interval_ms", /^(claudeCode:\n(?:  .*\n)*?  polling_interval_ms: ).*$/m],
+    ["cursor.polling_interval_ms", /^(cursor:\n(?:  .*\n)*?  polling_interval_ms: ).*$/m],
+    ["codex.polling_interval_ms", /^(codex:\n(?:  .*\n)*?  polling_interval_ms: ).*$/m],
+    ["pi.polling_interval_ms", /^(pi:\n(?:  .*\n)*?  polling_interval_ms: ).*$/m],
+    ["omp.polling_interval_ms", /^(omp:\n(?:  .*\n)*?  polling_interval_ms: ).*$/m],
+    ["slack.polling_interval_ms", /^(slack:\n(?:  .*\n)*?  polling_interval_ms: ).*$/m],
+    ["backup.interval_ms", /^(backup:\n(?:  .*\n)*?  interval_ms: ).*$/m],
+  ];
+
+  for (const [field, re] of durationCases) {
+    test(`${field}: 0m is rejected with a message naming the field`, () => {
+      const yaml = yamlWith(seeded, (y) => {
+        expect(y).toMatch(re);
+        return y.replace(re, "$10m");
+      });
+      expect(() => settingsFromYAML(yaml, seeded, [])).toThrow(field);
+    });
+  }
+
+  for (const bad of ["0", "-3"]) {
+    test(`backup.max_backups: ${bad} is rejected with a message naming the field`, () => {
+      const yaml = yamlWith(seeded, (y) => y.replace(/^(  max_backups: ).*$/m, `$1${bad}`));
+      expect(() => settingsFromYAML(yaml, seeded, [])).toThrow("backup.max_backups");
+    });
+  }
+
+  test("default_heartbeat_ms below the 5 minute minimum is rejected; exactly 5m accepted", () => {
+    const set = (v: string) => yamlWith(seeded, (y) => y.replace(/^(default_heartbeat_ms: ).*$/m, `$1${v}`));
+    expect(() => settingsFromYAML(set("4m"), seeded, [])).toThrow(/default_heartbeat_ms must be at least 5 minutes/);
+    expect(() => settingsFromYAML(set("1m"), seeded, [])).toThrow("default_heartbeat_ms");
+    expect(settingsFromYAML(set("5m"), seeded, []).default_heartbeat_ms).toBe(300000);
+  });
+
+  test("positive values are stored as written", () => {
+    const yaml = yamlWith(seeded, (y) =>
+      y.replace(/^default_heartbeat_ms: .*$/m, "default_heartbeat_ms: 5m").replace(/^(  max_backups: ).*$/m, "$13"));
+    const out = settingsFromYAML(yaml, seeded, []);
+    expect(out.default_heartbeat_ms).toBe(300000);
+    expect(out.backup?.max_backups).toBe(3);
+  });
+
+  test("message_max_age_days: 0 and message_min_count: 0 remain valid (documented never-prune sentinel)", () => {
+    const yaml = yamlWith(seeded, (y) => y.replace(/^message_max_age_days:.*$/m, "message_max_age_days: 0").replace(/^message_min_count:.*$/m, "message_min_count: 0"));
+    const out = settingsFromYAML(yaml, seeded, []);
+    expect(out.message_max_age_days).toBe(0);
+    expect(out.message_min_count).toBe(0);
+  });
+});
+
+describe("persona heartbeat_delay_ms minimum (#103)", () => {
+  const base: PersonaEntity = {
+    id: "p1", display_name: "Bot", entity: "system", traits: [], topics: [],
+    is_paused: false, is_archived: false, is_static: false,
+    last_updated: "2024-01-01T00:00:00.000Z",
+  };
+  const withHeartbeat = (p: PersonaEntity, value: string) =>
+    personaToYAML(p).replace(/^heartbeat_delay_ms: .*$/m, `heartbeat_delay_ms: ${value}`);
+
+  test("update path rejects 0m and 4m, naming the field; accepts 5m; null inherits", () => {
+    expect(() => personaFromYAML(withHeartbeat(base, "0m"), base)).toThrow("heartbeat_delay_ms");
+    expect(() => personaFromYAML(withHeartbeat(base, "4m"), base)).toThrow(/at least 5 minutes/);
+    expect(personaFromYAML(withHeartbeat(base, "5m"), base).updates.heartbeat_delay_ms).toBe(300000);
+    expect(personaFromYAML(withHeartbeat(base, "null"), base).updates.heartbeat_delay_ms).toBeUndefined();
+  });
+
+  test("create path rejects 0m and 4m; accepts 5m; null inherits", () => {
+    const tpl = newPersonaToYAML("Bot");
+    const edit = (v: string) => tpl.includes("heartbeat_delay_ms:")
+      ? tpl.replace(/^heartbeat_delay_ms: .*$/m, `heartbeat_delay_ms: ${v}`)
+      : `${tpl}\nheartbeat_delay_ms: ${v}\n`;
+    expect(() => newPersonaFromYAML(edit("0m"))).toThrow("heartbeat_delay_ms");
+    expect(() => newPersonaFromYAML(edit("4m"))).toThrow(/at least 5 minutes/);
+    expect(newPersonaFromYAML(edit("5m")).heartbeat_delay_ms).toBe(300000);
+    expect(newPersonaFromYAML(edit("null")).heartbeat_delay_ms).toBeUndefined();
+  });
+
+  test("a static persona with stored heartbeat_delay_ms 0 (Slack) round-trips through the editor unchanged", () => {
+    const slackLike: PersonaEntity = { ...base, is_static: true, heartbeat_delay_ms: 0 };
+    expect(() => personaFromYAML(personaToYAML(slackLike), slackLike)).not.toThrow();
+  });
+
+  test("a static persona is not blocked even when the YAML carries an explicit sub-minimum value", () => {
+    const slackLike: PersonaEntity = { ...base, is_static: true, heartbeat_delay_ms: 0 };
+    expect(personaFromYAML(withHeartbeat(slackLike, "1m"), slackLike).updates.heartbeat_delay_ms).toBe(60000);
   });
 });

@@ -9,6 +9,16 @@ import type {
 import { modelGuidToDisplay, displayToModelGuid, resolveEntryId } from "./yaml-shared.js";
 import { buildPersonaToolsMap, resolvePersonaToolsFromMap, preserveHiddenToolGrants } from "../../../src/core/persona-tools.js";
 import { parseDuration, formatDuration } from "./duration.js";
+import { assertHeartbeatSetting } from "../../../src/core/settings-validation.js";
+
+// A static persona is skipped by checkScheduledTasks, so its heartbeat_delay_ms (Slack seeds 0) is
+// inert and must not block editing; every other persona must meet the heartbeat minimum.
+function parseHeartbeatDelay(value: string | null | undefined, isStatic: boolean): number | undefined {
+  if (value == null) return undefined;
+  const ms = parseDuration(value) ?? undefined;
+  if (!isStatic) assertHeartbeatSetting("heartbeat_delay_ms", ms);
+  return ms;
+}
 
 const PLACEHOLDER_LONG_DESC = "Detailed description of this persona's personality, background, and role";
 
@@ -152,9 +162,7 @@ export function newPersonaFromYAML(yamlContent: string, allTools?: ToolDefinitio
     groups_visible: groupsVisible.length > 0 ? groupsVisible : ["General"],
     traits,
     topics,
-    heartbeat_delay_ms: data.heartbeat_delay_ms == null
-      ? undefined
-      : parseDuration(data.heartbeat_delay_ms) ?? undefined,
+    heartbeat_delay_ms: parseHeartbeatDelay(data.heartbeat_delay_ms, false),
     context_window_ms: data.context_window_ms == null
       ? undefined
       : parseDuration(data.context_window_ms) ?? undefined,
@@ -366,9 +374,7 @@ export function personaFromYAML(yamlContent: string, original: PersonaEntity, al
     groups_visible: groupsVisible,
     traits,
     topics,
-    heartbeat_delay_ms: data.heartbeat_delay_ms == null
-      ? undefined
-      : parseDuration(data.heartbeat_delay_ms) ?? undefined,
+    heartbeat_delay_ms: parseHeartbeatDelay(data.heartbeat_delay_ms, original.is_static === true),
     context_window_ms: data.context_window_ms == null
       ? undefined
       : parseDuration(data.context_window_ms) ?? undefined,
