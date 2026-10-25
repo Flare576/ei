@@ -11,6 +11,8 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-10-25
+
 ### Upgrading to 1.11.0
 
 If you are coming back after months, read this before the first launch.
