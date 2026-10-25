@@ -125,11 +125,11 @@ The Processor is responsible for fetching, filtering, and formatting data before
 ### Provider Setup
 
 Providers are configured per-user via `/provider new` (TUI) or the onboarding flow (Web).
-On first TUI launch, a "Local LLM" provider is auto-created if a local LLM is detected on port 1234.
+On first TUI launch, provider detection (`tui/src/util/provider-detection.ts`) creates `LMStudio` (port 1234) and `Ollama` (port 11434) providers for local servers it finds, and cloud providers (Anthropic, OpenAI, Groq, Mistral, Gemini) from `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, and `GEMINI_API_KEY` when set.
 
 ### Model Specification
 
-Format: `ProviderName:model` (e.g., `Local LLM:llama-3.1-8b`, `My OpenAI:gpt-4o`)
+Format: `ProviderName:model` (e.g., `LMStudio:llama-3.1-8b`, `My OpenAI:gpt-4o`)
 
 ## Development
 
@@ -329,7 +329,7 @@ preload = ["@opentui/solid/preload"]
 
 ### First-Launch Startup Note
 
-On first launch after upgrading, `migrateMessageIds()` rewrites all existing `Quote.message_id` and persona/room message IDs to the fully-qualified format. For users with large OpenCode histories (20MB+ state.json), this can take 45–60 seconds. The TUI will appear to hang during this time — it hasn't. Subsequent launches are instant. Do not add a timeout or skip logic; the migration only runs once per ID and is idempotent.
+`migrateMessageIds()` runs on every launch, before the loop starts. It rewrites any remaining bare-UUID persona/room message IDs and parent/active-node references to the fully-qualified format, and re-tries bare `Quote.message_id` values (`msg_…` against the OpenCode reader in the TUI, UUIDs against Ei's own messages) that did not match on an earlier launch. A quote whose `message_id` is already fully qualified is never re-verified, so a wrong qualified ID is left as-is. For users with large OpenCode histories the quote pass can make startup noticeably slow, and the TUI will appear to hang during this time — it hasn't. Do not add a timeout or skip logic; the migration is idempotent and leaves unmatched IDs untouched for the next launch.
 
 ---
 
@@ -387,42 +387,47 @@ Tool calling can fail in several ways. Here's how each is handled:
 | Provider disabled | Tool excluded from persona's available tools silently |
 | Tool returns 5xx / network error | Inject error result, remove tool from payload for remainder of interaction. A failure the human can fix (dead login, missing key) is reported as `{error, message, remediation?}` — see below |
 | `max_calls_per_interaction` reached | Omit tool from subsequent LLM calls in this interaction |
-| Hard interaction limit (10 total calls) reached | All remaining tool calls skipped silently |
-| Tool returns empty result | Inject `"No results found"`, continue loop normally |
+| Hard interaction limit (10 total non-system calls) reached | All remaining tool calls skipped silently. `find_memory`, `fetch_memory`, and `fetch_message` are exempt from the limit |
+| Tool returns empty result | The result is passed to the model as the executor returned it; core code adds no placeholder text |
 | LLM emits malformed tool call JSON | Log warning, treat as stop, return what we have |
+| Model calls a tool not offered in this request | `unknown_tool` result (`error: false`) injected; the loop continues |
 | No executor registered for tool name | Inject error result, mark tool exhausted |
 | All tools exhausted or failed | LLM synthesizes final response without tools — always responds |
 
 **Rule**: Tool failures are never fatal. They inject an error result into the LLM's tool history and continue. The LLM is responsible for synthesizing a response with whatever information it has.
 
-**Uniform failure contract**: a tool failure the human can act on comes back to the model as JSON `{error, message, remediation?}` (`toolError()` in `src/core/tools/tool-error.ts`). `error` is a short machine code, `message` is the plain-language cause, and `remediation` is what the human can do — named by real UI location (web: Settings → Toolkits; TUI: `/auth spotify`, `/auth slack`) — and is omitted when there is nothing they can do. An executor reports such a failure by throwing `ToolFailure`; `executeToolCalls` records it as a failed call (`error: true`) and drops the tool for the rest of the interaction, so the cause is explained once rather than retried. The tools section of the prompt tells the model to relay the cause and remediation to the human instead of acting as if the tool had worked.
+**Uniform failure contract**: a tool failure the human can act on comes back to the model as JSON `{error, message, remediation?}` (`toolError()` in `src/core/tools/tool-error.ts`). `error` is a short machine code, `message` is the plain-language cause, and `remediation` is what the human can do — named by real UI location in each surface (web: Settings → Toolkits → *provider*; TUI: `/tools` → *provider*, or `/auth spotify` / `/auth slack`) — and is omitted when there is nothing they can do. An executor reports such a failure by throwing `ToolFailure`; `executeToolCalls` records it as a failed call (`error: true`) and drops the tool for the rest of the interaction, so the cause is explained once rather than retried. The tools section of the prompt tells the model to relay the cause and remediation to the human instead of acting as if the tool had worked.
 
-**Tool calling applies to** (v1): `HandlePersonaResponse`, `HandleRoomResponse` (read-only tools — see Kind Field), `HandleHeartbeatCheck`, `HandleEiHeartbeat`.
+**Tool calling applies to** (v1): `HandlePersonaResponse`, `HandleRoomResponse` (read-only tools — see Kind Field), `HandleHeartbeatCheck`, `HandleEiHeartbeat`, and `HandleToolContinuation` (carrying the tool list of the request it continues). Two ceremony phases also get a restricted set of Ei's system tools: `HandleDedupCurate` gets `find_memory` only, and `HandleKnowledgeSynthesis` gets `find_memory`, `fetch_memory`, and `fetch_message`.
 
-**Tool calling does NOT apply to** (v1): extraction steps, ceremony phases, one-shot requests.
+**Tool calling does NOT apply to** (v1): extraction steps, other ceremony phases, one-shot requests.
 
 ### Built-in Tool Registry
 
-Seeded on every startup via `Processor.bootstrapTools()`. Safe to call repeatedly — only adds if absent.
+Seeded on every startup via `bootstrapTools()` (`src/core/bootstrap-tools.ts`, called from `Processor`). Safe to call repeatedly — only adds if absent. Not every built-in is seeded: `find_memory`, `fetch_memory`, and `fetch_message` are `SYSTEM_TOOLS` in `src/core/tools/index.ts` (never stored in `state.json`; `bootstrapTools()` removes any stale stored copy), and the per-persona tools below are built at request time by `buildPersonaNoteTools`, `buildPersonaIdentityTools`, and `buildResolveSignalTool`.
 
 **Provider: `ei`** (Ei Built-ins, always enabled, no config needed)
 
-| Tool name | Runtime | Description |
-|-----------|---------|-------------|
-| `find_memory` | `any` | Semantic embedding search of `StateManager.searchHumanData()` — no external call. Supports optional `persona` filter for scoping to a specific persona's learned data. |
-| `fetch_memory` | `any` | Full-record lookup for a human entity (Fact, Topic, Person, or Quote) by ID. Use when `find_memory` returns an item and you need its complete details. |
-| `fetch_message` | `any` | Retrieve a specific message by its fully-qualified ID with optional `before`/`after` context window. Accepts FQ IDs (`opencode:machine:session:id`, `ei:uuid`, `claudecode:...`, `cursor:...`, `codex:...`) and routes to the correct source DB. Returns message content, surrounding context, and session metadata. |
-| `get_my_identity` | `any` | Retrieve your own complete identity: every current trait and topic (each carrying a stable id), plus your short and long description. Read-only — heartbeat-eligible. |
-| `edit_trait` | `any` | Add, remove, or update one of your own traits. `action: "add"` requires name/description/sentiment and mints a fresh id; `action: "remove"`/`"update"` operate on an existing id looked up via `get_my_identity`. Direct in-process write — heartbeat-ineligible. |
-| `edit_topic` | `any` | Add, remove, or update one of your own topics (perspective, approach, personal_stake, sentiment, exposure_current, exposure_desired). Same add/remove/update action shape as `edit_trait`. Direct in-process write — heartbeat-ineligible. |
-| `update_description` | `any` | Update your own short and/or long description; only the supplied field(s) change. Changing `long_description` recomputes its embedding. Direct in-process write — heartbeat-ineligible. |
-| `file_read` | `node` | Read a file from local filesystem (TUI only) |
-| `list_directory` | `node` | List directory contents (TUI only) |
-| `directory_tree` | `node` | Recursive directory tree up to configurable depth (TUI only) |
-| `search_files` | `node` | Find files by name glob pattern (TUI only) |
-| `grep` | `node` | Search file contents by regex (TUI only) |
-| `get_file_info` | `node` | File/directory metadata (TUI only) |
-| `web_fetch` | `node` | Fetch URL content as text (HTML stripped; TUI only — web blocked by CORS) |
+| Tool name | Source | Runtime | Kind | Heartbeat | Description |
+|-----------|--------|---------|------|-----------|-------------|
+| `find_memory` | system | `any` | read | eligible | Semantic embedding search of `StateManager.searchHumanData()` — no external call. Supports optional `persona` filter for scoping to a specific persona's learned data. |
+| `fetch_memory` | system | `any` | read | eligible | Full-record lookup for a human entity (Fact, Topic, Person, or Quote) by ID. Use when `find_memory` returns an item and you need its complete details. |
+| `fetch_message` | system | `any` | read | eligible | Retrieve a specific message by its fully-qualified ID with optional `before`/`after` context window. Accepts FQ IDs (`opencode:machine:session:id`, `ei:uuid`, `claudecode:...`, `cursor:...`, `codex:...`) and routes to the correct source DB. Returns message content, surrounding context, and session metadata. |
+| `get_my_identity` | per-persona | `any` | read | eligible | Retrieve your own complete identity: every current trait and topic (each carrying a stable id), plus your short and long description. |
+| `edit_trait` | per-persona | `any` | write | ineligible | Add, remove, or update one of your own traits. `action: "add"` requires name/description/sentiment and mints a fresh id; `action: "remove"`/`"update"` operate on an existing id looked up via `get_my_identity`. Direct in-process write. |
+| `edit_topic` | per-persona | `any` | write | ineligible | Add, remove, or update one of your own topics (perspective, approach, personal_stake, sentiment, exposure_current, exposure_desired). Same add/remove/update action shape as `edit_trait`. Direct in-process write. |
+| `update_description` | per-persona | `any` | write | ineligible | Update your own short and/or long description; only the supplied field(s) change. Changing `long_description` recomputes its embedding. Direct in-process write. |
+| `add_note` | per-persona | `any` | write | ineligible | Add a short note to your private scratchpad; notes appear in your system prompt as a numbered list (oldest evicted when full). |
+| `clear_note` | per-persona | `any` | write | ineligible | Remove a note from your scratchpad by its 1-based index. |
+| `resolve_signal` | per-persona | `any` | write | ineligible | Confirm or dismiss one of your own EmergentSignals (`id` + `action`); only transitions the signal's status and never edits identity. |
+| `file_read` | seeded | `node` | read | eligible | Read a file from local filesystem (TUI only) |
+| `list_directory` | seeded | `node` | read | eligible | List directory contents (TUI only) |
+| `directory_tree` | seeded | `node` | read | eligible | Recursive directory tree up to configurable depth (TUI only) |
+| `search_files` | seeded | `node` | read | eligible | Find files by name glob pattern (TUI only) |
+| `grep` | seeded | `node` | read | eligible | Search file contents by regex (TUI only) |
+| `get_file_info` | seeded | `node` | read | eligible | File/directory metadata (TUI only) |
+| `web_fetch` | seeded | `node` | read | eligible | Fetch URL content as text (HTML stripped; TUI only — web blocked by CORS) |
+| `submit_response`, `submit_heartbeat_check`, `submit_ei_heartbeat`, `submit_dedup_decisions` | seeded | `any` | read | — | Internal: each handler's dedicated submit tool (`is_submit`). Not user-visible and not user-configurable; calling one ends the tool loop. |
 
 **Provider: `tavily`** (Tavily Search, disabled by default, requires `config.api_key`)
 
@@ -465,7 +470,7 @@ A turn's tool calls and the model's thinking are saved as `tool_calls`/`thinking
 
 ### Persona Tool Grants Survive Provider Disable
 
-`PersonaEntity.tools` edits are full-record replacements, but neither editing surface can see or resubmit a tool id whose provider is currently disabled — disabled-provider tools are invisible to `buildPersonaToolsMap()`. Both surfaces that edit `tools` — the TUI's `$EDITOR` YAML editor (`tui/src/util/yaml-persona.ts`) and `ei update persona`/`ei_update` (`src/cli/persona-corrections.ts`) — call `preserveHiddenToolGrants()` (`src/core/persona-tools.ts`) to carry those hidden ids forward unconditionally, so re-enabling the provider later restores the persona's original grants instead of the edit having silently revoked them. This is not a general merge: every tool id whose provider IS enabled is still fully governed by what the caller submitted.
+`PersonaEntity.tools` edits are full-record replacements, but the editing surface can't see or resubmit a tool id whose provider is currently disabled — disabled-provider tools are invisible to `buildPersonaToolsMap()`. The TUI's `$EDITOR` YAML editor (`tui/src/util/yaml-persona.ts`) calls `preserveHiddenToolGrants()` (`src/core/persona-tools.ts`) to carry those hidden ids forward unconditionally, so re-enabling the provider later restores the persona's original grants instead of the edit having silently revoked them. `ei update persona`/`ei_update` (`src/cli/persona-corrections.ts`) does not accept `tools` at all (ADR-031), so the CLI/MCP surface neither grants nor revokes them. This is not a general merge: every tool id whose provider IS enabled is still fully governed by what the caller submitted.
 
 ---
 
@@ -501,11 +506,11 @@ Personas take the same three operations, but never through the shared fact/topic
 ### Shipped skills
 
 - **`ei-curate`** — safe, verified workflows for correcting facts/topics/people/quotes on top of these primitives. Requires confirmation before every write and refuses to guess on ambiguous attributions. Load it with `/ei-curate`. Source: `skills/ei-curate/SKILL.md`.
-- **`ei-persona`** — the equivalent guided workflow for authoring or directing a persona's *character* (create a new persona, edit its traits/topics, archive, or delete) rather than correcting learned data. Load it with `/ei-persona`. Source: `skills/ei-persona/SKILL.md`.
+- **`ei-persona`** — the equivalent guided workflow for authoring or directing a persona's *character* (create a new persona, edit its traits/topics, or delete) rather than correcting learned data. Archiving, pausing, and tool grants are TUI actions, not part of this skill. Load it with `/ei-persona`. Source: `skills/ei-persona/SKILL.md`.
 - **`ei-rewrite`** — the on-demand counterpart to Ei's automatic Rewrite ceremony (`src/core/handlers/rewrite.ts`): slims a Topic or Person record that has accreted *correctly-attributed* but off-contract content and redistributes it into existing or new records through these same `create`/`update` primitives. Unlike `ei-curate` there is no misattribution to investigate — the data is right, the container is wrong. Its one hard rule is that every redistribution target must be found by searching Ei's own data *before* anything new is created, so a manual rewrite can't fragment memory by minting a record Ei already has under different wording. `rewrite_length_floor` and `persona_groups`/`interested_personas` are outside the write contract (ADR-031), so it never sets them. Load it with `/ei-rewrite`. Source: `skills/ei-rewrite/SKILL.md`.
 - **`ei-manage-signals`** — the four-step procedure a CLI/MCP-driven coding agent follows on seeing an open Ei signal in its own system prompt: read your current full identity first (`ei --id`), have a real conversation with the human about the signal's claim, write the agreed trait/topic back in full through these same correction primitives (`ei update persona` — a whole-array merge patch, since CLI/MCP has no per-element edit), then clear the signal last via `ei confirm signal`/`ei dismiss signal` once the identity write has actually landed. `signal.confirm`/`signal.dismiss` never accept or apply an identity delta, for either lens or any caller (ADR-039 item 1) — there is no staging step; clearing a signal is pure status-transition bookkeeping. Not a single file: a root dispatcher (`SKILL.md`) over two lenses. `lenses/persona.md` is the identity half; `lenses/agent.md` is the operating-contract half — how the agent works *in this harness* — and writes into the harness's own instruction files as a marked delimited region, touching no Ei record at all. A `references/` directory carries the CLI surface, per-harness target files, and the configuration surfaces no file-based tool can reach.
 
-Every directory under `skills/` in the Ei package is installed by `ei --install` into your harness's skill discovery directory — these four, plus two that write nothing back through this queue: `ei-search` (deliberate mid-session read-path lookups) and `ei-generate` (agent-authored document synthesis from Ei's memory). The full user-facing table is in `src/cli/README.md` → Shipped Skills.
+Every directory under `skills/` in the Ei package is installed by `ei --install` into your harness's skill discovery directory. The ones above write through this queue; three more write nothing back: `ei-search` (deliberate mid-session read-path lookups), `ei-generate` (agent-authored document synthesis from Ei's memory), and `ei-perspective` (read-only, advisory: polls the user's real personas through temporary sub-agents that each embody one persona's injected identity). The full user-facing table is in `src/cli/README.md` → Shipped Skills.
 
 ---
 
