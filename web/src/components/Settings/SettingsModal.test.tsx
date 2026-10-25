@@ -296,3 +296,62 @@ describe("SettingsModal default context window guard", () => {
     expect(onUpdate).toHaveBeenCalledWith({ default_context_window_ms: 1 * 3600000 });
   });
 });
+
+// GitHub #103: an emptied heartbeat input is Number("") === 0, which stored
+// default_heartbeat_ms = 0 and made every persona due for a heartbeat on every
+// processor loop pass. Anything below the owner's 5-minute minimum must never
+// reach onUpdate; the alert fires on blur (so typing "15" is not interrupted by "1").
+describe("SettingsModal default heartbeat guard", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["0"],
+    ["-5"],
+    ["1"],
+    ["4.9833"],
+    [""],
+  ])("never persists %j minutes and alerts on blur naming the 5 minute minimum", (input) => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const onUpdate = renderModal([], makeProcessor([]));
+    const field = screen.getByLabelText("Default Heartbeat (minutes)");
+    fireEvent.change(field, { target: { value: input } });
+    expect(onUpdate).not.toHaveBeenCalled();
+    fireEvent.blur(field);
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringMatching(/Default Heartbeat.*at least 5 minutes/));
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("persists exactly 5 minutes (inclusive minimum) as milliseconds without alerting", () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const onUpdate = renderModal([], makeProcessor([]));
+    const field = screen.getByLabelText("Default Heartbeat (minutes)");
+    fireEvent.change(field, { target: { value: "5" } });
+    fireEvent.blur(field);
+    expect(onUpdate).toHaveBeenCalledWith({ default_heartbeat_ms: 300000 });
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it("persists a larger valid value as milliseconds", () => {
+    const onUpdate = renderModal([], makeProcessor([]));
+    fireEvent.change(screen.getByLabelText("Default Heartbeat (minutes)"), { target: { value: "45" } });
+    expect(onUpdate).toHaveBeenCalledWith({ default_heartbeat_ms: 45 * 60000 });
+  });
+});
+
+describe("SettingsModal message min count default display", () => {
+  it("shows 0 (no floor) when message_min_count is unset", () => {
+    renderModal([], makeProcessor([]));
+    expect((screen.getByLabelText("Min Messages to Keep") as HTMLInputElement).value).toBe("0");
+  });
+});
+
+// Unset message_max_age_days means 0 = never prune (ADR-033, ceremony.ts
+// `?? 0`), so the modal must not display a phantom 14-day default.
+describe("SettingsModal message rolloff age default display", () => {
+  it("shows 0 (never prune) when message_max_age_days is unset", () => {
+    renderModal([], makeProcessor([]));
+    expect((screen.getByLabelText("Message Rolloff Age (days)") as HTMLInputElement).value).toBe("0");
+  });
+});

@@ -8,6 +8,7 @@ import { ThemeEditor } from './ThemeEditor';
 import type { ProviderAccount, SyncCredentials, ToolProvider, ToolDefinition } from '../../../../src/core/types';
 import type { ThemeDefinition } from '../../../../src/core/types/entities.js';
 import type { Processor } from '../../../../src/core/processor';
+import { heartbeatSettingError, MIN_HEARTBEAT_MS } from '../../../../src/core/settings-validation';
 
 interface SettingsData {
   name_display?: string;
@@ -146,6 +147,34 @@ export const SettingsModal = ({
     onUpdate({ default_context_window_ms: hours * 3600000 });
   }, [onUpdate]);
 
+  // An emptied input is Number("") === 0, which would store a heartbeat of 0 ms and make
+  // every persona due for a heartbeat on every processor loop pass. Values below the owner's
+  // minimum (MIN_HEARTBEAT_MS) are never stored. Valid values persist immediately; an invalid
+  // draft (e.g. the "1" typed on the way to "15") is held locally without storing, and the
+  // alert fires on blur so multi-digit typing is not interrupted.
+  const [heartbeatDraft, setHeartbeatDraft] = useState<string | null>(null);
+
+  const handleHeartbeatChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const minutes = raw === "" ? NaN : Number(raw);
+    if (heartbeatSettingError("Default Heartbeat", minutes * 60000)) {
+      setHeartbeatDraft(raw);
+      return;
+    }
+    setHeartbeatDraft(null);
+    onUpdate({ default_heartbeat_ms: minutes * 60000 });
+  }, [onUpdate]);
+
+  const handleHeartbeatBlur = useCallback(() => {
+    if (heartbeatDraft === null) return;
+    const raw = heartbeatDraft;
+    setHeartbeatDraft(null);
+    alert(
+      `Default Heartbeat must be at least ${MIN_HEARTBEAT_MS / 60000} minutes. ` +
+      `"${raw}" was rejected -- 0 does not mean "disabled" here.`
+    );
+  }, [heartbeatDraft]);
+
   const handleAccountAdd = useCallback(() => {
     setEditingAccount(null);
     setAccountEditorOpen(true);
@@ -262,9 +291,10 @@ export const SettingsModal = ({
                   id="default-heartbeat"
                   type="number"
                   className="ei-input"
-                  min="1"
-                  value={settings.default_heartbeat_ms != null ? Math.round(settings.default_heartbeat_ms / 60000) : 30}
-                  onChange={(e) => onUpdate({ default_heartbeat_ms: Number(e.target.value) * 60000 })}
+                  min={MIN_HEARTBEAT_MS / 60000}
+                  value={heartbeatDraft ?? (settings.default_heartbeat_ms != null ? Math.round(settings.default_heartbeat_ms / 60000) : 30)}
+                  onChange={handleHeartbeatChange}
+                  onBlur={handleHeartbeatBlur}
                 />
                 <small className="ei-form-hint">Default heartbeat interval for new personas</small>
               </div>
@@ -293,7 +323,7 @@ export const SettingsModal = ({
                   type="number"
                   className="ei-input"
                   min="1"
-                  value={settings.message_min_count ?? 200}
+                  value={settings.message_min_count ?? 0}
                   onChange={(e) => onUpdate({ message_min_count: Number(e.target.value) })}
                 />
                 <small className="ei-form-hint">Minimum messages preserved per persona during cleanup</small>
@@ -306,7 +336,7 @@ export const SettingsModal = ({
                   type="number"
                   className="ei-input"
                   min="1"
-                  value={settings.message_max_age_days ?? 14}
+                  value={settings.message_max_age_days ?? 0}
                   onChange={(e) => onUpdate({ message_max_age_days: Number(e.target.value) })}
                 />
                 <small className="ei-form-hint">Messages older than this may be cleaned up</small>
