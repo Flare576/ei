@@ -11,6 +11,16 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ## [Unreleased]
 
+## [1.11.1] — 2026-10-25
+
+### Fixed
+
+- **1.11.0 was tagged but never reached npm; 1.11.1 is the first published 1.11 build.** The
+  release pipeline's unit tests failed on a clean runner because one test downloaded the real
+  embedding model and timed out. That test now stubs the embedding service. Nothing user-visible
+  differs from 1.11.0, so the 1.11.0 notes below, including *Upgrading to 1.11.0*, apply as
+  written.
+
 ## [1.11.0] — 2026-10-25
 
 ### Upgrading to 1.11.0
