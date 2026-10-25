@@ -10,13 +10,24 @@ import type { PersonaEntity, PersonaTrait, PersonaTopic } from "../../../../src/
 import type { ToolExecutor } from "../../../../src/core/tools/types.js";
 
 // AT3's "embedding recompute" describe block below drives the REAL
-// persona-manager.ts updatePersona logic (including its real
-// computePersonaDescriptionEmbedding call -- vi.mock cannot intercept
-// module imports in this project's bun+vitest setup, confirmed by an
-// isolated repro, so this test accepts the real model's wall-clock cost
-// instead of asserting on an unreachable mock). Every other test in this
-// file uses a plain vi.fn() closure and never touches embedding-service.js
-// at all, so it needs no mock and pays no such cost.
+// persona-manager.ts updatePersona logic, including the real
+// computePersonaDescriptionEmbedding (so the text that gets embedded is
+// composed exactly as in production). Only the embedding SERVICE is stubbed
+// with a deterministic function of its input text: the real model has to be
+// downloaded, and a cold CI runner racing several test workers on that
+// download gets a corrupt archive and times out. Every other test in this
+// file uses a plain vi.fn() closure and never touches embedding-service.js.
+vi.mock("../../../../src/core/embedding-service.js", async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    getEmbeddingService: vi.fn(() => ({
+      embed: vi.fn(async (text: string) => [text.length, text.charCodeAt(0) || 0, 1]),
+      embedBatch: vi.fn(async (texts: string[]) => texts.map((t) => [t.length, t.charCodeAt(0) || 0, 1])),
+      isReady: () => true,
+    })),
+  };
+});
 import { updatePersona as personaManagerUpdatePersona } from "../../../../src/core/persona-manager.js";
 import type { StateManager } from "../../../../src/core/state-manager.js";
 
