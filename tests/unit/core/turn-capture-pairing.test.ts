@@ -79,7 +79,7 @@ describe("tool-call tuples are paired by call id", () => {
       fx.messages().at(-1)?.tool_calls?.map((call) => [call.name, call.arguments, call.result, call.error, call.kind]),
     ).toEqual([
       [echo.name, { which: "first" }, "echo:first", false, "read"],
-      [failing.name, { which: "second" }, JSON.stringify({ error: "Tool unavailable: boom" }), true, "write"],
+      [failing.name, { which: "second" }, expect.stringContaining("boom"), true, "write"],
       [echo.name, { which: "third" }, "echo:third", false, "read"],
     ]);
   });

@@ -12,6 +12,7 @@
  * topic: "general" (web) or "news"
  */
 import type { ToolExecutor } from "../types.js";
+import { ToolFailure } from "../tool-error.js";
 
 interface TavilyResult {
   title: string;
@@ -33,7 +34,11 @@ async function tavilySearch(
 ): Promise<TavilySearchResponse> {
   const apiKey = config?.api_key?.trim();
   if (!apiKey) {
-    throw new Error(`tavily_${topic === "general" ? "web" : "news"}_search: missing api_key in tool config. Add your Tavily API key in Settings → Toolkits.`);
+    throw new ToolFailure(
+      "not_configured",
+      "Tavily search has no API key configured.",
+      "Add your Tavily API key in Settings → Toolkits → Tavily."
+    );
   }
 
   const query = typeof args.query === "string" ? args.query.trim() : "";
@@ -58,7 +63,24 @@ async function tavilySearch(
   });
 
   if (!response.ok) {
-    throw new Error(`Tavily Search API error (${response.status}): ${await response.text()}`);
+    const status = response.status;
+    if (status === 401 || status === 403) {
+      throw new ToolFailure(
+        "api_key_rejected",
+        `Tavily rejected the API key (HTTP ${status}).`,
+        "Check that the Tavily API key is correct and still active, then replace it in Settings → Toolkits → Tavily."
+      );
+    }
+    if (status === 429 || status >= 500) {
+      throw new ToolFailure(
+        "search_unavailable",
+        `Tavily search is unavailable right now (HTTP ${status}).`,
+        status === 429 ? "Tavily is rate-limiting or out of quota for this key; wait a bit and try again, or check the plan/usage on your Tavily account." : undefined
+      );
+    }
+    const body = (await response.text()).trim();
+    const detail = body.length > 300 ? `${body.slice(0, 300)}…` : body;
+    throw new ToolFailure("search_failed", `Tavily search failed (HTTP ${status})${detail ? `: ${detail}` : "."}`);
   }
 
   return response.json() as Promise<TavilySearchResponse>;

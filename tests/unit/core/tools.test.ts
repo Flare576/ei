@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   parseToolCalls,
   toOpenAITools,
@@ -6,8 +6,8 @@ import {
   registerExecutor,
   HARD_TOOL_CALL_LIMIT,
 } from "../../../src/core/tools/index.js";
+import { ToolFailure } from "../../../src/core/tools/tool-error.js";
 import type { ToolDefinition } from "../../../src/core/types.js";
-import type { ToolCall, ToolExecutor } from "../../../src/core/tools/types.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -215,8 +215,9 @@ describe("executeToolCalls", () => {
     expect(results[0].tool_call_id).toBe("call-max-1");
     expect(results[0].name).toBe(TEST_TOOL);
     expect(results[0].error).toBe(false);
-    const parsed = JSON.parse(results[0].result) as { error: string };
-    expect(parsed.error).toContain("Tool call limit reached");
+    const parsed = JSON.parse(results[0].result) as { error: string; message: string };
+    expect(parsed.error).toBe("tool_call_limit_reached");
+    expect(parsed.message).toContain(TEST_TOOL);
     expect(exhaustedToolNames.has(TEST_TOOL)).toBe(true);
   });
 
@@ -258,9 +259,95 @@ describe("executeToolCalls", () => {
 
     expect(results).toHaveLength(1);
     expect(results[0].error).toBe(true);
-    const parsed = JSON.parse(results[0].result) as { error: string };
-    expect(parsed.error).toContain("service unavailable");
+    const parsed = JSON.parse(results[0].result) as { error: string; message: string };
+    expect(parsed.error).toBe("tool_failed");
+    expect(parsed.message).toContain("service unavailable");
+    expect(parsed.message).toContain(TEST_TOOL);
     expect(exhaustedToolNames.has(TEST_TOOL)).toBe(true);
+  });
+
+  it("turns a thrown ToolFailure into its code, message and remediation, marks error and exhausts the tool", async () => {
+    registerExecutor({
+      name: TEST_TOOL,
+      execute: async () => {
+        throw new ToolFailure("token_dead", "The refresh token was revoked.", "Re-run /auth spotify.", { integration: "spotify" });
+      },
+    });
+
+    const { results, exhaustedToolNames } = await executeToolCalls(
+      [makeCall(TEST_TOOL, "call-failure-1")],
+      [definition],
+      new Map<string, number>(),
+      { count: 0 }
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0].error).toBe(true);
+    expect(JSON.parse(results[0].result)).toEqual({
+      error: "token_dead",
+      integration: "spotify",
+      message: "The refresh token was revoked.",
+      remediation: "Re-run /auth spotify.",
+    });
+    expect(exhaustedToolNames.has(TEST_TOOL)).toBe(true);
+  });
+
+  describe("Tavily failures through executeToolCalls", () => {
+    const originalFetch = globalThis.fetch;
+    const tavilyDef = (config: Record<string, string>) =>
+      makeToolDef("tavily_web_search", { config, max_calls_per_interaction: 3 });
+    const run = async (config: Record<string, string>) => {
+      const out = await executeToolCalls(
+        [makeCall("tavily_web_search", "call-tavily-1", { query: "ei" })],
+        [tavilyDef(config)],
+        new Map<string, number>(),
+        { count: 0 }
+      );
+      return {
+        result: JSON.parse(out.results[0].result) as { error: string; message: string; remediation?: string },
+        flagged: out.results[0].error,
+        exhausted: out.exhaustedToolNames.has("tavily_web_search"),
+      };
+    };
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it("reports not_configured with a remediation when the api key is missing", async () => {
+      const fetchSpy = vi.fn();
+      globalThis.fetch = fetchSpy as unknown as typeof fetch;
+      const { result, flagged, exhausted } = await run({});
+      expect(result.error).toBe("not_configured");
+      expect(result.remediation).toContain("Settings → Toolkits");
+      expect(flagged).toBe(true);
+      expect(exhausted).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("reports api_key_rejected with a remediation on HTTP 401", async () => {
+      globalThis.fetch = vi.fn(async () => new Response("unauthorized", { status: 401 })) as unknown as typeof fetch;
+      const { result, flagged } = await run({ api_key: "bad" });
+      expect(result.error).toBe("api_key_rejected");
+      expect(result.message).toContain("401");
+      expect(result.remediation).toBeTruthy();
+      expect(flagged).toBe(true);
+    });
+
+    it("reports search_unavailable with the status on HTTP 503", async () => {
+      globalThis.fetch = vi.fn(async () => new Response("down", { status: 503 })) as unknown as typeof fetch;
+      const { result } = await run({ api_key: "k" });
+      expect(result.error).toBe("search_unavailable");
+      expect(result.message).toContain("503");
+    });
+
+    it("reports search_failed with a capped body on other non-OK statuses", async () => {
+      globalThis.fetch = vi.fn(async () => new Response("x".repeat(5000), { status: 400 })) as unknown as typeof fetch;
+      const { result } = await run({ api_key: "k" });
+      expect(result.error).toBe("search_failed");
+      expect(result.message).toContain("400");
+      expect(result.message.length).toBeLessThan(500);
+    });
   });
 
   it("returns error: false with 'Unknown tool' payload when tool name has no registered executor", async () => {
@@ -281,8 +368,10 @@ describe("executeToolCalls", () => {
     expect(results[0].tool_call_id).toBe("call-unknown-1");
     expect(results[0].name).toBe("__nonexistent_tool_xyz__");
     expect(results[0].error).toBe(false);
-    const parsed = JSON.parse(results[0].result) as { error: string };
-    expect(parsed.error).toContain("Unknown tool");
+    const parsed = JSON.parse(results[0].result) as { error: string; message: string; remediation?: string };
+    expect(parsed.error).toBe("unknown_tool");
+    expect(parsed.message).toContain("__nonexistent_tool_xyz__");
+    expect(parsed.remediation).toBeTruthy();
     expect(exhaustedToolNames.has("__nonexistent_tool_xyz__")).toBe(false);
   });
 

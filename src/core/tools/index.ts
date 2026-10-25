@@ -9,6 +9,7 @@
 import type { ToolDefinition } from "../types.js";
 import type { ToolCall, ToolResult, ToolExecutor } from "./types.js";
 import { dedupeToolsByName } from "./dedupe.js";
+import { toolError, ToolFailure } from "./tool-error.js";
 import { tavilyWebSearchExecutor, tavilyNewsSearchExecutor } from "./builtin/web-search.js";
 import { currentlyPlayingExecutor } from "./builtin/currently-playing.js";
 import { likedSongsExecutor } from "./builtin/spotify-liked-songs.js";
@@ -446,7 +447,11 @@ export async function executeToolCalls(
       results.push({
         tool_call_id: call.id,
         name: call.name,
-        result: JSON.stringify({ error: `Unknown tool: ${call.name}` }),
+        result: toolError(
+          "unknown_tool",
+          `There is no tool named ${call.name} available in this request.`,
+          "Use only the tools listed in the request."
+        ),
         error: false,
       });
       continue;
@@ -461,7 +466,11 @@ export async function executeToolCalls(
       results.push({
         tool_call_id: call.id,
         name: call.name,
-        result: JSON.stringify({ error: `Tool call limit reached for ${call.name}` }),
+        result: toolError(
+          "tool_call_limit_reached",
+          `${call.name} has already been called the maximum number of times allowed in this interaction.`,
+          "Use the results already gathered instead of calling this tool again."
+        ),
         error: false,
       });
       continue;
@@ -473,7 +482,7 @@ export async function executeToolCalls(
       results.push({
         tool_call_id: call.id,
         name: call.name,
-        result: JSON.stringify({ error: `No executor for tool: ${call.name}` }),
+        result: toolError("no_executor", `The ${call.name} tool has no executor registered, so it cannot run.`),
         error: true,
       });
       exhaustedToolNames.add(call.name);
@@ -505,10 +514,13 @@ export async function executeToolCalls(
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.warn(`[Tools] ${call.name} failed: ${errMsg}`);
+      const payload = err instanceof ToolFailure
+        ? toolError(err.code, err.message, err.remediation, err.extra)
+        : toolError("tool_failed", `The ${call.name} tool failed: ${errMsg}`);
       results.push({
         tool_call_id: call.id,
         name: call.name,
-        result: JSON.stringify({ error: `Tool unavailable: ${errMsg}` }),
+        result: payload,
         error: true,
       });
       exhaustedToolNames.add(call.name);
