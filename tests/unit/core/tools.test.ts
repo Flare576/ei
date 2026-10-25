@@ -319,7 +319,8 @@ describe("executeToolCalls", () => {
       globalThis.fetch = fetchSpy as unknown as typeof fetch;
       const { result, flagged, exhausted } = await run({});
       expect(result.error).toBe("not_configured");
-      expect(result.remediation).toContain("Settings → Toolkits");
+      expect(result.remediation).toContain("Settings → Toolkits → Tavily");
+      expect(result.remediation).toContain("/tools → Tavily Search");
       expect(flagged).toBe(true);
       expect(exhausted).toBe(true);
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -330,7 +331,8 @@ describe("executeToolCalls", () => {
       const { result, flagged } = await run({ api_key: "bad" });
       expect(result.error).toBe("api_key_rejected");
       expect(result.message).toContain("401");
-      expect(result.remediation).toBeTruthy();
+      expect(result.remediation).toContain("Settings → Toolkits → Tavily");
+      expect(result.remediation).toContain("/tools → Tavily Search");
       expect(flagged).toBe(true);
     });
 

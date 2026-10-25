@@ -37,7 +37,7 @@ async function tavilySearch(
     throw new ToolFailure(
       "not_configured",
       "Tavily search has no API key configured.",
-      "Add your Tavily API key in Settings → Toolkits → Tavily."
+      "Add your Tavily API key. In the web app: Settings → Toolkits → Tavily. In the TUI: /tools → Tavily Search."
     );
   }
 
@@ -68,7 +68,7 @@ async function tavilySearch(
       throw new ToolFailure(
         "api_key_rejected",
         `Tavily rejected the API key (HTTP ${status}).`,
-        "Check that the Tavily API key is correct and still active, then replace it in Settings → Toolkits → Tavily."
+        "Check that the Tavily API key is correct and still active, then replace it. In the web app: Settings → Toolkits → Tavily. In the TUI: /tools → Tavily Search."
       );
     }
     if (status === 429 || status >= 500) {
