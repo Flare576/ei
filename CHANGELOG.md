@@ -11,15 +11,16 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ## [Unreleased]
 
-## [1.11.1] — 2026-10-25
+## [1.11.2] — 2026-10-25
 
 ### Fixed
 
-- **1.11.0 was tagged but never reached npm; 1.11.1 is the first published 1.11 build.** The
-  release pipeline's unit tests failed on a clean runner because one test downloaded the real
-  embedding model and timed out. That test now stubs the embedding service. Nothing user-visible
-  differs from 1.11.0, so the 1.11.0 notes below, including *Upgrading to 1.11.0*, apply as
-  written.
+- **1.11.0 and 1.11.1 were tagged but never reached npm; 1.11.2 is the first published 1.11
+  build.** The release pipeline's unit tests failed on a clean runner because one test needed
+  the real embedding model: its download races across test workers and comes out corrupt, so
+  the test timed out. The test now replaces the persona description embedding with a
+  deterministic function, so it no longer depends on the model. Nothing user-visible differs
+  from 1.11.0, so the 1.11.0 notes below, including *Upgrading to 1.11.0*, apply as written.
 
 ## [1.11.0] — 2026-10-25
 
