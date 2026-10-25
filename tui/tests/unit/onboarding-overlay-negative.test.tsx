@@ -22,7 +22,7 @@ mock.module("../../src/util/logger", () => ({
   interceptConsole: () => {},
 }));
 
-import { getInstalledVersion } from "../../src/util/local-state";
+import { getInstalledVersion } from "../../../src/cli/local-state.js";
 
 // Test-controlled: injected directly as a PROP, never via mock.module() —
 // see onboarding-overlay.test.tsx's happy-path file for the full

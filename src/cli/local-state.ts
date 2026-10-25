@@ -1,5 +1,5 @@
 import { join, dirname } from "path";
-import { mkdir, rename, unlink } from "fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "fs/promises";
 
 const LOCAL_STATE_FILE = "local.json";
 
@@ -8,8 +8,11 @@ const LOCAL_STATE_FILE = "local.json";
  *
  * Unlike `state.json`, this file is NEVER synced or merged across machines —
  * it holds install/version bookkeeping that is intrinsically tied to this
- * one install (e.g. "which harness version's onboarding/install steps have
- * already run here"). Do not add synced settings or secrets to this shape.
+ * one install (e.g. "which version's harness hooks/skills were last
+ * installed here"). Do not add synced settings or secrets to this shape.
+ *
+ * Written by both the CLI (`ei --install`) and the TUI (onboarding wizard,
+ * upgrade prompt), so it lives here rather than under `tui/`.
  */
 export interface LocalState {
   installed_version?: string;
@@ -22,9 +25,7 @@ export interface LocalState {
  */
 export async function readLocalState(dataPath: string): Promise<LocalState> {
   try {
-    const file = Bun.file(join(dataPath, LOCAL_STATE_FILE));
-    if (!(await file.exists())) return {};
-    const text = await file.text();
+    const text = await readFile(join(dataPath, LOCAL_STATE_FILE), "utf-8");
     return JSON.parse(text) as LocalState;
   } catch {
     return {};
@@ -45,7 +46,7 @@ export async function writeLocalState(dataPath: string, patch: Partial<LocalStat
 
   const tempPath = `${targetPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
   try {
-    await Bun.write(tempPath, JSON.stringify(merged, null, 2));
+    await writeFile(tempPath, JSON.stringify(merged, null, 2));
     await rename(tempPath, targetPath);
   } catch (e) {
     try {

@@ -25,7 +25,7 @@ mock.module("../../src/util/logger", () => ({
   interceptConsole: () => {},
 }));
 
-import { getInstalledVersion } from "../../src/util/local-state";
+import { getInstalledVersion } from "../../../src/cli/local-state.js";
 
 // Test-controlled: `runHarnessInstall` is injected directly as a PROP
 // (never mocked via bun:test's mock.module()) so it can never touch this

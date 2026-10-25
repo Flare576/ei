@@ -1,6 +1,6 @@
 import { interceptConsole } from "./logger.js";
 import { installMcpClients } from "../../../src/cli/install.js";
-import { setInstalledVersion } from "./local-state.js";
+import { setInstalledVersion } from "../../../src/cli/local-state.js";
 
 export interface HarnessInstallResult {
   ok: boolean;

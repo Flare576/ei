@@ -33,7 +33,7 @@ mock.module("../../src/util/logger", () => ({
   interceptConsole: () => {},
 }));
 
-import { getInstalledVersion } from "../../src/util/local-state";
+import { getInstalledVersion } from "../../../src/cli/local-state.js";
 
 let runHarnessInstallImpl: () => Promise<{ ok: boolean; failures: string[] }> = async () => ({
   ok: false,

@@ -22,7 +22,7 @@ import {
   ALL_PROVIDER_NAMES,
 } from "../util/provider-detection.js";
 import type { ProviderDetectionStatus } from "../util/provider-detection.js";
-import { getInstalledVersion } from "../util/local-state.js";
+import { getInstalledVersion } from "../../../src/cli/local-state.js";
 import { shouldShowUpgradePrompt } from "../util/upgrade-prompt.js";
 import { runHarnessInstall, stampInstalled } from "../util/harness-install.js";
 import pkg from "../../../package.json";

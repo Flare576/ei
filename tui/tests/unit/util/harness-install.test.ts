@@ -71,7 +71,7 @@ mock.module("../../../src/util/logger", () => ({
 }));
 
 import { runHarnessInstall, stampInstalled } from "../../../src/util/harness-install";
-import { getInstalledVersion } from "../../../src/util/local-state";
+import { getInstalledVersion } from "../../../../src/cli/local-state.js";
 
 describe("runHarnessInstall", () => {
   beforeEach(() => {

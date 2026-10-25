@@ -80,7 +80,7 @@ import type { ParentComponent } from "solid-js";
 import { EiProvider, useEi, type EiContextValue } from "../../src/context/ei";
 import { KeyboardProvider } from "../../src/context/keyboard";
 import { OverlayProvider } from "../../src/context/overlay";
-import { getInstalledVersion } from "../../src/util/local-state";
+import { getInstalledVersion } from "../../../src/cli/local-state.js";
 import pkg from "../../../package.json";
 
 const TestProviders: ParentComponent = (props) => (

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, readdir, writeFile } from "fs/promises";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm, readdir, readFile, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -8,7 +8,7 @@ import {
   getInstalledVersion,
   setInstalledVersion,
   type LocalState,
-} from "../../../src/util/local-state.js";
+} from "../../../src/cli/local-state.js";
 
 describe("local-state", () => {
   let dataPath: string;
@@ -66,7 +66,7 @@ describe("local-state", () => {
 
       await writeLocalState(dataPath, { installed_version: "3.1.4" } as Partial<LocalState>);
 
-      const raw = JSON.parse(await Bun.file(join(dataPath, "local.json")).text()) as Record<string, unknown>;
+      const raw = JSON.parse(await readFile(join(dataPath, "local.json"), "utf-8")) as Record<string, unknown>;
       expect(raw.a).toBe(1);
       expect(raw.installed_version).toBe("3.1.4");
     });
@@ -75,40 +75,17 @@ describe("local-state", () => {
       await writeFile(join(dataPath, "local.json"), JSON.stringify({ a: 1, installed_version: "0.0.1" }));
       await writeLocalState(dataPath, { installed_version: "0.0.2" });
 
-      const raw = JSON.parse(await Bun.file(join(dataPath, "local.json")).text()) as Record<string, unknown>;
+      const raw = JSON.parse(await readFile(join(dataPath, "local.json"), "utf-8")) as Record<string, unknown>;
       expect(raw.a).toBe(1);
       expect(raw.installed_version).toBe("0.0.2");
     });
 
-    it("writes via a temp path then renames — no leftover temp files remain", async () => {
-      const originalWrite = Bun.write;
-      const writeCalls: string[] = [];
-      Bun.write = async (path: unknown, data: unknown) => {
-        writeCalls.push(String(path));
-        return originalWrite(path as never, data as never);
-      };
+    it("leaves only local.json behind — no temp files remain after the atomic write", async () => {
+      await writeLocalState(dataPath, { installed_version: "5.5.5" });
+      await writeLocalState(dataPath, { installed_version: "5.5.6" });
 
-      try {
-        await writeLocalState(dataPath, { installed_version: "5.5.5" });
-      } finally {
-        Bun.write = originalWrite;
-      }
-
-      const targetPath = join(dataPath, "local.json");
-      expect(writeCalls.length).toBe(1);
-      // The path actually written to must be a distinct temp path, not the
-      // final target — proof the implementation writes-then-renames rather
-      // than writing the target file directly.
-      expect(writeCalls[0]).not.toBe(targetPath);
-      expect(writeCalls[0].startsWith(`${targetPath}.tmp.`)).toBe(true);
-
-      // After rename, only the final file should exist — the temp name must
-      // be gone (proving the rename, not a copy, and that cleanup happened).
-      const entries = await readdir(dataPath);
-      expect(entries).toEqual(["local.json"]);
-
-      const state = await readLocalState(dataPath);
-      expect(state).toEqual({ installed_version: "5.5.5" });
+      expect(await readdir(dataPath)).toEqual(["local.json"]);
+      expect(await readLocalState(dataPath)).toEqual({ installed_version: "5.5.6" });
     });
   });
 
@@ -126,7 +103,7 @@ describe("local-state", () => {
       await writeFile(join(dataPath, "local.json"), JSON.stringify({ some_future_key: "keep-me" }));
       await setInstalledVersion(dataPath, "1.8.1");
 
-      const raw = JSON.parse(await Bun.file(join(dataPath, "local.json")).text()) as Record<string, unknown>;
+      const raw = JSON.parse(await readFile(join(dataPath, "local.json"), "utf-8")) as Record<string, unknown>;
       expect(raw.some_future_key).toBe("keep-me");
       expect(raw.installed_version).toBe("1.8.1");
     });

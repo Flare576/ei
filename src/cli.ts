@@ -16,7 +16,7 @@ import { readFile } from "fs/promises";
 import { retrieveBalanced, lookupById, lookupByIdentifier, resolveExternalMessage, loadLatestState, resolvePersonaHasActiveSignals, listPersonaSignals } from "./cli/retrieval";
 import type { StorageState } from "./core/types";
 import { resolvePersonaId, filterByPersona, filterTypeSpecificByPersona, filterBySource, filterTypeSpecificBySource } from "./cli/persona-filter.js";
-import { installMcpClients } from "./cli/install.js";
+import { installAndStamp } from "./cli/install-and-stamp.js";
 import { getRecentSessionMessages } from "./cli/session-context.js";
 import { createEntity, updateEntity, removeEntity, createQuoteEntity, fixQuoteEntity, relinkQuoteEntity, CorrectionValidationError, CORRECTABLE_TYPES, UPDATABLE_TYPES } from "./cli/corrections-endpoints.js";
 import { createPersonaEntity, updatePersonaEntity, removePersonaEntity, addPersonaObservation, applyPersonaSignal } from "./cli/persona-corrections.js";
@@ -287,7 +287,7 @@ async function main(): Promise<void> {
   }
 
   if (args[0] === "--install") {
-    await installMcpClients();
+    await installAndStamp(pkg.version);
     console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   MCP (optional, manual)
