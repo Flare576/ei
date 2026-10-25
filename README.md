@@ -33,11 +33,11 @@ I built a [Sync](#what-does-sync-do) feature for this - it works using an encryp
 
 ## Coding Tool Integrations
 
-Ei can import sessions from your coding tools and extract what you've been working on — pulling out facts, topics, and context that persist across sessions. Enable any combination; they work independently and feed into the same knowledge base.
+Ei can import sessions from your coding tools and extract what you've been working on — pulling out facts, topics, and context that persist across sessions. Enable any combination; they work independently and feed into the same knowledge base. Importers run in the TUI; the web app has no coding-tool settings.
 
-Supported tools: OpenCode, Claude Code, Cursor, Codex, Pi, and OMP. Full setup in the [TUI README → Coding Tool Integrations](./tui/README.md#coding-tool-integrations).
+Supported tools: OpenCode, Claude Code, Cursor, Codex, Pi, and OMP. OMP is its own integration with its own setting, separate from Pi — **Pi** means vanilla Pi only. Full setup in the [TUI README → Coding Tool Integrations](./tui/README.md#coding-tool-integrations).
 
-Agents aren't read-only anymore. Run `bunx ei-tui` — the onboarding wizard walks you through setup and installs Ei's skills for your detected coding tools, plus two hooks per tool: one that injects relevant memory before each prompt, and one that tells the agent which Ei persona it *is* at session start. Four of the skills write, each walking the agent through explicit confirmation before every write: `ei-curate` corrects bad extracted data, splits merged records, and repoints mis-attributed quotes; `ei-persona` creates or directs a persona's identity (display name, traits, topics); `ei-rewrite` slims a Person or Topic record that's grown into a catch-all, redistributing the overflow instead of discarding it; and `ei-manage-signals` walks a coding agent through resolving its own open signals — read your current identity, talk it through with the human, write the agreed change in full, then clear the signal.
+Agents aren't read-only anymore. Run `bunx ei-tui` — the onboarding wizard walks you through setup and installs Ei's skills for your detected coding tools (Claude Code, Cursor, Codex, Pi, and OMP; `ei --install` also wires up OpenCode when it's present), covering both behaviors: memory injected before each prompt, and which Ei persona the agent *is* at session start. Claude Code, Codex, and Cursor get these as two hooks; Pi and OMP get one extension that does both; OpenCode gets the identity plugin only, with memory injection coming through Oh My OpenCode. Four of the skills write, each walking the agent through explicit confirmation before every write: `ei-curate` corrects bad extracted data, splits merged records, and repoints mis-attributed quotes; `ei-persona` creates or directs a persona's identity (display name, traits, topics); `ei-rewrite` slims a Person or Topic record that's grown into a catch-all, redistributing the overflow instead of discarding it; and `ei-manage-signals` walks a coding agent through resolving its own open signals — read your current identity, talk it through with the human, write the agreed change in full, then clear the signal. `ei-perspective` is read-only: it polls your real personas through sub-agents that carry their injected identities, for advice.
 
 The same corrections are also available as MCP tools (`ei_create`, `ei_update`, `ei_remove`) alongside the existing search/lookup tools, but MCP is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](./src/cli/README.md#mcp-server) for manual MCP setup.
 
@@ -100,6 +100,9 @@ Personas can use tools. Not just read-from-memory tools — *actual* tools. Web 
 | `edit_trait` | Add, remove, or update one of your own traits. *(heartbeat-ineligible)* |
 | `edit_topic` | Add, remove, or update one of your own topics. *(heartbeat-ineligible)* |
 | `update_description` | Update your own short and/or long description. *(heartbeat-ineligible)* |
+| `resolve_signal` | Confirm or dismiss one of your own open signals (patterns Ei has noticed about a persona). Changes only the signal's status, never your traits. *(heartbeat-ineligible)* |
+| `add_note` | Keep a private note that appears in your system prompt (up to 20; the oldest is dropped when full). *(heartbeat-ineligible)* |
+| `clear_note` | Remove one of your notes. *(heartbeat-ineligible)* |
 | `file_read` | Read a file from your local filesystem *(TUI only)* |
 | `list_directory` | Explore folder structure *(TUI only)* |
 | `directory_tree` | Recursive directory tree *(TUI only)* |
@@ -107,6 +110,8 @@ Personas can use tools. Not just read-from-memory tools — *actual* tools. Web 
 | `grep` | Search file contents by regex *(TUI only)* |
 | `get_file_info` | File/directory metadata *(TUI only)* |
 | `web_fetch` | Fetch a URL and return its text content *(TUI only — blocked by CORS in browsers)* |
+
+These are available in 1:1 chats. In Rooms only the read tools remain, so a persona there can look things up but can't edit its identity, notes, or signals; and the write tools (identity edits, notes, `resolve_signal`) are withheld from heartbeats too.
 
 The filesystem tools make Ei a legitimate coding assistant in the TUI. Ask a persona to review a file, understand a project structure, or track down where something is defined — it can actually look.
 
@@ -130,7 +135,7 @@ Connect in **Settings → Tool Kits → Spotify**. Once connected, personas can 
 
 ### Assigning Tools to Personas
 
-Tools aren't global — you choose which personas get access. Edit a persona and toggle the tools it can use. A focused work persona might only have filesystem tools. A general-purpose companion might have everything.
+Tools aren't global — you choose which personas get access. Edit a persona and toggle the tools it can use. A focused work persona might only have filesystem tools. A general-purpose companion might have everything. The Ei built-ins for identity, notes, and signals aren't per-persona toggles: every persona has them in 1:1 chats.
 
 ### Seeing What a Persona Did
 
@@ -183,6 +188,15 @@ The "User Prompt" is the part where you put your messages
 A "Persona" is the combination of these two pieces of data, plus some _personality_. The reason I didn't call it an "Agent" is because Personas aren't static<sup>1</sup> - they'll grow and adapt as you talk to them. See the [Core Readme](src/README.md) for more information!
 
 > <sup>1</sup>: By default. You can make them static.
+
+A persona's identity is its traits (how it behaves, each with a strength) and its topics (what it cares about), plus its descriptions. Here's what actually changes them:
+
+- **You, in chat.** In a 1:1 chat with a non-static persona, Ei reads each of your messages for explicit requests about how the persona should behave. Ask it to be more or less of something and the traits shift. "Stop doing X" doesn't delete a trait — it sets its strength to 0, which suppresses it and shows it as a never-do rule.
+- **The persona itself.** In 1:1 chats a persona can look at its own identity and edit its own traits, topics, and descriptions (`get_my_identity`, `edit_trait`, `edit_topic`, `update_description`), applied immediately. It can also confirm or dismiss its own signals (`resolve_signal`).
+- **Signals.** Signals are patterns Ei notices about a persona. They're resolved by the persona (`resolve_signal`) or by a coding agent using the `ei-manage-signals` skill (CLI or MCP).
+- **You, by hand.** Edit the persona directly with `/details` or `/persona` in the TUI, or the Identity tab in the web.
+
+Static personas skip the chat-driven trait changes (the other routes still work). The daily ceremony never changes a persona's identity — it only tidies and rewrites your knowledge base and fades topic exposure. The old reflection flow (`/reflect`, reflection review, and the `ei-reflect` skill) is gone.
 
 ## What's a Room?
 
@@ -302,4 +316,4 @@ See `AGENTS.md` for detailed architecture and contribution guidelines.
 
 `v1` is an extension of `v0`, not a promise of API stability — for semver purposes this project still behaves like `0.x`, where breaking changes ride the minor version. A retired command, a changed CLI flag, or a reshaped record can land in a `1.x` minor, called out under **Changed** or **Removed** in [CHANGELOG.md](./CHANGELOG.md) rather than held back for a major bump.
 
-`v2` is reserved for a version that has been *earned* through adoption — enough people depending on Ei that a stability guarantee is worth more than the freedom to fix the design. Until then, read the changelog before upgrading.
+`v2` is reserved for a version that has been *earned* through adoption — enough people depending on Ei that a stability guarantee is worth more than the freedom to fix the design. Until then, read the changelog before upgrading. Before moving to v1.11.0, read **Upgrading to 1.11.0** in [CHANGELOG.md](./CHANGELOG.md), and copy your `state.json` somewhere safe before the first launch after upgrading.
