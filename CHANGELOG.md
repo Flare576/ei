@@ -32,11 +32,15 @@ If you are coming back after months, read this before the first launch.
 - **The ceremony does not catch up.** It runs only at its configured time, while Ei is running.
 - **Retired reflection data is dropped.** See *Removed*. If you had a pending reflection
   proposal, it is gone after the upgrade.
-- **If the TUI offers to install the latest skills, hooks and integrations, know what it does.**
-  Accepting it removes the `ei` MCP entry from your Claude Code, Cursor and Codex configs (add it
-  back by hand if you used MCP), and it does not delete retired skills: remove any stale
-  `ei-reflect` directory from the skills folders you use (`~/.claude/skills`,
-  `~/.agents/skills`, `~/.omp/agent/skills`, `~/.config/opencode/skills`).
+- **The TUI will offer to install the latest skills, hooks and integrations on first launch if
+  your install has no version record, and you should know what accepting does.** An existing
+  install with no `installed_version` in `local.json` (set up before the record existed, or with an
+  older `ei --install`) is prompted, as is one recorded at a different version. Accepting runs the
+  same install as `ei --install`: it removes the `ei` MCP entry from your Claude Code, Cursor and
+  Codex configs (add it back by hand if you used MCP), and it does not delete retired skills such
+  as `ei-reflect`: remove any stale `ei-reflect` directory from the skills folders you use
+  (`~/.claude/skills`, `~/.agents/skills`, `~/.omp/agent/skills`, `~/.config/opencode/skills`).
+  Dismissing it asks again next launch.
 - **Rolling backups are opt-in and each one is a full copy of `state.json`.** They are TUI-only
   and apply once `backup.enabled` is on; by default one is taken at most every hour and 24 are
   kept, so disk use scales with the size of your state.
@@ -48,6 +52,13 @@ If you are coming back after months, read this before the first launch.
 
 ### Fixed
 
+- **`ei --install` now records the installed version, and existing installs with no record are
+  offered the skills/hooks refresh after an upgrade.** The version was written only by the TUI
+  (onboarding wizard, upgrade prompt), so installs done with `ei --install`, or set up before the
+  record existed, were never prompted after an upgrade. `ei --install` now writes
+  `installed_version` to `local.json` once the install succeeds (a failed install records
+  nothing), and the TUI treats an existing user with no record as out of date and shows the
+  upgrade prompt.
 - **Pantheon's `P-Sisyphus` agent id now resolves to the existing `Sisyphus` persona.** Pi/OMP
   sessions attributed to `P-Sisyphus` were creating a separate `P Sisyphus` persona on import;
   `p-sisyphus`/`P-Sisyphus` are now `Sisyphus` aliases alongside the other OpenCode variants.
