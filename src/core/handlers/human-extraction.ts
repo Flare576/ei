@@ -312,8 +312,7 @@ export async function handleHumanPersonScan(response: LLMResponse, state: StateM
           console.debug(`[handleHumanPersonScan] Multi-match for "${candidate.name}" (${matches.length} hits) — no embedding above threshold, creating new record`);
         }
       } catch (err) {
-        console.warn(`[handleHumanPersonScan] Multi-match embedding failed for "${candidate.name}", using first match:`, err);
-        matchedPerson = matches[0].person;
+        console.warn(`[handleHumanPersonScan] Multi-match embedding failed for "${candidate.name}" (${matches.length} hits) — cannot disambiguate, creating new record:`, err);
       }
     } else {
       // Step 3: relationship filter → uniqueness match or cosine on the relevant subset.

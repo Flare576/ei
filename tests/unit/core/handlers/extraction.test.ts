@@ -827,6 +827,26 @@ describe("handleHumanPersonScan — confidence-gated matching", () => {
     );
   });
 
+  it("multi-match: embedding failure creates a NEW record and modifies neither existing record (#78)", async () => {
+    state._human.people.push(makePerson({ id: "jeff-kirk", name: "Jeff Kirk", relationship: "Coworker", embedding: V }));
+    state._human.people.push(makePerson({ id: "jeff-bezos", name: "Jeff Bezos", relationship: "Coworker", embedding: ORTHOGONAL }));
+    const before = JSON.stringify(state._human.people);
+    mockEmbedImpl = async () => { throw new Error("embedding service down"); };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await runScan({ name: "Jeff", description: "an ambiguous Jeff", relationship: "Coworker" });
+
+    expect(queuePersonUpdate).toHaveBeenCalledTimes(1);
+    expect(queuePersonUpdate).toHaveBeenCalledWith(
+      { matched_guid: null },
+      expect.objectContaining({ candidateName: "Jeff" }),
+      state,
+    );
+    expect(JSON.stringify(state._human.people)).toBe(before);
+    expect(warn).toHaveBeenCalled(); // degradation stays visible
+    warn.mockRestore();
+  });
+
   // ── #78 M1 (deferred): unnamed placeholder without an embedding cannot promote ──
 
   it("M1 (deferred #78): a sole placeholder with NO embedding forks a new record instead of promoting", async () => {
