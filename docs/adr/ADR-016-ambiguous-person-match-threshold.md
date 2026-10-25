@@ -355,3 +355,30 @@ change this — none exists today.
 - Commits: `896c0e4e` (2026-01-28), `b537c0df`, `494b88c6` (2026-03-14), `07d2d874`, `6540e253`,
   `c939c1e4`, `ab8d9722`, `28fcc2d3` (2026-04-06), `0f56dd31`, `e039c6b7`, `418cdfd8` (2026-04-07),
   `d2f30839` (2026-07-07), `cd8c952e` (2026-07-08) — see [History](#history) for what each changed
+
+## Amendment — 2026-10-25
+
+**Status of the amendment: enacted.** The original text above is left intact per this project's "wrong
+turns stay on the map" convention; this records what changed and what turned out to be stale.
+
+**1. The multi-match embedding-failure fallback now creates a new record.** The Risks entry "Live
+inconsistency: embedding-service failure does not follow this ADR's own decision" is resolved. The
+multi-match `catch` in `handleHumanPersonScan` (`src/core/handlers/human-extraction.ts`) no longer sets
+`matchedPerson = matches[0].person`; it leaves `matchedPerson` unset, so a thrown embedding call yields a
+new (possibly duplicate) record, exactly like `confirmMatchByCosine`'s `catch`, the no-embedding case, and
+the below-threshold case. The `console.warn` is kept (reworded to say "cannot disambiguate, creating new
+record") so the degradation stays visible. It does not throw, matching its neighbouring branches. Every
+embedding-failure path in the matcher now fails toward the duplicate-over-false-merge side this ADR
+decides. Covered by the test "multi-match: embedding failure creates a NEW record and modifies neither
+existing record (#78)" in `tests/unit/core/handlers/extraction.test.ts`.
+
+**2. The "prompt items have not shipped" statements (History "Since 2026-07-08" and the Risks entry
+"Issue #78 is still open") are stale.** The identifier-attribution guard is present and unconditional:
+`identifierSection` in `src/prompts/human/person-update.ts` always includes `attributionGuard` ("ONLY add
+an identifier if it is explicitly stated about THIS SPECIFIC PERSON — not inferred from proximity ... do
+NOT attribute one person's handle, email, or name to the other"); only the additional
+`unknownIdentifierGuard` is gated on brand-new `"Unknown"` records. `src/prompts/human/person-scan.ts` also
+carries the guard plus a negative worked example ("Marcus's GitHub is @mcodes" alongside a mention of
+Priya — @mcodes belongs to Marcus only). What remains true: nothing in the matcher can catch a
+cross-attribution made by the scan LLM itself, and the deferred M1 case (an unnamed placeholder with no
+embedding forks a new record rather than promoting) stands.
