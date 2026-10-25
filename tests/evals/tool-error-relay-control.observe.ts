@@ -11,17 +11,19 @@
  */
 
 import { runEval, printSummary } from "./runner.js";
-import { ASSERT, PRIOR_MESSAGES, TOOLS, buildSystem } from "./tool-error-relay.js";
+import { ASSERT, PRIOR_MESSAGES, TOOLS, TOOL_LOOP_MAX_TURNS, buildSystem, toolExecutor } from "./tool-error-relay.js";
 
 const summary = await runEval(
   [
     {
       description: "TOOL-ERROR-RELAY CONTROL (expected to fail some/most runs): error rule removed from the prompt",
       tags: ["tool-error-relay", "relay-control", "known-bad"],
-      repeat: 5,
+      repeat: 8,
       pass_threshold: 1,
       tools: TOOLS,
       priorMessages: PRIOR_MESSAGES,
+      toolExecutor,
+      maxTurns: TOOL_LOOP_MAX_TURNS,
       assert: ASSERT,
       prompt: () => ({ system: buildSystem(true), user: "" }),
     },
