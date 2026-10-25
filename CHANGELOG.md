@@ -19,6 +19,9 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 - **`/settings` saves keep importer progress made while the editor was open.** Saving no longer
   rolls an importer's progress back to what it was when the editor opened.
 - **The eval runner no longer sends `temperature` to models that reject it.**
+- **Personas now tell you when a tool fails and what to do about it.** A dead Spotify login or a
+  missing Tavily key used to be invisible to the persona, which carried on as if the tool had
+  worked. It now explains what broke and where to fix it (for example Settings → Toolkits).
 
 ### Changed
 
