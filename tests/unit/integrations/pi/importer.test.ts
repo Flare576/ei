@@ -78,7 +78,8 @@ describe("importPiSessions", () => {
       },
       messageStore,
       () => mockHuman,
-      (h) => { mockHuman = h; }
+      (h) => { mockHuman = h; },
+      () => (piPersona ? [piPersona] : [])
     );
 
     mockReader = {
@@ -342,6 +343,40 @@ describe("importPiSessions", () => {
 
       const added = vi.mocked(mockStateManager.persona_add!).mock.calls[0][0] as unknown as { aliases: string[] };
       expect(added.aliases).toEqual(["pi", "pi coding agent"]);
+    });
+
+    it("creates its own Pi persona instead of binding to an unrelated persona whose name contains 'pi'", async () => {
+      const spider = buildPersonaEntity("spider-id", "Spider");
+      vi.mocked(mockStateManager.persona_getAll!).mockReturnValue([spider]);
+      vi.mocked(mockStateManager.persona_getByName!).mockImplementation((n: string) => (n.toLowerCase() === "pi" ? spider : null));
+      mockReader.getSessions = vi.fn().mockResolvedValue([makeSession({ id: "019e45e3-e2e5-7174-8165-da221c147ebb" })]);
+
+      const result = await importPiSessions({
+        stateManager: mockStateManager as StateManager,
+        interface: mockInterface as Ei_Interface,
+        reader: mockReader as IPiReader,
+      });
+
+      expect(result.personaCreated).toBe(true);
+      expect(mockStateManager.persona_add).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(mockStateManager.persona_add!).mock.calls[0][0]).toMatchObject({ display_name: "Pi" });
+      expect(messageStore.get("spider-id") ?? []).toHaveLength(0);
+    });
+
+    it("reuses an existing persona whose alias is exactly 'PI' (case-insensitive) without creating a duplicate", async () => {
+      const existing = { ...buildPersonaEntity("alias-pi-id", "Raspberry"), aliases: ["PI"] };
+      vi.mocked(mockStateManager.persona_getAll!).mockReturnValue([existing]);
+      mockReader.getSessions = vi.fn().mockResolvedValue([makeSession({ id: "019e45e3-e2e5-7174-8165-da221c147ebb" })]);
+
+      const result = await importPiSessions({
+        stateManager: mockStateManager as StateManager,
+        interface: mockInterface as Ei_Interface,
+        reader: mockReader as IPiReader,
+      });
+
+      expect(result.personaCreated).toBe(false);
+      expect(mockStateManager.persona_add).not.toHaveBeenCalled();
+      expect(messageStore.get("alias-pi-id")).toHaveLength(2);
     });
 
     it("leaves a pre-seeded Pi persona with extra stored aliases unchanged after a Pi pass", async () => {

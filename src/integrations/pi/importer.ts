@@ -10,6 +10,7 @@ import {
   queueTopicRewritePhase,
 } from "../../core/orchestrators/ceremony.js";
 import { qualifyPiMessage } from "../../core/utils/message-id.js";
+import { findPersonaByExactName } from "../../core/personas/opencode-agent.js";
 import { convertToEiMessage, convertToPreMarkedEiMessage } from "../shared/message-converter.js";
 import { getMachineId } from "../machine-id.js";
 import { isProcessRunning } from "../process-check.js";
@@ -43,7 +44,7 @@ function ensurePiPersona(
   stateManager: StateManager,
   eiInterface?: Ei_Interface
 ): PersonaEntity {
-  const existing = stateManager.persona_getByName(PI_PERSONA_NAME);
+  const existing = findPersonaByExactName(stateManager, PI_PERSONA_NAME);
   if (existing) return existing;
 
   const now = new Date().toISOString();
@@ -160,7 +161,7 @@ export async function importPiSessions(options: PiImporterOptions): Promise<PiIm
 
   if (signal?.aborted) return result;
 
-  const personaExistedBefore = stateManager.persona_getByName(PI_PERSONA_NAME) !== null;
+  const personaExistedBefore = findPersonaByExactName(stateManager, PI_PERSONA_NAME) !== null;
   const persona = ensurePiPersona(stateManager, eiInterface);
   result.personaCreated = !personaExistedBefore;
 

@@ -43,13 +43,15 @@ export function buildMockStateManager(
   onPersonaArchive: (id: string) => boolean,
   messageStore: Map<string, Message[]>,
   getHuman: () => HumanEntity,
-  setHuman: (h: HumanEntity) => void
+  setHuman: (h: HumanEntity) => void,
+  getAllPersonas: () => ReturnType<typeof buildPersonaEntity>[] = () => []
 ): Partial<StateManager> {
   return {
     getHuman: vi.fn(getHuman),
     setHuman: vi.fn(setHuman),
     persona_getById: vi.fn(getPersonaById),
     persona_getByName: vi.fn(getPersonaByName),
+    persona_getAll: vi.fn(getAllPersonas),
     persona_add: vi.fn(onPersonaAdd),
     persona_update: vi.fn(),
     persona_archive: vi.fn(onPersonaArchive),
