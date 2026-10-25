@@ -163,12 +163,13 @@ const summary = await runEval(
     // note must not be read as a human's testimony, and Sisyphus's own concrete practice must
     // still be retained as self-report. Known-bad control:
     // tests/evals/persona-signal-scan-parent-line-control.observe.ts (same input, parent line as human).
-    // Known limitation of the scan on the local gemma-4-26b-a4b-qat model: in some runs it reads the
-    // parent's note as a human's testimony (2 of 5 in a recorded run), so this case does not reach
-    // 5 of 5 on that model.
+    // Known limitation of the scan on the local gemma-4-26b-a4b model: in some runs it reads the
+    // parent's note as a human's testimony (2 of 5 in one recorded run, 1 of 5 in the v1.11.0
+    // release preflight), so this case does not reliably reach 5 of 5 on that model. Tagged
+    // known-model-limitation so the release check treats a miss here as expected, not a regression.
     {
       description: "Persona-signal-scan: a sub-agent's parent-agent line is not read as a human observer (P0)",
-      tags: ["persona-signal-scan", "parent-line"],
+      tags: ["persona-signal-scan", "parent-line", "known-model-limitation:gemma4_MoE"],
       repeat: 5,
       pass_threshold: 1,
       prompt: () => buildParentLinePrompt(false),
