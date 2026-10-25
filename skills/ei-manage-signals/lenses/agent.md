@@ -14,7 +14,8 @@ the rules, sequences, tool preferences, and prohibitions that govern work in
 *this* repo, on *this* machine, under *this* harness. Extraction-produced
 signals in the `agent` bucket arrive there from verified execution
 provenance, checked at ingestion, never guessed at from raw text. A signal
-you mint yourself this run via `ei add observation --lens agent` is the
+you mint yourself this run via `ei add observation` (with `"lens":"agent"` in
+the JSON body — `lens` is a body field, not a flag) is the
 one exception: its lens is your own assertion, unverified
 (`../references/cli.md`). Either way, this lens is the only path any of
 them has to an actual file.

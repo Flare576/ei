@@ -293,12 +293,12 @@ Ei recomputes the embedding automatically on every update.
 
 Every field NOT in the edited set survives an update untouched. Genuinely
 system-owned fields (`id`, `last_updated`, `description_embedding`,
-`is_static`, `last_heartbeat`, `observations`, `signals`) are never yours
-to set directly; sending them back (e.g. echoed from an `ei --id` read) is
-harmless — they're silently ignored, not rejected — but you never need to
-include them at all. `observations`/`signals` change only through
-`ei add observation`/`ei confirm signal`/`ei dismiss signal` above, never
-through `ei update persona`.
+`is_static`, `last_heartbeat`) are never yours to set directly; if echoed
+back from an `ei --id` read they are stripped as read-shape fields rather than
+rejected, but you never need to include them at all. Do not send
+`observations` or `signals` — they are rejected as unrecognized fields, and they
+change only through `ei add observation`/`ei confirm signal`/`ei dismiss signal`
+above, never through `ei update persona`.
 
 ## Passing JSON safely
 

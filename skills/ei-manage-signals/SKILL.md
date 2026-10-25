@@ -210,11 +210,11 @@ a query you run.
   the first, or the closest.
 
 - **You have no name.** This is normal and expected: the `<ei-relationship>`
-  block carries a base prompt, traits, topics, and a signal-count notice, but
-  **no `display_name` and no id** — and four of the six supported harnesses
-  (Claude Code, Cursor, Codex, base Pi) never receive that block at all.
-  Absence of the block is not an error. Show the user the candidate list and
-  **ask which Persona is you.**
+  block carries a base prompt, traits, and topics (plus a `# Ei Signals`
+  invitation only when your persona has open signals), but **no
+  `display_name` and no id**. Every supported harness receives the block at
+  session start. Either way, a missing or unmatched name is not an error.
+  Show the user the candidate list and **ask which Persona is you.**
 
 Treat any name you find in the relationship block as *evidence*, not as
 authority. It narrows the list; it does not decide.

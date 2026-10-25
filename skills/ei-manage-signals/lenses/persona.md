@@ -59,7 +59,8 @@ through them and, for each, ask:
   `agent.md` conceptually — you can't move it between lenses yourself (there
   is no CLI operation for that), but you can dismiss it here as "not
   identity" and let the user separately raise it through the Agent lens or
-  a fresh `ei add observation --lens agent` if it's worth keeping.
+  a fresh `ei add observation` with `"lens":"agent"` in its JSON body (`lens`
+  is a body field, not a flag) if it's worth keeping.
 - **Is this recurring, or a one-off already captured by `recurrence_count`
   and `observer_kinds`?** The signal's own `recurrence_count` already tells
   you how many independent contexts corroborate it.
@@ -148,7 +149,7 @@ Use these precisely when proposing changes.
 
 | Field | Range | Meaning |
 |---|---|---|
-| `strength` | 0.0–1.0 | How consistently this manifests. 0 = suppress, 0.5 = occasional, 1.0 = always present, defining |
+| `strength` | 0.0–1.0 | How consistently this manifests. 0 = a guardrail — the trait is injected as a "never do this" rule, so set it only when the user explicitly asked for the behavior to stop; 0.5 = default; 1.0 = always present, defining |
 | `sentiment` | -1.0 to 1.0 | How you *feel* about having this trait. -1 = resent it, 0 = neutral, 1 = fully embrace it |
 
 **Topics:**
@@ -159,7 +160,7 @@ Use these precisely when proposing changes.
 | `exposure_current` | 0.0–1.0 | How recently/frequently this has come up (0 = long ago, 1 = just now) |
 | `exposure_desired` | 0.0–1.0 | How much you want to engage with it (0 = avoid, 0.5 = normal, 1 = core obsession) |
 
-**Minimum floor:** 3 traits and 3 topics. Never go below.
+**Guideline, not a floor:** aim for roughly 3 traits and 3 topics when rewriting identity wholesale. Nothing enforces it (`ei-persona` says the same), so never pad an array just to hit it.
 
 ### `long_description` rules (most important)
 
@@ -219,14 +220,16 @@ show the user what changed, and get fresh agreement before writing — same
 narrower scope as `../references/cli.md`'s general write guidance: you're
 only checking the fields your patch touches, not the whole record.
 
-This returns the complete, current `PersonaEntity` — read it for context and
+This returns the persona's identity record — read it for context and
 for the diff-check in the prior section, not because you need to resend it.
-`aliases`, `model`, `group_primary`, `groups_visible`, `is_paused`,
-`pause_until`, `is_archived`, `avatar_emoji`, `tools`, `observations`, and
-`signals` are not part of the external write contract, or simply irrelevant
-to what this lens edits — `observations`/`signals` change only through
+It does **not** include `model`, `tools`, `is_paused`, `is_archived`,
+`show_thinking`, or the other in-app-only fields — those are absent from every
+CLI/MCP read and can't be written here. `observations`/`signals` are likewise
+not part of this write — they change only through
 `ei add observation`/`ei confirm signal`/`ei dismiss signal`, never through
-this write. Never hand-retype anything from memory — build the patch from
+this write. `aliases`, `avatar_emoji`, `avatar_image`, `preferred_theme`, and
+`notes` are writable but irrelevant to what this lens edits. Never hand-retype
+anything from memory — build the patch from
 this read's actual values for the fields you ARE changing.
 
 ### Apply your edits
@@ -255,7 +258,7 @@ Self-check against step 2's guidance before writing — the backend does
 **not** enforce these, by design, so a single incremental edit is never
 blocked, but that means you're the only guardrail:
 
-- At least 3 traits, at least 3 topics
+- Roughly 3 traits and 3 topics, as a guideline (not enforced)
 - `long_description` ≤ 800 characters
 - `sentiment` within -1..1; `strength`/`exposure_current`/`exposure_desired`
   within 0..1
