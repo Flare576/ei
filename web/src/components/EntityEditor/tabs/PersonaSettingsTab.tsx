@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { ModelPicker } from "../../Settings/ModelPicker";
 import { GroupChipEditor } from "../GroupChipEditor";
 import type { ProviderAccount, PersonaEntity } from "../../../../../src/core/types";
+import { heartbeatSettingError, MIN_HEARTBEAT_MS } from "../../../../../src/core/settings-validation";
 
 const isEiPersona = (persona: PersonaEntity): boolean => {
   return persona.aliases?.[0]?.toLowerCase() === "ei";
@@ -26,11 +27,33 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
   const heartbeatMinutes = persona.heartbeat_delay_ms ? Math.round(persona.heartbeat_delay_ms / 60000) : 30;
   const contextHours = Math.round((persona.context_window_ms ?? 28800000) / 3600000);
 
+  // Static personas are skipped by checkScheduledTasks, so their heartbeat is inert (Slack seeds 0)
+  // and is not held to the minimum. Everyone else: below MIN_HEARTBEAT_MS is never stored; valid
+  // values persist immediately, an invalid draft is held locally and alerted on blur.
+  const [heartbeatDraft, setHeartbeatDraft] = useState<string | null>(null);
+
   const handleHeartbeatChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const minutes = parseInt(e.target.value, 10);
-    if (!isNaN(minutes) && minutes > 0) {
-      onChange("heartbeat_delay_ms", minutes * 60000);
+    const raw = e.target.value;
+    const minutes = parseInt(raw, 10);
+    const ms = minutes * 60000;
+    const invalid = isNaN(minutes) || minutes <= 0 ||
+      (!persona.is_static && heartbeatSettingError("Heartbeat", ms) !== undefined);
+    if (invalid) {
+      setHeartbeatDraft(raw);
+      return;
     }
+    setHeartbeatDraft(null);
+    onChange("heartbeat_delay_ms", ms);
+  };
+
+  const handleHeartbeatBlur = () => {
+    if (heartbeatDraft === null) return;
+    const raw = heartbeatDraft;
+    setHeartbeatDraft(null);
+    alert(
+      `Heartbeat must be at least ${persona.is_static ? 1 : MIN_HEARTBEAT_MS / 60000} minute(s). ` +
+      `"${raw}" was rejected.`
+    );
   };
 
   const handleContextWindowChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,10 +110,11 @@ export const PersonaSettingsTab: React.FC<PersonaSettingsTabProps> = ({
           <input
             id="heartbeat-length"
             type="number"
-            min="1"
+            min={persona.is_static ? 1 : MIN_HEARTBEAT_MS / 60000}
             className="ei-input"
-            value={heartbeatMinutes}
+            value={heartbeatDraft ?? heartbeatMinutes}
             onChange={handleHeartbeatChange}
+            onBlur={handleHeartbeatBlur}
           />
           <small className="ei-form-hint">How often this persona checks for inactivity (default: 30 min)</small>
         </div>

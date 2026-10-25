@@ -43,3 +43,40 @@ describe("PersonaSettingsTab thinking toggle", () => {
     expect(onChange).toHaveBeenLastCalledWith("show_thinking", true);
   });
 });
+
+describe("PersonaSettingsTab heartbeat minimum", () => {
+  const field = () => screen.getByLabelText("Heartbeat Length (minutes)");
+
+  it.each([["0"], ["-5"], ["4"]])("never writes %s minutes for a non-static persona and alerts on blur", (input) => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const onChange = vi.fn();
+    render(<PersonaSettingsTab persona={makePersona()} onChange={onChange} />);
+    fireEvent.change(field(), { target: { value: input } });
+    fireEvent.blur(field());
+    expect(onChange).not.toHaveBeenCalledWith("heartbeat_delay_ms", expect.anything());
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining("at least 5 minute"));
+  });
+
+  it("writes exactly 5 minutes as milliseconds", () => {
+    const onChange = vi.fn();
+    render(<PersonaSettingsTab persona={makePersona()} onChange={onChange} />);
+    fireEvent.change(field(), { target: { value: "5" } });
+    expect(onChange).toHaveBeenCalledWith("heartbeat_delay_ms", 300000);
+  });
+
+  it("a static persona with a stored 0 renders and is not rewritten or alerted just by opening/blurring", () => {
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+    const onChange = vi.fn();
+    render(<PersonaSettingsTab persona={makePersona({ is_static: true, heartbeat_delay_ms: 0 })} onChange={onChange} />);
+    fireEvent.blur(field());
+    expect(onChange).not.toHaveBeenCalledWith("heartbeat_delay_ms", expect.anything());
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it("a static persona may still be edited to a value under the minimum (heartbeat is inert for static personas)", () => {
+    const onChange = vi.fn();
+    render(<PersonaSettingsTab persona={makePersona({ is_static: true, heartbeat_delay_ms: 0 })} onChange={onChange} />);
+    fireEvent.change(field(), { target: { value: "2" } });
+    expect(onChange).toHaveBeenCalledWith("heartbeat_delay_ms", 120000);
+  });
+});
