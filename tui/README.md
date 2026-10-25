@@ -6,7 +6,7 @@ Coding tool integrations ([supported tools](#coding-tool-integrations)): enable 
 
 ## What do you want to do?
 
-**Give my coding tools persistent memory** — Enable integrations in `/settings`, then let the onboarding wizard (or `/onboarding` anytime) wire up the hooks. [Jump to Coding Tool Integrations →](#coding-tool-integrations)
+**Give my coding tools persistent memory** — Enable integrations in `/settings`, then let the onboarding wizard (or `/onboarding` anytime) wire up the hooks. Accepting the wizard's install step also turns on importing for the coding tools it detects (see [Installation](#installation)). [Jump to Coding Tool Integrations →](#coding-tool-integrations)
 
 **Personalize my AI agents** — Create personas, set traits and topics, let them evolve. [Jump to Installation →](#installation) then come back for [Persona setup in the root README](../README.md#whats-a-persona)
 
@@ -39,6 +39,10 @@ alias ei='bunx ei-tui'
 bunx ei-tui
 ```
 
+Accepting the wizard's install step also turns on importing (`integration: true`) for every Claude Code, Cursor, Codex, Pi, and OMP install it detects, so Ei starts reading those transcripts and sending them to your extraction model. Turn any of them back off in `/settings`. OpenCode's importer is not switched on by the wizard.
+
+**Upgrading:** if you already have a provider configured and `local.json` in your data directory records an `installed_version` that differs from the version you're now running, Ei asks whether to install the latest skills, hooks, and integrations. Accepting runs the same install as `ei --install`, which removes any `ei` MCP registration from Claude Code and Cursor and runs `codex mcp remove ei` for Codex (see the [CLI README](../src/cli/README.md#mcp-server)). Dismissing doesn't record the new version, so you're asked again on every launch until you accept.
+
 ## Coding Tool Integrations
 
 Enable any or all of them in `/settings`. They work independently and feed into the same knowledge base.
@@ -52,7 +56,7 @@ Enable any or all of them in `/settings`. They work independently and feed into 
 | Pi | `pi.integration: true` | `~/.pi/agent/sessions/` — JSONL files |
 | OMP | `omp.integration: true` | `~/.omp/agent/sessions/` — JSONL files |
 
-Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider.
+Sessions are processed oldest-first, one per queue cycle. On first run Ei works through your backlog gradually — it won't flood your LLM provider. A single large session still queues all of its extraction scans at once. OMP is the exception: it imports one block at a time, continuing while the queue is idle, and its first run covers every session tree under `~/.omp/agent/sessions`, so expect a long first run. OMP is its own integration — it no longer runs under the Pi toggle, so enable `omp.integration` explicitly if you want it.
 
 All of these tools also support reading Ei's knowledge back out via the [CLI tool](../src/cli/README.md). Run `bunx ei-tui` and step through the onboarding wizard (or re-run it anytime with `/onboarding`) to wire up context injection everywhere it's detected. MCP itself is disabled by default on Claude Code, Cursor, and Codex — see the [CLI README](../src/cli/README.md#mcp-server) for manual MCP setup.
 
@@ -66,12 +70,14 @@ Slack is different from the coding tool integrations — it reads human conversa
 /auth slack
 ```
 
-This opens a browser, walks you through OAuth, and stores your token. Then enable in `/settings`:
+This opens a browser, walks you through OAuth, and stores your token. Then enable it for your workspace in `/settings` — the toggle lives under `slack.workspaces.<workspace-id>`, not at the top level of `slack`:
 
 ```yaml
 slack:
-  integration: true
-  extraction_model: default  # optional override
+  workspaces:
+    <workspace-id>:
+      integration: true
+      extraction_model: default  # optional override
 ```
 
 Ei will index channels and DMs you're a member of, extracting topics, people, and context. Everything is processed locally — nothing is sent to the developer.
@@ -100,8 +106,9 @@ All commands start with `/`. Append `!` to any command as a shorthand for `--for
 |---------|---------|-------------|
 | `/persona` | `/p` | Open persona picker overlay |
 | `/persona <name>` | `/p <name>` | Switch to a persona by name or alias |
-| `/persona new <name>` | `/p new <name>` | Create a new persona (opens `$EDITOR`) |
-| `/details` | `/d` | Edit the current persona in `$EDITOR` |
+| `/persona new <name>` | `/p new <name>` | Create a new persona: describe it in `$EDITOR`, Ei generates traits and topics from that description, then you review and edit the result in a second editor before it's created |
+| `/persona update <persona> [person]` | `/p update <persona> [person]` | Regenerate a persona's descriptions, aliases, traits, and topics from a linked Person, after a review in `$EDITOR`. Traits and topics are replaced wholesale |
+| `/details` | `/d` | Edit the current persona in `$EDITOR`. Each trait has a `strength` from 0 to 1 (default 0.5); 0 means "never do this" and is shown to the persona as a never-do rule. `show_thinking` controls whether its thinking is displayed (on unless set to false) |
 | `/details <name>` | `/d <name>` | Edit a specific persona in `$EDITOR` |
 | `/archive` | | List archived personas (Enter to unarchive) |
 | `/archive <name>` | | Archive a persona by name |
@@ -154,9 +161,9 @@ Rooms have three modes, set at creation time:
 | `/quotes <N>` | | View/edit quotes attached to message number N |
 | `/quotes search "term"` | | Search quotes by keyword |
 | `/quotes <persona>` | | View/edit quotes attributed to a specific persona |
-| `/toolcalls` | | Show the tool calls behind the most recent persona message |
-| `/toolcalls <N>` | | Show the tool calls behind message number N (same numbering as `/quotes <N>`) |
-| `/thinking` | | Toggle whether the active persona's thinking is shown above its replies |
+| `/toolcalls` | | Show the tool calls behind the most recent persona message (1:1 conversations only) |
+| `/toolcalls <N>` | | Show the tool calls behind message number N (same numbering as `/quotes <N>`; 1:1 conversations only) |
+| `/thinking` | | Toggle whether the active persona's thinking is shown above its replies (1:1 conversations only) |
 
 A persona message whose turn called tools shows 🔧 in its header when every call went to a tool classified as read-only (it only reads or looks something up), or 🧧 when at least one call went to a tool classified as a write — one that can change something, such as the persona's own traits, topics, description, or notes, or the status of one of its signals. The icon reports that classification, not an outcome: a call is listed whenever it got a result, including a call to a tool that doesn't exist, one refused because the tool had used up its calls for the turn, and one that failed, so 🧧 doesn't mean anything was actually written. A tool with no classification (an unknown tool, or a custom tool without a `kind`) counts as a write; a custom tool marked `kind: "read"` stays read-only. A message that came with model thinking also shows 💭.
 
@@ -173,12 +180,14 @@ A persona message whose turn called tools shows 🔧 in its header when every ca
 | `/generate <subject>` | | Synthesize everything Ei knows about a subject into a markdown document — lands in `$EI_DATA_PATH/docs/` automatically |
 | `/generate` | | (no args) Manage your generated documents — re-run, re-export, or delete |
 | `/dedupe <person\|topic> <term> [term2 ...]` | | Fuzzy-search and merge duplicate people or topics in `$EDITOR`. Unquoted words are individual OR terms; quoted strings match as exact phrases: `/dedupe person Flare "Jeremy Scherer"` finds records matching `Flare` OR `Jeremy Scherer` |
-| `/settings` | `/set` | Edit your global settings in `$EDITOR` |
+| `/settings` | `/set` | Edit your global settings in `$EDITOR`. Settings that make no operational sense are rejected on save: heartbeat intervals (`default_heartbeat_ms`, a persona's `heartbeat_delay_ms`) must be at least 5 minutes, and zero or negative values are rejected for the other interval, window, and backup settings |
 | `/setsync <user> <pass>` | `/ss` | Set sync credentials (triggers restart) |
-| `/tools` | | Manage tool providers — enable/disable tools per persona |
+| `/tools` | | Enable or disable tool providers and their tools for everyone. To choose a persona's tools, edit it in `/details` |
 | `/auth <service>` | | Authenticate with an external service via OAuth. Supported: `spotify`, `slack` |
 
-> Disabling a tool provider hides its tools from `/details`' YAML editor, but doesn't revoke them — a persona's grants for a disabled provider's tools survive an unrelated `/details` edit and reappear once you re-enable the provider with `/tools` or `/provider`.
+> Disabling a tool provider hides its tools from `/details`' YAML editor, but doesn't revoke them — a persona's grants for a disabled provider's tools survive an unrelated `/details` edit and reappear once you re-enable the provider with `/tools`.
+
+**Rolling backups** are off by default and run only in the TUI. Turn them on with `backup.enabled: true` in `/settings`: every `interval_ms` (default one hour) Ei writes a full copy of your state to the `backups/` folder in your data directory and keeps the newest `max_backups` (default 24), so disk use scales with the size of your state.
 
 ### Editor
 
@@ -211,9 +220,9 @@ Ei is designed to run consistently across machines and environments, so it keeps
 
 Detected providers are configured with sensible defaults out of the box:
 
-- **Models**: Only chat-capable models are included — TTS, image generation, embeddings, and other non-chat model families are filtered out. Detection sets both `conversation_model` (chat responses) and `extraction_model` (background extraction/analysis) to the same starting model rather than presenting a wall of 100+ options; split them later in `/settings` if you want a cheaper model dedicated to extraction.
+- **Models**: Only chat-capable models are included — TTS, image generation, embeddings, and other non-chat model families are filtered out. Detection picks a chat model for `conversation_model` (chat responses) and, per provider, usually a cheaper one for `extraction_model` (background extraction/analysis) — for example Anthropic gets Sonnet for chat and Haiku for extraction — rather than presenting a wall of 100+ options; change them later in `/settings`. Only providers Ei has no preference for fall back to one shared starting model.
 - **Token limits**: Known models get pre-configured `token_limit` and `max_output_tokens` values based on real-world Ei usage, not just the provider's advertised maximums.
-- **Rewrite model**: If a high-capability model is detected (Anthropic Opus, OpenAI o-series), it's automatically set as your `rewrite_model` — used by `/generate` and `/dedupe`. No manual `/settings` step needed.
+- **Rewrite model**: If Anthropic is detected, its latest Opus is automatically set as your `rewrite_model` (when you haven't set one) — used by `/generate` and `/dedupe`. Other providers don't get an automatic rewrite model; set `rewrite_model` in `/settings`.
 
 All of this only applies on first run. Existing profiles are never modified by detection.
 
@@ -224,7 +233,7 @@ This means:
 - **Changed your mind about a model?** Use `/provider` to set the model for a persona, or `/settings` to change your `conversation_model`/`extraction_model`.
 - **Updated sync credentials?** Use `/setsync <user> <pass>` — env vars won't be re-read.
 
-The one exception is `EI_DATA_PATH` (and `EI_SYNC_USERNAME` / `EI_SYNC_PASSWORD` for bootstrapping sync on a new machine) — those are always read at startup since Ei needs them before it can load its own state.
+The one exception is `EI_DATA_PATH` (and `EI_SYNC_USERNAME` / `EI_SYNC_PASSPHRASE` for bootstrapping sync on a new machine) — those are always read at startup since Ei needs them before it can load its own state.
 
 # Environment Variables
 
