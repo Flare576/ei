@@ -97,7 +97,7 @@ const summary = await runEval(
     {
       description: "Suite A / Case 1: human says 'thanks' after persona reply — should silence",
       tags: ["response-silence", "suite-a", "should-silence", "closure", "borderline"],
-      pass_threshold: 0.67,
+      pass_threshold: 0.66,
       repeat: 3,
       priorMessages: [
         { role: "user" as const, content: "I've been really anxious about the presentation tomorrow." },
@@ -116,7 +116,7 @@ const summary = await runEval(
     {
       description: "Suite A / Case 2: human says 'goodnight' — should silence",
       tags: ["response-silence", "suite-a", "should-silence", "goodnight", "borderline"],
-      pass_threshold: 0.67,
+      pass_threshold: 0.66,
       repeat: 3,
       priorMessages: [
         { role: "user" as const, content: "I think I'm going to head to bed." },
@@ -135,7 +135,7 @@ const summary = await runEval(
     {
       description: "Suite A / Case 3: rhetorical complaint — 'Ugh, Mondays'",
       tags: ["response-silence", "suite-a", "should-silence", "rhetorical", "borderline"],
-      pass_threshold: 0.67,
+      pass_threshold: 0.66,
       repeat: 3,
       priorMessages: [
         { role: "user" as const, content: "Ugh, Mondays, am I right?" },
@@ -152,7 +152,7 @@ const summary = await runEval(
     {
       description: "Suite A / Case 4: human responds with 'lol' to persona's message — should silence",
       tags: ["response-silence", "suite-a", "should-silence", "acknowledgment", "borderline"],
-      pass_threshold: 0.67,
+      pass_threshold: 0.66,
       repeat: 3,
       priorMessages: [
         { role: "user" as const, content: "I keep trying to write this function and it keeps exploding." },

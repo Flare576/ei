@@ -28,7 +28,8 @@ export interface EvalCase {
   /**
    * Minimum pass rate across repeated runs (0.0–1.0). Default: 1.0 (all runs must pass).
    * Use for cases with known nondeterminism — tag with "borderline" when setting below 1.0.
-   * Example: pass_threshold: 0.67 means 2 of 3 runs must pass.
+   * Example: pass_threshold: 0.66 means 2 of 3 runs must pass. Do not write 0.67: 2/3 is 0.6667,
+   * which is below 0.67, so that threshold silently demands 3 of 3.
    */
   pass_threshold?: number;
   /**
