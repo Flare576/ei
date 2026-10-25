@@ -253,6 +253,19 @@ become inert. Truncated results already persisted cannot be restored. The thinki
 (item 3) is flagged to be revisited from real usage and can change without a migration, because it
 only affects how new messages are written.
 
+## Amendment — 2026-10-25
+
+**Status of the amendment: enacted.** Item 5's sentence "`kind` is not an authorization mechanism" is
+superseded for one context; the original text above is left intact. Flare ruled that Personas in Rooms
+must not get write tools, because Rooms are shared, multi-participant context where a comment is easily
+mistaken for an instruction and edits belong in 1:1. `kind` is now also the gate for the Room context: a
+`HandleRoomResponse` request, and every `HandleToolContinuation` round that originated from one, is offered
+only tools with `kind === "read"`. It is deny-by-default, so a definition with no `kind` is excluded,
+matching the display rule that treats an unclassified tool as write. There is no separate `room_eligible`
+flag. Heartbeat access is unchanged and still decided by `heartbeat_eligible` alone; the two axes may differ.
+1:1 tool lists are unchanged. Implemented by `filterToolsForRoom` (`src/core/tools/room-filter.ts`), applied in
+`Processor` tool-list assembly before a handler's submit tool is injected.
+
 ## References
 
 - ADR-039: the premise this makes true; item 4's read/write criterion.
