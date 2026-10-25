@@ -95,16 +95,18 @@ people/quotes). It has:
 | Part | What it is | How you change it |
 |---|---|---|
 | **identity fields** | `display_name`, `short_description`, `long_description` | rewrite the field |
-| **traits** (`traits[]`) | named character traits, each with a sentiment and optional strength | add / adjust / remove an entry |
+| **traits** (`traits[]`) | named character traits, each with a sentiment and optional strength (0 = a never-do guardrail — use it for "stop doing X" requests; 0.5 = default) | add / adjust / remove an entry |
 | **topics** (`topics[]`) | subjects the persona has a stance on — perspective, approach, personal stake | add / adjust / remove an entry |
 
-**Lifecycle flags and tool grants are TUI-only now, not this skill's to touch.**
-`is_paused`, `is_archived`, and `tools` are all real fields on the record — `ei --id`
-still shows them, for context — but none of them can be set through this CLI/MCP
-path anymore (ADR-031: they only affect in-app behavior, not the knowledge base this
-skill manages). If a user asks you to pause, archive, or grant/revoke a tool, tell
-them that's a TUI action (the persona editor, or `/archive`) — this skill can't do
-it on their behalf. See `references/cli.md` for the full writable-field list.
+**Lifecycle flags, tool grants, and the model are TUI-only now, not this skill's to
+touch or read.** `is_paused`, `is_archived`, `tools`, `model`, and `show_thinking` are
+real Ei fields, but `ei --id` does not return them (System Hidden, ADR-031) and none
+of them can be set through this CLI/MCP path (they only affect in-app behavior, not the
+knowledge base this skill manages). If a user asks you to pause, archive, or
+grant/revoke a tool — or asks what a persona currently has access to — tell them
+that's a TUI action (the `/details` editor, or `/archive`) or the Tools tab in the
+web persona editor; this skill can't read or change it on their behalf. See
+`references/cli.md` for the full writable-field list.
 
 Full CRUD is in scope here — **create**, **update**, and **remove** — unlike
 `ei-curate`'s quote carve-out (quotes are evidence of real events and can't be
@@ -128,8 +130,9 @@ directly). The *only* restriction is **delete** — see Guardrails below.
    full field list and shapes, the merge-patch semantics `update` follows, and
    how to pass JSON safely.
 3. **Don't assume a minimum trait or topic count.** Nothing in this path enforces
-   one (unlike the reflection ceremony's own 3-traits/3-topics convention — that's
-   a different skill's guidance for a different situation, not a rule here). A
+   one (unlike the roughly-3-traits/3-topics guideline `ei-manage-signals`'s Persona
+   lens suggests for a wholesale rewrite — that's guidance for a different situation,
+   not a rule here). A
    user asking for "one more trait" should get exactly that.
 
 ---
@@ -150,9 +153,10 @@ the moment its condition applies.
 
 ### 2. Read — understand what's actually there
 - `ei --id <id>` → the current record: `display_name`, `short_description`,
-  `long_description`, every entry in `traits[]` and `topics[]`, plus read-only
-  context like the lifecycle flags (`is_paused`, `is_archived`, …) and `tools` —
-  see `references/cli.md` for exactly which fields you can and can't write.
+  `long_description`, every entry in `traits[]` and `topics[]`, plus a few
+  read-only fields (`id`, `is_static`, `aliases`, …). Lifecycle flags, `tools`,
+  and `model` are not returned — see `references/cli.md` for exactly which
+  fields you can and can't write.
 - Restate to yourself what the persona currently is, in plain terms, before
   deciding what to change.
 

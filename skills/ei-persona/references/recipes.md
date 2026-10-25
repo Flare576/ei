@@ -24,7 +24,8 @@ translated into a concrete new character trait.
    duplicate or contradict one that's already there.
 2. Turn the request into a concrete trait: a short `name`, a `description` of what it
    looks like in behavior (not just a label), a `sentiment` (-1..1, how the persona feels
-   about having it), and optionally a `strength` (0..1, how consistently it shows up). If
+   about having it), and optionally a `strength` (0..1, how consistently it shows up; 0 is a
+   never-do guardrail, 0.5 is the default). If
    the user's request is vague ("sarcastic"), propose the concrete wording and get their
    yes before writing — don't silently decide how sarcastic is "sarcastic."
 3. Build the patch's `traits` array: a copy of every existing trait, plus the new one
@@ -47,7 +48,8 @@ translated into a concrete new character trait.
 1. `ei --id <persona-id>` → read. Find the matching entry in `traits[]` by name.
 2. Change only the field(s) that need to change on that one trait object — `strength`
    and/or `sentiment` (both stay within their bounds, -1..1 for sentiment, 0..1 for
-   strength) and/or `description`. Leave `id` and `name` as-is unless the user explicitly
+   strength; 0 means "never do this" — use it for a "stop doing that" request, not a small
+   weakening like 0.1) and/or `description`. Leave `id` and `name` as-is unless the user explicitly
    wants a rename.
 3. Build the patch's `traits` array: a copy of every trait, with just that one entry
    edited — `traits` is still the whole array, even though only one entry changed.
@@ -213,16 +215,15 @@ one anymore. This recipe is no longer "read → set the flag → write" — it's
 **Symptom:** "give DJ Spotify access so she can answer what she's listening to" / "let Ei
 search the web" / "[persona] shouldn't be able to read my files anymore."
 
-`tools` left the external write contract entirely (ADR-031: it only affects in-harness
-behavior, not the knowledge base this CLI/MCP surface manages). `ei --id <persona-id>` still
-shows the current grants as the same `{ "<Provider>": { "<Tool>": true|false } }` map, so
-you can still tell the user what's currently granted — but there is no `ei update persona`
-payload that can flip a boolean in it anymore.
+`tools` left the external contract entirely (ADR-031: it only affects in-harness
+behavior, not the knowledge base this CLI/MCP surface manages). It is System Hidden —
+`ei --id <persona-id>` and `ei_lookup` do not return it — so this skill can neither read
+nor change a persona's grants, and cannot answer "what does X have access to right now."
 
-1. `ei --id <persona-id>` → read, and answer any "what does X have access to right now"
-   question directly from the `tools` map.
-2. For an actual grant/revoke request: tell the user this is done in the TUI's persona
-   editor now, not through this skill. Point them there rather than attempting a write.
+1. Don't guess at the current grants and don't attempt a write — there is nothing to read
+   and no `ei update persona` payload that can change them.
+2. For any grant/revoke request, or any question about what a persona has access to: tell
+   the user to use the TUI's `/details` editor or the Tools tab in the web persona editor.
 
 ---
 

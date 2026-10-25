@@ -23,14 +23,16 @@ find a persona by name. **`--persona "<Name>"` is a different feature** — it f
 entity types (facts/topics/people) down to what a named persona has learned; it never returns
 personas themselves, so it cannot be used to find one.
 
-`ei --id <id>` is your workhorse once you have the id. For a persona it returns the **full**
-record: every field Ei stores, not just the ones you can write. Read it before writing, for
+`ei --id <id>` is your workhorse once you have the id. For a persona it returns the identity
+record — not every field Ei stores: the in-app-only fields (see "Everything else" below) are
+stripped from every CLI/MCP read. Read it before writing, for
 context — an update no longer needs the whole record sent back (see "Updating" below), but you
 still want to see current values before proposing a change.
 
 ## The persona record shape — read vs. write are different sets now
 
-`ei --id <id>` returns MORE fields than you can write. The externally **writable** surface —
+`ei --id <id>` can return fields you can't write (`id`, `is_static`, `group_primary`,
+`groups_visible`, …). The externally **writable** surface —
 what `create`/`update` accept — is:
 
 ```
@@ -47,11 +49,12 @@ notes: [ "…" ],                        # capped at 20 entries server-side — 
                                         # pushes the array past 20 is rejected
 ```
 
-**Everything else `ei --id` shows you is read-only.** `model`, `group_primary`,
-`groups_visible`, `is_paused`, `pause_until`, `is_archived`, `archived_at`,
+**Everything else is not yours to write, and the in-app-only fields are not even readable.**
+`model`, `is_paused`, `pause_until`, `is_archived`, `archived_at`,
 `heartbeat_delay_ms`, `context_window_ms`, `include_message_timestamps`, `context_boundary`,
-and `tools` are all real, live fields on the record — you can (and should) read them for
-context — but there is no flag, no JSON field, no way at all to set any of them through this
+and `tools` are real fields on the record, but `ei --id` and `ei_lookup` do not return them
+(`stripHiddenPersonaFields`; System Hidden in ADR-031), and there is no flag, no JSON field,
+no way at all to set any of them through this
 CLI/MCP path. Submitting one in an `update` payload is rejected as an unrecognized field, not
 silently ignored. Every one of them is either an in-app setting (`/provider`, the TUI YAML
 editor) or in-app behavior (pause/archive), and the in-app surface is where it belongs — see
@@ -94,7 +97,7 @@ assigned on create. You never need to invent a UUID for a brand-new trait or top
 just omit `id` and let it be minted.
 
 **No minimum count.** Nothing here enforces a minimum number of traits or topics. (The
-reflection ceremony's own convention of "at least 3 traits, at least 3 topics" is guidance
+roughly-3-traits/3-topics guideline in `ei-manage-signals`'s Persona lens is guidance
 inside a *different* skill for a *different* situation — it is not a rule this path
 enforces. Adding a single trait to an otherwise-untouched persona is a completely valid
 edit.)
@@ -113,14 +116,14 @@ don't invent or hand-edit them:
 `create` and `update`. Renaming an existing persona *into* a reserved name is rejected
 exactly like creating one with that name.
 
-## Tool grants (`tools`) — read-only through this path now
+## Tool grants (`tools`) — not readable or writable through this path
 
 `tools` used to be writable here — grant/revoke via a boolean map. It no longer is
 (ADR-031: only affects in-harness behavior, not the external knowledge base this CLI/MCP
-surface manages). `ei --id <persona-id>` still shows the current grants as the same
-self-documenting `{ "<Provider>": { "<Tool>": true|false } }` map, for context — but there is
-nothing you can send back to change it. If a user asks you to grant or revoke a tool for a
-persona, tell them to do it in the TUI's persona editor; this skill can't.
+surface manages), and it is System Hidden, so `ei --id <persona-id>` and `ei_lookup` do not
+return it either. Grants can be neither read nor changed through this skill. If a user asks what
+a persona has access to, or wants a tool granted or revoked, tell them to use the TUI's
+`/details` editor or the Tools tab in the web persona editor; this skill can't.
 
 ## Creating
 
@@ -198,8 +201,8 @@ Inlining JSON with quotes/apostrophes into a shell single-quoted string is a foo
 (descriptions like `the middleware ('MW')`, or a Yoda-style `long_description` full of
 inverted syntax and dashes, will break your quoting). Prefer one of:
 
-- **`--json-file <path>`:** write the patch JSON to a file, then
-  `ei update persona <id> --json-file /tmp/patch.json`. This is the preferred mode over
+- **`--json-file <path>`:** write the patch JSON to a `mktemp` file (not a predictable path), then
+  `ei update persona <id> --json-file "$PATCH_FILE"`. This is the preferred mode over
   `--json "$(cat ...)"` — same body, but it never puts the JSON on argv, which matters more
   now that a patch can still carry prose-heavy fields like `traits[].description`.
 - **A scripting runtime:** build the patch object, `JSON.stringify`, and pass the string as a
