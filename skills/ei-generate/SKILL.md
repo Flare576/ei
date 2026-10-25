@@ -25,8 +25,7 @@ description: >
   is instead to fix wrong data in Ei, that's `ei-curate`; to look
   something up without producing a document, that's `ei-search`; to
   resolve the calling agent's own open signals (identity or operating
-  contract), that's `ei-manage-signals`; to capture a reuse-tested
-  project pattern for the commons, that's `pod7-pattern-harvester`.
+  contract), that's `ei-manage-signals`.
 ---
 
 # Ei Generate — synthesizing a document from Ei's memory, by hand
@@ -74,7 +73,7 @@ verb, and Ei's write path (`ei create/update/remove`, plus the quote-only
 Confirm the CLI is reachable: `ei --help` (or `bunx ei-tui --help` if `ei`
 isn't on PATH — same fallback every Ei skill uses). If you're not already
 familiar with `ei`'s read surface (`ei "query"`, `ei --id <id>`,
-`--recent`, `--persona`, `--source`), read `skills/ei-search/SKILL.md`
+`--recent`, `--persona`, `--source`), read the `ei-search` skill
 first — this skill assumes that baseline and doesn't repeat it. →
 `references/cli.md` has the two things specific to *this* skill's use of
 the CLI.
@@ -209,8 +208,7 @@ backing this output. Write only after they've told you.
   authoring a persona's character (`ei-persona`), a quick
   mid-conversation lookup with no document to produce (`ei-search`),
   resolving the calling agent's own open signals — identity or operating
-  contract (`ei-manage-signals`), or capturing a reuse-tested project
-  pattern for the commons (`pod7-pattern-harvester`).
+  contract (`ei-manage-signals`).
 
 ---
 

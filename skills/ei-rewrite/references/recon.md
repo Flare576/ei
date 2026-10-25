@@ -3,10 +3,10 @@
 Read `SKILL.md`'s "Why this skill exists" section first if you haven't — this
 file is the mechanical follow-through on that warning. The short version:
 **you have research tools the automatic Rewrite ceremony doesn't, and that is
-a liability for this specific decision, not an advantage.** The ceremony is
-forced to search Ei before it can redistribute anything, because
-`find_memory`/`searchHumanData` is the *only* tool it has. You have to force
-yourself to do the same thing on purpose.
+a liability for this specific decision, not an advantage.** The ceremony gets
+Ei's own search matches (`searchHumanData`, computed by Ei and placed in its
+prompt) before it can redistribute anything, and that is the *only* information
+it has. You have to force yourself to do the same thing on purpose.
 
 The decision this file governs, precisely: **for a piece of content you're
 about to pull out of a bloated record, does Ei already have a home for it?**

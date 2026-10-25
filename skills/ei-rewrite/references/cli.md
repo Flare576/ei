@@ -66,9 +66,10 @@ Ei recomputes the embedding automatically on every update.
 
 Don't hand-type JSON into a shell single-quoted string — descriptions
 routinely contain apostrophes and quotes that will break your quoting. Prefer
-`--json-file <path>`:
+`--json-file <path>` (use a `mktemp` file, not a predictable path):
 ```bash
-ei update person <id> --json-file /tmp/patch.json
+PATCH_FILE=$(mktemp)   # write the JSON body into it, then:
+ei update person <id> --json-file "$PATCH_FILE"
 ```
 Same body as `--json`, read from a file instead of argv. Or a scripting runtime: build the
 patch object, `JSON.stringify`, pass the result as a single interpolated argument to

@@ -1,7 +1,7 @@
 # reference: the `ei` CLI, as used by this skill
 
-This skill assumes you already know Ei's read surface from `ei-search`
-(`skills/ei-search/SKILL.md`) — read that first if you haven't. This file
+This skill assumes you already know Ei's read surface from the `ei-search`
+skill — read that first if you haven't. This file
 only covers what's specific to generating a document.
 
 ## Confirm reachability first

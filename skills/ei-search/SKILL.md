@@ -80,11 +80,11 @@ exact command surface — this skill is a guide, but the CLI evolves.
 | `ei topics -n N "query"` | Topics only |
 | `ei quotes -n N "query"` | Quotes only |
 | `ei personas -n N "query"` | Personas only — matches display name first, falls back to semantic search over persona descriptions |
-| `ei --persona "Name" "query"` | Narrow facts/people/topics to what a specific persona has learned — reliable only for those three types: always excludes quotes, and on `ei personas` returns everything unfiltered instead of scoping (see Guardrails) |
+| `ei --persona "Name" "query"` | Narrow results to what a specific persona has learned — facts/people/topics are scoped to that persona's interest; quotes stay visible only when that persona's group visibility allows them; on `ei personas` it returns everything unfiltered instead of scoping (see Guardrails) |
 | `ei --recent` | Most recently mentioned items, no query needed — browse by recency |
 | `ei --persona "Name" --recent` | Recent items scoped to one persona's knowledge |
-| `ei --source <prefix> "query"` | Same narrowing, by source prefix (e.g. `cursor`, `codex:my-machine`) instead of persona — same caveats: always excludes quotes, doesn't scope `ei personas` results |
-| `ei --id <id>` | Full-record lookup — entity id or fully-qualified message id (see below) |
+| `ei --source <prefix> "query"` | Same narrowing, by source prefix (e.g. `cursor`, `codex:my-machine`) instead of persona — always excludes quotes (empty, not an error) and doesn't scope `ei personas` results |
+| `ei --id <id>` | Full-record lookup — entity id or fully-qualified message id (see below); for a message id, add `--before N --after N` to include N surrounding messages each side |
 | `echo <id> \| ei --id` | Same lookup, id piped via stdin |
 | `ei "query" \| jq -r '.[0].id' \| ei --id` | Search-then-drill-down: every hit carries an `id`, so this fetches the top hit's full record |
 
@@ -183,12 +183,10 @@ a quote or reference came from, routed automatically to the right source by
 the id's prefix: Ei's own state, OpenCode SQLite, Claude Code JSONL, the
 Cursor DB, or Codex rollout history. Use this when a quote's phrasing is
 ambiguous, or you want the surrounding exchange rather than the isolated
-sentence. **CLI caveat**: `ei --id` on a message always fetches just that one
-message — it has no `before`/`after` flags to expand the window. (The MCP
-`ei_fetch_message` tool, where available, additionally accepts `before`/
-`after` counts to pull in surrounding messages; if you're on an MCP-enabled
-harness and specifically need that expanded window, that tool covers a case
-the CLI path here doesn't.)
+sentence. `ei --id <message-id> --before N --after N` returns N surrounding
+messages on each side (both default to 0, which fetches just that one message);
+the MCP `ei_fetch_message` tool, where available, takes the same
+`before`/`after` counts.
 
 ---
 
@@ -205,8 +203,9 @@ All search commands return **arrays**; every result has a `type` field.
 
 `ei --id <entity-id>` returns a **single object** (not an array), same shape
 as above, plus a `linked_quotes[]` array for facts/topics/people. Persona
-id-lookups additionally get a `tools` field as a self-documenting
-`{ providerDisplayName: { toolDisplayName: boolean } }` map.
+id-lookups return identity fields only — in-app-only fields such as `tools`,
+`model`, `is_paused`, `is_archived`, and `show_thinking` are never returned
+over CLI/MCP.
 
 `ei --id <message-id>` returns a different shape entirely: message content
 plus its session/source context (`{ message, before, after, session/source }`
@@ -229,9 +228,11 @@ only when you actually need one of the extra fields listed above.
   message it was lifted from, and is nullable and non-unique across quotes.
   Both resolve through `ei --id`, but only `id` names one quote.
 - **`--persona`/`--source` are human-memory narrowing tools, not universal
-  filters.** They're reliable for facts, people, and topics. They always
-  exclude quotes (results come back empty, not an error). On `ei personas`
-  they don't filter at all — every persona comes back unfiltered — so
+  filters.** They're reliable for facts, people, and topics. `--source`
+  always excludes quotes (results come back empty, not an error);
+  `--persona` keeps quotes visible only to the extent that persona's group
+  visibility allows. On `ei personas`
+  neither filters at all — every persona comes back unfiltered — so
   don't rely on them there.
 - **This is the explicit-call path, not a substitute for the passive
   injection.** Don't re-run a broad search "just in case" every turn — the

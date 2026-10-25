@@ -67,15 +67,17 @@ the loop on a judgment call.
 **But read this carefully, because it names the exact way this skill fails if
 you're not disciplined:**
 
-The Rewrite ceremony's LLM step has **only Ei's own tools** — `find_memory` /
-`searchHumanData` — and nothing else. It cannot grep a codebase, cannot search
+The Rewrite ceremony's LLM step has **no tools at all**. Ei itself pre-computes
+the search (`searchHumanData`, per subject) and puts the matches into the
+prompt, so the model can only choose among homes that exist in Ei's own
+dataset. It cannot grep a codebase, cannot search
 the web, cannot lean on anything it "already knows" about the subject from
 training or from earlier in a conversation. Every candidate home for
-redistributed content is found by *actually querying Ei's own dataset*,
-because that's the only query surface it has. This constraint is a **feature**:
+redistributed content comes from *actually querying Ei's own dataset*,
+because that's the only information it is given. This constraint is a **feature**:
 it structurally prevents the ceremony from inventing a duplicate Topic or
-Person that already exists under different wording, because it's forced to
-check first.
+Person that already exists under different wording, because the check
+happens before the model ever sees the task.
 
 You — a coding-harness agent — do not have that constraint. You have grep, web
 search, general knowledge, and (often) memory of a conversation where the

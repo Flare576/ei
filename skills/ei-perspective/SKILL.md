@@ -4,7 +4,7 @@ description: >
   Spin up temporary sub-agents that each embody one of the user's real Ei
   Personas — their actual traits, description, and topics, not a
   paraphrase — so they can weigh in on a real open question from the
-  inside, cross-talk with each other over `hub`, and converge (or
+  inside, cross-talk with each other as peers, and converge (or
   explicitly disagree) before answering. Use for: persona-authored
   feedback on a proposed feature, a "how would each of my personas react
   to X" check before shipping something identity-facing, a design
@@ -75,7 +75,7 @@ jq 'length' "$PERSONAS_JSON"             # equals your -n cap? raise it and re-r
 ```
 
 **Known gap**: the `ei` CLI's persona list/lookup does not expose
-`is_archived`/`is_static` — there is no field to mechanically filter an
+`is_archived` or `is_paused` — there is no field to mechanically filter an
 archived or paused persona out of this list. If the roster might include
 one, ask the user which names actually belong in this poll rather than
 assuming the list is already clean.
@@ -128,9 +128,9 @@ before treating "identity alone" as sufficient grounding.
 
 **Stage it once, reference it everywhere.** Don't paste the same
 multi-persona JSON/text blob into N separate dispatch prompts — write it
-to one shared file (`local://<name>.json` or `.md`) and have every
-participant read their own entry from it. Cheaper, and it means every
-participant is grounded in the exact same snapshot.
+to one shared scratch file (any location every participant can read) and
+have every participant read their own entry from it. Cheaper, and it means
+every participant is grounded in the exact same snapshot.
 
 ---
 
@@ -139,15 +139,15 @@ participant is grounded in the exact same snapshot.
 Two shapes, decided per persona:
 
 - **The persona is also a harness agent in this session's own agent
-  roster** (e.g. an Ei Persona named "Beta" when a `p-beta` agent type
-  exists) — dispatch via `task(agent: "<that agent type>")`, with the
+  roster** (e.g. an Ei Persona named "Beta" when an agent type named for
+  Beta exists) — spawn a sub-agent of that agent type, with the
   Ei identity layered on top: *"you are both operating as your normal
   agent identity and channeling this Ei Persona identity."* They keep
   their normal agent behavior; the Ei identity is additional context, not
   a replacement.
 - **No harness-agent counterpart exists** (most personas — Ei, DJ, a
-  user-created character with no matching agent) — dispatch via a plain
-  `task()` call, no `agent` field, framed as *"you are simulating this
+  user-created character with no matching agent) — spawn a general-purpose
+  sub-agent with no specific agent type, framed as *"you are simulating this
   Persona; answer in their voice, not as a UX consultant describing
   them."* A generic model instance with the persona's real traits
   injected produces a close facsimile of how they'd actually respond in
@@ -172,8 +172,8 @@ Every dispatch needs:
    instruction to actually coordinate:
    - Draft an honest, individual first answer, grounded in their own real
      identity — not a generic "helpful AI" answer with a name attached.
-   - Broadcast a short version of that position (`hub send to:"all"`).
-   - Check for replies (`hub inbox`/`hub wait`). If a peer changes their
+   - Send a short version of that position to every peer.
+   - Check for peers' replies, waiting for them if needed. If a peer changes their
      mind or sharpens their answer, **actually revise** — don't restate
      the first draft. Real disagreement is fine; note it explicitly
      rather than talking it into a false convergence.

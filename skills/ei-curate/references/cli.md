@@ -175,8 +175,8 @@ records that are genuine junk/duplicates **after** you've moved any real quotes 
 Inlining JSON with quotes/apostrophes into a shell single-quoted string is a footgun
 (descriptions like `the middleware ('MW')` will break your quoting). Prefer one of:
 
-- **`--json-file <path>`:** write the JSON to a file, then
-  `ei update person <id> --json-file /tmp/patch.json` — same body, but it never puts the
+- **`--json-file <path>`:** write the JSON to a `mktemp` file (not a predictable path), then
+  `ei update person <id> --json-file "$PATCH_FILE"` — same body, but it never puts the
   JSON on argv.
 - **A scripting runtime:** read the record, parse it, mutate the object, `JSON.stringify`,
   and pass the string as a single argument (interpolation escaping handles the quotes). For
