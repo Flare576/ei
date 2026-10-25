@@ -6,7 +6,7 @@
  * runtime: "any" (works in Web + TUI)
  */
 import type { ToolExecutor } from "../types.js";
-import { getSpotifyAccessToken, notAuthenticatedError } from "./spotify-auth.js";
+import { getSpotifyAccessToken, notAuthenticatedFailure, spotifyApiFailure } from "./spotify-auth.js";
 
 interface SpotifyCurrentlyPlayingResponse {
   is_playing: boolean;
@@ -25,22 +25,12 @@ export const currentlyPlayingExecutor: ToolExecutor = {
   async execute(_args: Record<string, unknown>, config?: Record<string, string>, onConfigUpdate?: (updates: Record<string, string>) => void): Promise<string> {
     const refreshToken = config?.spotify_refresh_token?.trim();
     if (!refreshToken) {
-      return notAuthenticatedError("get_currently_playing");
+      throw notAuthenticatedFailure();
     }
 
-    let accessToken: string;
-    try {
-      accessToken = await getSpotifyAccessToken(refreshToken, (newToken) => {
-        onConfigUpdate?.({ spotify_refresh_token: newToken });
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // If token refresh fails, the refresh token is likely revoked
-      return JSON.stringify({
-        error: "token_refresh_failed",
-        message: msg,
-      });
-    }
+    const accessToken = await getSpotifyAccessToken(refreshToken, (newToken) => {
+      onConfigUpdate?.({ spotify_refresh_token: newToken });
+    });
 
     const response = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -52,6 +42,8 @@ export const currentlyPlayingExecutor: ToolExecutor = {
     }
 
     if (!response.ok) {
+      const failure = spotifyApiFailure(response.status);
+      if (failure) throw failure;
       throw new Error(`Spotify API error (${response.status}): ${await response.text()}`);
     }
 

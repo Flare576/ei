@@ -8,6 +8,12 @@
  * so it always reflects the latest stored value.
  */
 
+import { ToolFailure } from "../tool-error.js";
+
+const SPOTIFY_RECONNECT_REMEDIATION =
+  "Reconnect Spotify. In the web app: Settings → Toolkits → Spotify → Connect Spotify. In the TUI: /auth spotify";
+const SPOTIFY_RETRY_REMEDIATION = "Try again later.";
+
 export const SPOTIFY_CLIENT_ID = "41a10178f66946f78d4a1e265606ba36";
 export const SPOTIFY_SCOPES = ["user-read-currently-playing", "user-library-read"];
 
@@ -51,8 +57,20 @@ export async function getSpotifyAccessToken(
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Spotify token refresh failed (${response.status}): ${text}`);
+    const detail = (await response.text()).trim().slice(0, 300);
+    const withDetail = detail ? `: ${detail}` : "";
+    if (response.status === 429 || response.status >= 500) {
+      throw new ToolFailure(
+        "token_refresh_failed",
+        `Spotify could not refresh the login because its account service is unavailable or rate-limiting (HTTP ${response.status})${withDetail}`,
+        SPOTIFY_RETRY_REMEDIATION
+      );
+    }
+    throw new ToolFailure(
+      "token_refresh_failed",
+      `Spotify rejected the stored login when refreshing it (HTTP ${response.status}); the connection was most likely revoked or has expired${withDetail}`,
+      SPOTIFY_RECONNECT_REMEDIATION
+    );
   }
 
   const data = (await response.json()) as {
@@ -79,12 +97,36 @@ export function clearTokenCache(): void {
   cachedToken = null;
 }
 
-/** Return a structured "not authenticated" error for the LLM to relay to the user. */
-export function notAuthenticatedError(tool: string): string {
-  return JSON.stringify({
-    error: "not_authenticated",
-    tool,
-    message:
-      "Spotify is not connected. In the web app: Settings → Tool Kits → Spotify → Connect Spotify. In the TUI: /auth spotify",
-  });
+/** Failure for a tool call made with no stored refresh token. */
+export function notAuthenticatedFailure(): ToolFailure {
+  return new ToolFailure("not_authenticated", "Spotify is not connected.", SPOTIFY_RECONNECT_REMEDIATION);
+}
+
+/**
+ * Map a non-success Spotify API response to a ToolFailure the persona can explain.
+ * Returns undefined for statuses with no specific guidance (callers keep their generic error).
+ */
+export function spotifyApiFailure(status: number): ToolFailure | undefined {
+  if (status === 401 || status === 403) {
+    return new ToolFailure(
+      "spotify_unauthorized",
+      `Spotify refused the request (HTTP ${status}); the connection no longer has permission, most likely because it was revoked or lacks the required access.`,
+      SPOTIFY_RECONNECT_REMEDIATION
+    );
+  }
+  if (status === 429) {
+    return new ToolFailure(
+      "spotify_rate_limited",
+      "Spotify is rate-limiting requests (HTTP 429).",
+      SPOTIFY_RETRY_REMEDIATION
+    );
+  }
+  if (status >= 500) {
+    return new ToolFailure(
+      "spotify_unavailable",
+      `Spotify is having a problem on its side (HTTP ${status}).`,
+      SPOTIFY_RETRY_REMEDIATION
+    );
+  }
+  return undefined;
 }

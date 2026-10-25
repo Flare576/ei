@@ -12,6 +12,11 @@
  * callers must persist the new refresh token via onTokenRotated.
  */
 
+import { ToolFailure } from "../tool-error.js";
+
+const SLACK_RECONNECT_REMEDIATION =
+  "Reconnect Slack. In the TUI: /auth slack. In the web app: My Data → External → Connect Slack.";
+
 export const SLACK_CLIENT_ID = "11080256060354.11080294064034";
 
 export const SLACK_USER_SCOPES = [
@@ -69,8 +74,12 @@ export async function getSlackAccessToken(
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Slack token refresh failed (${response.status}): ${text}`);
+    const detail = (await response.text()).trim().slice(0, 300);
+    throw new ToolFailure(
+      "token_refresh_failed",
+      `Slack rejected the stored login when refreshing it (HTTP ${response.status})${detail ? `: ${detail}` : ""}`,
+      SLACK_RECONNECT_REMEDIATION
+    );
   }
 
   const data = (await response.json()) as {
@@ -84,7 +93,11 @@ export async function getSlackAccessToken(
   };
 
   if (!data.ok || !data.authed_user?.access_token) {
-    throw new Error(`Slack token refresh failed: ${data.error ?? "unknown error"}`);
+    throw new ToolFailure(
+      "token_refresh_failed",
+      `Slack rejected the stored login when refreshing it: ${data.error ?? "unknown error"}`,
+      SLACK_RECONNECT_REMEDIATION
+    );
   }
 
   const expiresIn = data.authed_user.expires_in ?? 43200; // 12h default
@@ -106,12 +119,3 @@ export function clearSlackTokenCache(): void {
   cachedToken = null;
 }
 
-/** Return a structured "not authenticated" error. */
-export function slackNotAuthenticatedError(): string {
-  return JSON.stringify({
-    error: "not_authenticated",
-    integration: "slack",
-    message:
-      "Slack is not connected. In the TUI: /auth slack. In the web app: My Data → External → Connect Slack.",
-  });
-}

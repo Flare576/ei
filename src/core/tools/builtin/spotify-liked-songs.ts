@@ -7,7 +7,7 @@
  * runtime: "any" (works in Web + TUI)
  */
 import type { ToolExecutor } from "../types.js";
-import { getSpotifyAccessToken, notAuthenticatedError } from "./spotify-auth.js";
+import { getSpotifyAccessToken, notAuthenticatedFailure, spotifyApiFailure } from "./spotify-auth.js";
 
 interface SpotifyTrack {
   artist: string;
@@ -51,6 +51,8 @@ async function fetchAllLikedSongs(accessToken: string): Promise<SpotifyTrack[]> 
     });
 
     if (!response.ok) {
+      const failure = spotifyApiFailure(response.status);
+      if (failure) throw failure;
       throw new Error(`Spotify liked songs API error (${response.status}): ${await response.text()}`);
     }
 
@@ -77,7 +79,7 @@ export const likedSongsExecutor: ToolExecutor = {
   async execute(_args: Record<string, unknown>, config?: Record<string, string>, onConfigUpdate?: (updates: Record<string, string>) => void): Promise<string> {
     const refreshToken = config?.spotify_refresh_token?.trim();
     if (!refreshToken) {
-      return notAuthenticatedError("get_liked_songs");
+      throw notAuthenticatedFailure();
     }
 
     // Return cached result if still fresh
@@ -85,18 +87,9 @@ export const likedSongsExecutor: ToolExecutor = {
       return JSON.stringify({ tracks: likedSongsCache.tracks, cached: true });
     }
 
-    let accessToken: string;
-    try {
-      accessToken = await getSpotifyAccessToken(refreshToken, (newToken) => {
-        onConfigUpdate?.({ spotify_refresh_token: newToken });
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return JSON.stringify({
-        error: "token_refresh_failed",
-        message: msg,
-      });
-    }
+    const accessToken = await getSpotifyAccessToken(refreshToken, (newToken) => {
+      onConfigUpdate?.({ spotify_refresh_token: newToken });
+    });
 
     const tracks = await fetchAllLikedSongs(accessToken);
 
