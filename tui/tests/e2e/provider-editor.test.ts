@@ -2,7 +2,7 @@ import { test, expect } from "@microsoft/tui-test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
 import { rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { BUN_PATH, getTestDataPath } from "./fixtures.js";
+import { BUN_PATH, getTestDataPath, seedCurrentLocalState } from "./fixtures.js";
 
 const MOCK_PORT = 3108;
 const WITH_PROVIDER_DATA_PATH = getTestDataPath("provider-editor-existing");
@@ -78,6 +78,7 @@ const mockServer = new MockLLMServerImpl();
 
 rmSync(WITH_PROVIDER_DATA_PATH, { recursive: true, force: true });
 mkdirSync(WITH_PROVIDER_DATA_PATH, { recursive: true });
+seedCurrentLocalState(WITH_PROVIDER_DATA_PATH);
 const checkpointWithProvider = createCheckpointWithExistingProvider();
 const withProviderStatePath = join(WITH_PROVIDER_DATA_PATH, "state.json");
 writeFileSync(withProviderStatePath, JSON.stringify(checkpointWithProvider, null, 2));

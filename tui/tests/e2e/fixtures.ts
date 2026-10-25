@@ -7,6 +7,9 @@
  * ```
  */
 
+import { readFileSync, writeFileSync } from "fs";
+import { join, resolve } from "path";
+
 export const BUN_PATH = process.env.BUN_PATH || `${process.env.HOME}/.bun/bin/bun`;
 export const TAB = "\t";
 
@@ -91,6 +94,20 @@ export function createCheckpointWithTwoPersonas(mockServerUrl: string) {
  */
 export function getTestDataPath(testName: string): string {
   return `/tmp/ei-test-${testName}-${process.pid}-${Date.now()}`;
+}
+
+/**
+ * Stamps `local.json` with the CURRENT package version. Existing-user
+ * fixtures (provider accounts in state.json) MUST call this after creating
+ * the data dir: with no `installed_version` the TUI treats the install as
+ * stale and shows the upgrade prompt overlay, which swallows keystrokes.
+ * Do not use for first-boot (no-accounts) fixtures that expect the wizard.
+ */
+export function seedCurrentLocalState(dataPath: string): void {
+  // tui-test imports a compiled copy under `.tui-test`, so resolve the repo
+  // root from its stable cwd (tui/) rather than import.meta.url.
+  const pkg = JSON.parse(readFileSync(resolve(process.cwd(), "..", "package.json"), "utf8")) as { version: string };
+  writeFileSync(join(dataPath, "local.json"), JSON.stringify({ installed_version: pkg.version }), "utf8");
 }
 
 /**

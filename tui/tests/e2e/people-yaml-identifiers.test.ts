@@ -21,7 +21,7 @@ import { rmSync, mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync }
 
 type TuiTerminal = Parameters<Parameters<typeof test>[1]>[0]["terminal"];
 import { join } from "path";
-import { createTestSettings, BUN_PATH, getTestDataPath } from "./fixtures.js";
+import { createTestSettings, BUN_PATH, getTestDataPath, seedCurrentLocalState } from "./fixtures.js";
 
 const MOCK_PORT = 3122;
 const MOCK_SERVER_URL = `http://127.0.0.1:${MOCK_PORT}/v1`;
@@ -35,6 +35,7 @@ const CAPTURE_SCRIPT = join(TEST_DATA_PATH, "capture-editor.sh");
 
 rmSync(TEST_DATA_PATH, { recursive: true, force: true });
 mkdirSync(TEST_DATA_PATH, { recursive: true });
+seedCurrentLocalState(TEST_DATA_PATH);
 
 writeFileSync(
   CAPTURE_SCRIPT,

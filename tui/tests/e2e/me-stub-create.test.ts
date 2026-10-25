@@ -9,7 +9,7 @@ import { test, expect } from "@microsoft/tui-test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
 import { rmSync, mkdirSync, writeFileSync, chmodSync } from "fs";
 import { join } from "path";
-import { createTestSettings, BUN_PATH, getTestDataPath } from "./fixtures.js";
+import { createTestSettings, BUN_PATH, getTestDataPath, seedCurrentLocalState } from "./fixtures.js";
 
 const MOCK_PORT = 3125;
 const MOCK_SERVER_URL = `http://127.0.0.1:${MOCK_PORT}/v1`;
@@ -22,6 +22,7 @@ const CREATE_SCRIPT = join(TEST_DATA_PATH, "create-editor.py");
 
 rmSync(TEST_DATA_PATH, { recursive: true, force: true });
 mkdirSync(TEST_DATA_PATH, { recursive: true });
+seedCurrentLocalState(TEST_DATA_PATH);
 
 // Python editor: replaces the commented stub with a real uncommitted entry.
 // The TUI will generate a UUID for the missing id field.

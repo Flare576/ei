@@ -12,7 +12,7 @@ import { test, expect } from "@microsoft/tui-test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
 import { rmSync, mkdirSync, writeFileSync, chmodSync } from "fs";
 import { join } from "path";
-import { createTestSettings, BUN_PATH, getTestDataPath } from "./fixtures.js";
+import { createTestSettings, BUN_PATH, getTestDataPath, seedCurrentLocalState } from "./fixtures.js";
 
 const MOCK_PORT = 3121;
 const MOCK_SERVER_URL = `http://127.0.0.1:${MOCK_PORT}/v1`;
@@ -25,6 +25,7 @@ const DELETE_SCRIPT = join(TEST_DATA_PATH, "delete-editor.py");
 
 rmSync(TEST_DATA_PATH, { recursive: true, force: true });
 mkdirSync(TEST_DATA_PATH, { recursive: true });
+seedCurrentLocalState(TEST_DATA_PATH);
 
 // Python editor: finds `name: Full Name` then flips the nearest `_delete: false`
 // to `_delete: true`, simulating a user who tries to delete a built-in fact.

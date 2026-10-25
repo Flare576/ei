@@ -2,7 +2,7 @@ import { test, expect } from "@microsoft/tui-test";
 import { MockLLMServerImpl } from "./framework/mock-server.js";
 import { rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { createCheckpointWithTwoPersonas, getTestDataPath, BUN_PATH } from "./fixtures.js";
+import { createCheckpointWithTwoPersonas, getTestDataPath, BUN_PATH, seedCurrentLocalState } from "./fixtures.js";
 
 const MOCK_PORT = 3102;
 const TEST_DATA_PATH = getTestDataPath("context-boundary");
@@ -11,6 +11,7 @@ const mockServer = new MockLLMServerImpl();
 
 rmSync(TEST_DATA_PATH, { recursive: true, force: true });
 mkdirSync(TEST_DATA_PATH, { recursive: true });
+seedCurrentLocalState(TEST_DATA_PATH);
 const checkpoint = createCheckpointWithTwoPersonas(`http://127.0.0.1:${MOCK_PORT}/v1`);
 const statePath = join(TEST_DATA_PATH, "state.json");
 writeFileSync(statePath, JSON.stringify(checkpoint, null, 2));
