@@ -11,6 +11,41 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ## [Unreleased]
 
+### Upgrading to 1.11.0
+
+If you are coming back after months, read this before the first launch.
+
+- **Copy `state.json` first.** Migrations run in place on every launch, before the loop starts.
+  There is no pre-upgrade backup and no downgrade path.
+- **OMP is its own integration now, and nothing copies the Pi toggle.** If you imported OMP
+  through Pi, enable `omp.integration` in `/settings`. The first OMP run re-imports every
+  session tree from the beginning, creates an `OhMyPi` persona and archived personas for
+  sub-agents, and can be large: it takes a long time and uses LLM calls. Old `pi:` ids for OMP
+  sessions no longer resolve; Pi itself reads only `~/.pi`.
+- **Check your heartbeat settings before launching.** The new 5-minute minimum and the
+  zero/negative-duration checks apply only when you save; values already stored are read as they
+  are at runtime. Check `default_heartbeat_ms` and each persona's `heartbeat_delay_ms` in
+  `/settings`: a stored `0` queues a heartbeat on every loop pass (static personas are skipped by
+  the scheduler).
+- **Idle personas may message you first.** On the first launch, a heartbeat fires for every
+  persona that is not archived, static or paused and whose last message is older than its delay.
+- **The ceremony does not catch up.** It runs only at its configured time, while Ei is running.
+- **Retired reflection data is dropped.** See *Removed*. If you had a pending reflection
+  proposal, it is gone after the upgrade.
+- **If the TUI offers to install the latest skills, hooks and integrations, know what it does.**
+  Accepting it removes the `ei` MCP entry from your Claude Code, Cursor and Codex configs (add it
+  back by hand if you used MCP), and it does not delete retired skills: remove any stale
+  `ei-reflect` directory from the skills folders you use (`~/.claude/skills`,
+  `~/.agents/skills`, `~/.omp/agent/skills`, `~/.config/opencode/skills`).
+- **Rolling backups are opt-in and each one is a full copy of `state.json`.** They are TUI-only
+  and apply once `backup.enabled` is on; by default one is taken at most every hour and 24 are
+  kept, so disk use scales with the size of your state.
+- **The startup quote-id migration runs every launch.** It does not re-verify quote ids that are
+  already fully qualified, so quotes mis-sourced under 1.10.0 stay as they are.
+- **Custom tools without a `kind` count as write tools.** They are not offered to Personas in
+  Rooms; mark a tool `kind: "read"` to keep it there.
+- **`show_thinking` absent means on.** Every existing persona shows thinking once you upgrade.
+
 ### Fixed
 
 - **Pantheon's `P-Sisyphus` agent id now resolves to the existing `Sisyphus` persona.** Pi/OMP
@@ -125,6 +160,33 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
   apply to every such model however it was configured; as with Haiku, the `token_limit` is
   copied only onto models created by onboarding or auto-detection, so existing models (and any
   added through `/providers`) need `token_limit` set by hand.
+- **Persona identity and signals are now tools, not a review step.** In a 1:1 conversation a
+  persona can read and change itself directly: `get_my_identity` shows its full identity, and
+  `edit_trait`, `edit_topic` and `update_description` change it. `resolve_signal` settles one of
+  its own open signals, and `add_note` / `clear_note` keep its notes. Only `get_my_identity` is
+  read-only: the others are classified as writes, so they are withheld in Rooms and are not
+  offered during heartbeats.
+- **Harness agents can work with a persona's signals from the CLI and MCP.**
+  `ei add observation <personaId>` asserts an observation, `ei list signals <personaId>` lists
+  every signal (all statuses, both lenses) so you can find the ids, and `ei confirm signal` /
+  `ei dismiss signal <personaId> <signalId>` mark one reviewed or dismissed. MCP has the same
+  four as `ei_observation_add`, `ei_signal_list`, `ei_signal_confirm` and `ei_signal_dismiss`.
+- **Two new skills.** `ei-manage-signals` teaches a harness agent to act on an open signal
+  (read the full identity, talk it over with you, then act); it replaces `ei-reflect`.
+  `ei-perspective` spins up temporary sub-agents that each embody one of your Personas, so they
+  can weigh in on a real open question.
+
+### Removed
+
+- **The reflection workflow is gone.** The `/reflect` TUI command, the web reflection review
+  modal and the TUI/web pending-reflection indicators, the automatic reflection critic, the
+  reflection-alert heartbeat items, and the `ei-reflect` skill (replaced by `ei-manage-signals`)
+  no longer exist. The `external_reflection_only` and `pending_update` persona fields are removed
+  from the persona record, and the `<ei-relationship>` block no longer carries the Person Log
+  character-count nudge.
+- **Nothing is migrated.** On upgrade, any pending reflection proposal and any queued critic
+  work is dropped without notice, and the two retired persona fields are deleted from stored
+  personas when they load.
 
 ## [1.10.0] — 2026-08-09
 
