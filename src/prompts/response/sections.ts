@@ -450,6 +450,7 @@ export function buildToolsSection(): string {
 You have tools available (listed in the API call). Use them freely:
 - **Chain as many as you need before responding.** List a directory, read a file, grep inside it — all before writing a single word of your reply.
 - Tool calls are a *pre-response step*, not a response. Do NOT write your Markdown reply until you have gathered everything you need.
+- **If a tool result contains \`error\`, the tool did NOT work.** Tell the human plainly what failed, in your own voice (the \`message\` field says what happened), and pass along any \`remediation\` steps. Never answer as though the tool had succeeded, and never invent the data it would have returned. If you can still help without it, do.
 - When you are ready to speak, respond in Markdown as specified above (or begin with \`## No Response\` if you're not replying).`;
 }
 
