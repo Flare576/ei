@@ -10,22 +10,26 @@ import type { PersonaEntity, PersonaTrait, PersonaTopic } from "../../../../src/
 import type { ToolExecutor } from "../../../../src/core/tools/types.js";
 
 // AT3's "embedding recompute" describe block below drives the REAL
-// persona-manager.ts updatePersona logic, including the real
-// computePersonaDescriptionEmbedding (so the text that gets embedded is
-// composed exactly as in production). Only the embedding SERVICE is stubbed
-// with a deterministic function of its input text: the real model has to be
-// downloaded, and a cold CI runner racing several test workers on that
-// download gets a corrupt archive and times out. Every other test in this
-// file uses a plain vi.fn() closure and never touches embedding-service.js.
+// persona-manager.ts updatePersona logic. computePersonaDescriptionEmbedding is
+// replaced by a deterministic function of the text the real
+// getPersonaDescriptionText composes, so the text that gets embedded is still
+// built exactly as in production. The real model has to be downloaded: on a cold
+// CI runner several test workers race that download, the archive comes out
+// corrupt and the test times out. The export itself has to be replaced: stubbing
+// getEmbeddingService does not reach it, because computePersonaDescriptionEmbedding
+// calls the module's own binding, not the mocked export. Every other test in
+// this file uses a plain vi.fn() closure and never touches embedding-service.js.
+type DescriptionInput = { display_name: string; long_description?: string; short_description?: string };
 vi.mock("../../../../src/core/embedding-service.js", async (importOriginal) => {
-  const actual = await importOriginal() as Record<string, unknown>;
+  const actual = (await importOriginal()) as Record<string, unknown> & {
+    getPersonaDescriptionText: (persona: DescriptionInput) => string;
+  };
   return {
     ...actual,
-    getEmbeddingService: vi.fn(() => ({
-      embed: vi.fn(async (text: string) => [text.length, text.charCodeAt(0) || 0, 1]),
-      embedBatch: vi.fn(async (texts: string[]) => texts.map((t) => [t.length, t.charCodeAt(0) || 0, 1])),
-      isReady: () => true,
-    })),
+    computePersonaDescriptionEmbedding: vi.fn(async (persona: DescriptionInput) => {
+      const text = actual.getPersonaDescriptionText(persona);
+      return [text.length, text.charCodeAt(0) || 0, 1];
+    }),
   };
 });
 import { updatePersona as personaManagerUpdatePersona } from "../../../../src/core/persona-manager.js";
