@@ -335,4 +335,6 @@ Skills are installed automatically — any directory added under `skills/` in th
 - OMP: `~/.omp/agent/skills/ei-reflect/`
 - OpenCode: `~/.config/opencode/skills/ei-reflect/`
 
+After a successful run, `ei --install` records the installed version as `installed_version` in `local.json` in the data directory (`$EI_DATA_PATH`, or the default data directory). The TUI compares that record with the version it is running and offers this same install after an upgrade; an existing install with no record is offered it too. A failed or partial install (the run exits with the aggregate error) records nothing, so the TUI keeps offering it.
+
 Installing or upgrading also removes the `ei` MCP entry, if present, from the harnesses that registered one: Claude Code (`mcpServers` in `~/.claude.json`), Cursor (`mcpServers` in `~/.cursor/mcp.json`, when Cursor is detected), and Codex (`codex mcp remove ei`, which rewrites `~/.codex/config.toml`). OpenCode's config is never touched. This happens whether you run `ei --install`, accept the TUI's post-upgrade install prompt, or accept the onboarding wizard's install step — all three run the same installer. If you rely on the MCP server, re-register it afterwards (see [MCP Server](#mcp-server)).

@@ -41,7 +41,7 @@ bunx ei-tui
 
 Accepting the wizard's install step also turns on importing (`integration: true`) for every Claude Code, Cursor, Codex, Pi, and OMP install it detects, so Ei starts reading those transcripts and sending them to your extraction model. Turn any of them back off in `/settings`. OpenCode's importer is not switched on by the wizard.
 
-**Upgrading:** if you already have a provider configured and `local.json` in your data directory records an `installed_version` that differs from the version you're now running, Ei asks whether to install the latest skills, hooks, and integrations. Accepting runs the same install as `ei --install`, which removes any `ei` MCP registration from Claude Code and Cursor and runs `codex mcp remove ei` for Codex (see the [CLI README](../src/cli/README.md#mcp-server)). Dismissing doesn't record the new version, so you're asked again on every launch until you accept.
+**Upgrading:** if you already have a provider configured and `local.json` in your data directory either records an `installed_version` that differs from the version you're now running or has no `installed_version` at all (an existing install that predates the record, or one set up with an older `ei --install`), Ei asks whether to install the latest skills, hooks, and integrations. Accepting runs the same install as `ei --install`, which removes any `ei` MCP registration from Claude Code and Cursor and runs `codex mcp remove ei` for Codex (see the [CLI README](../src/cli/README.md#mcp-server)), then records the running version. Dismissing doesn't record the new version, so you're asked again on every launch until you accept. With no provider configured, first launch goes to the onboarding wizard instead.
 
 ## Coding Tool Integrations
 
