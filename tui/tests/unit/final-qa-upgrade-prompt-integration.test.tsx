@@ -18,7 +18,7 @@
 // upgrade-prompt-dismiss-is-permanent.test.tsx.
 //
 // Gap this closes: onboarding-wiring.test.tsx already covers the
-// present-stale->true and absent->false legs of shouldShowUpgradePrompt's
+// present-stale->true and absent->true legs of shouldShowUpgradePrompt's
 // decision matrix through a real finishBootstrap() run, but never
 // exercises the EQUAL-version leg through the real wiring (only through
 // upgrade-prompt.test.ts's pure unit test of the decision function in
@@ -47,7 +47,7 @@ import type { ParentComponent } from "solid-js";
 import { EiProvider, useEi, type EiContextValue } from "../../src/context/ei";
 import { KeyboardProvider } from "../../src/context/keyboard";
 import { OverlayProvider } from "../../src/context/overlay";
-import { getInstalledVersion } from "../../src/util/local-state";
+import { getInstalledVersion } from "../../../src/cli/local-state.js";
 import pkg from "../../../package.json";
 
 const TestProviders: ParentComponent = (props) => (

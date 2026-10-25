@@ -38,7 +38,7 @@ import type { ParentComponent } from "solid-js";
 import { EiProvider, useEi, type EiContextValue } from "../../src/context/ei";
 import { KeyboardProvider } from "../../src/context/keyboard";
 import { OverlayProvider } from "../../src/context/overlay";
-import { getInstalledVersion } from "../../src/util/local-state";
+import { getInstalledVersion } from "../../../src/cli/local-state.js";
 import { onboardingCommand } from "../../src/commands/onboarding";
 import type { Command } from "../../src/commands/registry";
 
@@ -172,7 +172,7 @@ describe("finishBootstrap() — existing user (hasAccounts true)", () => {
     }
   }, 15000);
 
-  it("does NOT show the upgrade prompt when local.json is absent (never-installed == not stale)", async () => {
+  it("shows the upgrade prompt (never the wizard) when local.json is absent — an existing install with no record is stale", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "ei-wiring-nolocal-"));
     cleanupDirs.push(dataDir);
     writeFileSync(join(dataDir, "state.json"), JSON.stringify(makeCheckpoint(makeExistingAccountSettings())));
@@ -187,10 +187,12 @@ describe("finishBootstrap() — existing user (hasAccounts true)", () => {
 
     try {
       await waitUntil(() => capturedEi !== undefined);
-      // Give the fire-and-forget hasAccounts/upgrade-prompt check time to settle.
-      await wait(400);
-      expect(capturedEi!.showUpgradePrompt()).toBe(false);
+      await waitUntil(() => capturedEi !== undefined && capturedEi.showUpgradePrompt());
+      expect(capturedEi!.showUpgradePrompt()).toBe(true);
       expect(capturedEi!.showOnboarding()).toBe(false);
+      expect(capturedEi!.isFirstBoot()).toBe(false);
+      // Showing the prompt must not write a stamp: only an accepted, successful install does.
+      expect(await getInstalledVersion(dataDir)).toBeUndefined();
     } finally {
       renderer.destroy();
     }
