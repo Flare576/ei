@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   ensureAgentPersona,
   ensureAllAgentPersonas,
+  findPersonaByExactName,
   resolveCanonicalAgent,
 } from "../../../../src/core/personas/opencode-agent.js";
 import { StateManager } from "../../../../src/core/state-manager.js";
@@ -28,7 +29,7 @@ describe("ensureAgentPersona", () => {
 
   beforeEach(() => {
     mockStateManager = {
-      persona_getByName: vi.fn().mockReturnValue(null),
+      persona_getAll: vi.fn().mockReturnValue([]),
       persona_add: vi.fn(),
     };
     mockInterface = {
@@ -57,7 +58,7 @@ describe("ensureAgentPersona", () => {
       last_updated: "2026-01-01T00:00:00.000Z",
     };
 
-    mockStateManager.persona_getByName = vi.fn().mockReturnValue(existingPersona);
+    mockStateManager.persona_getAll = vi.fn().mockReturnValue([existingPersona]);
 
     const result = await ensureAgentPersona("build", {
       stateManager: mockStateManager as StateManager,
@@ -472,7 +473,7 @@ describe("ensureAllAgentPersonas", () => {
 
   beforeEach(() => {
     mockStateManager = {
-      persona_getByName: vi.fn().mockReturnValue(null),
+      persona_getAll: vi.fn().mockReturnValue([]),
       persona_add: vi.fn(),
     };
     mockInterface = {
@@ -518,9 +519,7 @@ describe("ensureAllAgentPersonas", () => {
       last_updated: "2026-01-01T00:00:00.000Z",
     };
 
-    mockStateManager.persona_getByName = vi.fn().mockImplementation((name: string) =>
-      name === "Build" ? existingPersona : name === "Sisyphus" ? null : null
-    );
+    mockStateManager.persona_getAll = vi.fn().mockReturnValue([existingPersona]);
 
     const result = await ensureAllAgentPersonas(
       ["build", "sisyphus"],
@@ -642,5 +641,51 @@ describe("ensureAgentPersona creation kind", () => {
     expect(result.archived_at).toBeUndefined();
     expect(JSON.stringify(sm.persona_getById("stored-sisyphus"))).toBe(before);
     expect(sm.persona_getAll()).toHaveLength(1);
+  });
+
+  it("does not bind a new agent to an unrelated persona whose name merely contains it (Architect vs Software Architect)", async () => {
+    sm.persona_add(makeStoredPersona("stored-sw-arch", "Software Architect"));
+
+    const result = await ensureAgentPersona("Architect", { stateManager: sm });
+
+    expect(result.id).not.toBe("stored-sw-arch");
+    expect(result.display_name).toBe("Architect");
+    expect(sm.persona_getAll()).toHaveLength(2);
+    expect(sm.persona_getById("stored-sw-arch")!.aliases).toEqual(["software architect"]);
+  });
+
+  it("still resolves exact display-name and alias hits, case-insensitively, without creating a duplicate", async () => {
+    sm.persona_add(makeStoredPersona("stored-sw-arch", "Software Architect", { aliases: ["swarch"] }));
+
+    const byName = await ensureAgentPersona("SOFTWARE ARCHITECT", { stateManager: sm });
+    const byAlias = await ensureAgentPersona("SwArch", { stateManager: sm });
+
+    expect(byName.id).toBe("stored-sw-arch");
+    expect(byAlias.id).toBe("stored-sw-arch");
+    expect(sm.persona_getAll()).toHaveLength(1);
+  });
+});
+
+describe("findPersonaByExactName", () => {
+  it("strips zero-width/whitespace padding, matches case-insensitively, and never matches a substring", async () => {
+    const sm = new StateManager();
+    await sm.initialize(createMockStorage());
+    sm.persona_add({
+      id: "spider-id",
+      display_name: "Spider",
+      entity: "system",
+      aliases: ["web crawler"],
+      traits: [],
+      topics: [],
+      is_paused: false,
+      is_archived: false,
+      is_static: false,
+      last_updated: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(findPersonaByExactName(sm, "\u200B spider ")?.id).toBe("spider-id");
+    expect(findPersonaByExactName(sm, "WEB CRAWLER")?.id).toBe("spider-id");
+    expect(findPersonaByExactName(sm, "Pi")).toBeNull();
+    expect(findPersonaByExactName(sm, "spid")).toBeNull();
   });
 });

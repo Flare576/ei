@@ -864,4 +864,78 @@ describe("importOpenCodeSessions", () => {
     expect(result.sessionsProcessed).toBe(1);
   });
 
+  describe("exact persona lookup (no partial match)", () => {
+    function assistantMsg(agent: string): OpenCodeMessage {
+      return {
+        id: "msg_x1",
+        sessionId: "ses_test123",
+        role: "assistant",
+        agent,
+        content: `Hello from ${agent}`,
+        timestamp: "2026-02-01T00:00:00.000Z",
+      };
+    }
+
+    async function run(agent: string) {
+      mockReader.getSessionsUpdatedSince = vi.fn().mockResolvedValue([makeSession({ id: "ses_test123" })]);
+      mockReader.getMessagesForSession = vi.fn().mockResolvedValue([assistantMsg(agent)]);
+      return importOpenCodeSessions({
+        stateManager: mockStateManager as StateManager,
+        interface: mockInterface as Ei_Interface,
+        reader: mockReader as IOpenCodeReader,
+      });
+    }
+
+    it("files 'Architect' under its own new persona, not the unrelated 'Software Architect'", async () => {
+      createdPersonas.set("Software Architect", { id: "persona-swarch", display_name: "Software Architect" });
+
+      const result = await run("Architect");
+
+      expect(result.personasCreated).toEqual(["Architect"]);
+      expect(createdPersonas.get("Architect")).toBeDefined();
+      expect(messageStore.get("persona-swarch") ?? []).toHaveLength(0);
+      expect(messageStore.get(createdPersonas.get("Architect")!.id)).toHaveLength(1);
+    });
+
+    it("still files an exact display-name hit, case-insensitively, under the existing persona", async () => {
+      createdPersonas.set("Software Architect", { id: "persona-swarch", display_name: "Software Architect" });
+
+      const result = await run("software architect");
+
+      expect(result.personasCreated).toEqual([]);
+      expect(createdPersonas.size).toBe(1);
+      expect(messageStore.get("persona-swarch")).toHaveLength(1);
+    });
+
+    it("still files an exact alias hit under the existing persona", async () => {
+      vi.mocked(mockStateManager.persona_getAll!).mockReturnValue([
+        { ...buildPersonaEntity("x", { id: "persona-swarch", display_name: "Software Architect" }), aliases: ["swarch"] },
+      ]);
+
+      const result = await run("SWARCH");
+
+      expect(result.personasCreated).toEqual([]);
+      expect(mockStateManager.persona_add).not.toHaveBeenCalled();
+      expect(messageStore.get("persona-swarch")).toHaveLength(1);
+    });
+
+    it("archived refresh keeps existing aliases and adds resolver aliases without duplicates", async () => {
+      vi.mocked(mockStateManager.persona_getAll!).mockReturnValue([
+        {
+          ...buildPersonaEntity("x", { id: "persona-sis", display_name: "Sisyphus" }, true),
+          aliases: ["my-sis", "SISYPHUS"],
+        },
+      ]);
+
+      await run("Sisyphus (Ultraworker)");
+
+      expect(mockStateManager.persona_update).toHaveBeenCalledTimes(1);
+      const [id, patch] = vi.mocked(mockStateManager.persona_update!).mock.calls[0] as unknown as [string, { aliases: string[] }];
+      expect(id).toBe("persona-sis");
+      expect(patch.aliases.slice(0, 2)).toEqual(["my-sis", "SISYPHUS"]);
+      expect(patch.aliases).toContain("Sisyphus (Ultraworker)");
+      const lower = patch.aliases.map(a => a.toLowerCase());
+      expect(new Set(lower).size).toBe(lower.length);
+    });
+  });
 });

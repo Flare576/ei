@@ -3,7 +3,7 @@ import type { Ei_Interface, Message, ContextStatus } from "../../core/types.js";
 import type { IOpenCodeReader, OpenCodeSession, OpenCodeMessage } from "./types.js";
 import { UTILITY_AGENTS, AGENT_TO_AGENT_PREFIXES } from "./types.js";
 import { createOpenCodeReader } from "./reader-factory.js";
-import { ensureAgentPersona, resolveCanonicalAgent } from "../../core/personas/opencode-agent.js";
+import { ensureAgentPersona, findAgentPersonaExact, findPersonaByExactName, resolveCanonicalAgent } from "../../core/personas/opencode-agent.js";
 import {
   queueAllScans,
   type ExtractionContext,
@@ -179,7 +179,7 @@ export async function importOpenCodeSessions(
   // land in the same bucket instead of clobbering each other.
   const byPersonaId = new Map<string, { persona: NonNullable<ReturnType<typeof stateManager.persona_getByName>>; msgs: OpenCodeMessage[]; isNew: boolean; agentName: string }>();
   for (const msg of relevant) {
-    let persona = stateManager.persona_getByName(msg.agent);
+    let persona = findPersonaByExactName(stateManager, msg.agent) ?? findAgentPersonaExact(stateManager, msg.agent);
     let isNew = false;
     if (!persona) {
       persona = await ensureAgentPersona(msg.agent, {
@@ -206,7 +206,15 @@ export async function importOpenCodeSessions(
     if (persona.is_archived) {
       // Existing archived persona: refresh identity fields, then remove only external messages
       const agentInfo = await reader.getAgentInfo(persona.display_name);
-      const { aliases } = resolveCanonicalAgent(agentName);
+      const { aliases: resolved } = resolveCanonicalAgent(agentName);
+      const aliases = [...(persona.aliases ?? [])];
+      const seen = new Set(aliases.map(a => a.toLowerCase()));
+      for (const a of resolved) {
+        if (!seen.has(a.toLowerCase())) {
+          seen.add(a.toLowerCase());
+          aliases.push(a);
+        }
+      }
       stateManager.persona_update(persona.id, {
         short_description: agentInfo?.description ?? persona.short_description,
         aliases,

@@ -48,6 +48,16 @@ export function findAgentPersonaExact(stateManager: StateManager, agentName: str
   return matchAgentPersona(stateManager.persona_getAll(), resolveCanonicalAgent(agentName).canonical);
 }
 
+/**
+ * Exact (case-insensitive) display-name or alias lookup of a name as given, after the
+ * same leading/trailing whitespace + zero-width strip `persona_getByName` applies to
+ * its exact tiers. Unlike `persona_getByName` there is NO unique-substring fallback.
+ */
+export function findPersonaByExactName(stateManager: StateManager, name: string): PersonaEntity | null {
+  const stripped = name.replace(/^[\p{Z}\u200B\u200C\u200D\u2060\uFEFF]+|[\p{Z}\u200B\u200C\u200D\u2060\uFEFF]+$/gu, "");
+  return matchAgentPersona(stateManager.persona_getAll(), stripped);
+}
+
 export function resolveCanonicalAgent(agentName: string): { canonical: string; aliases: string[] } {
   // Strip Unicode whitespace (\p{Z}) AND zero-width characters (\u200B, \u200C, \u200D, \u2060, \uFEFF).
   // The \u200B strip is not decorative — oh-my-openagent intentionally prefixes agent display
@@ -86,9 +96,7 @@ export async function ensureAgentPersona(
 
   const { canonical, aliases } = resolveCanonicalAgent(agentName);
 
-  const existing = creation
-    ? findAgentPersonaExact(stateManager, agentName)
-    : stateManager.persona_getByName(canonical);
+  const existing = findAgentPersonaExact(stateManager, agentName);
   if (existing) {
     return existing;
   }
