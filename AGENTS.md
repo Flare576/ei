@@ -385,7 +385,7 @@ Tool calling can fail in several ways. Here's how each is handled:
 | Failure | Behavior |
 |---------|----------|
 | Provider disabled | Tool excluded from persona's available tools silently |
-| Tool returns 5xx / network error | Inject error result, remove tool from payload for remainder of interaction |
+| Tool returns 5xx / network error | Inject error result, remove tool from payload for remainder of interaction. A failure the human can fix (dead login, missing key) is reported as `{error, message, remediation?}` — see below |
 | `max_calls_per_interaction` reached | Omit tool from subsequent LLM calls in this interaction |
 | Hard interaction limit (10 total calls) reached | All remaining tool calls skipped silently |
 | Tool returns empty result | Inject `"No results found"`, continue loop normally |
@@ -394,6 +394,8 @@ Tool calling can fail in several ways. Here's how each is handled:
 | All tools exhausted or failed | LLM synthesizes final response without tools — always responds |
 
 **Rule**: Tool failures are never fatal. They inject an error result into the LLM's tool history and continue. The LLM is responsible for synthesizing a response with whatever information it has.
+
+**Uniform failure contract**: a tool failure the human can act on comes back to the model as JSON `{error, message, remediation?}` (`toolError()` in `src/core/tools/tool-error.ts`). `error` is a short machine code, `message` is the plain-language cause, and `remediation` is what the human can do — named by real UI location (web: Settings → Toolkits; TUI: `/auth spotify`, `/auth slack`) — and is omitted when there is nothing they can do. An executor reports such a failure by throwing `ToolFailure`; `executeToolCalls` records it as a failed call (`error: true`) and drops the tool for the rest of the interaction, so the cause is explained once rather than retried. The tools section of the prompt tells the model to relay the cause and remediation to the human instead of acting as if the tool had worked.
 
 **Tool calling applies to** (v1): `HandlePersonaResponse`, `HandleRoomResponse` (read-only tools — see Kind Field), `HandleHeartbeatCheck`, `HandleEiHeartbeat`.
 
@@ -458,6 +460,8 @@ A turn's tool calls and the model's thinking are saved as `tool_calls`/`thinking
 4. If it needs a new provider, add provider seed block before the tool seed block
 5. Set `kind` to `"read"` or `"write"` (see Kind Field above)
 6. Update the Built-in Tool Registry table above
+
+**Writing a tool executor**: for a failure the human can fix (expired login, missing API key, revoked access), throw `new ToolFailure(code, plainLanguageCause, remediation)` — don't hand-build an error string or return an empty result. Let any other error (bugs, transient network faults) propagate as a plain `Error`; `executeToolCalls` still reports it as a failed call, but it carries no remediation.
 
 ### Persona Tool Grants Survive Provider Disable
 
