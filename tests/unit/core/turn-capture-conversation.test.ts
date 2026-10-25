@@ -55,7 +55,9 @@ describe.each(modes)("whole-turn capture — %s", (mode) => {
     const findResult = "find_memory result sentinel";
     const noteResult = "ordinary tool result sentinel";
     fx.registerExecutor({ name: "find_memory", execute: async () => findResult });
-    const ordinary = fx.registerTool({ kind: "write", result: noteResult });
+    // Rooms only offer read tools, so the ordinary tool is a write tool only in 1:1.
+    const ordinaryKind = mode === "room" ? "read" : "write";
+    const ordinary = fx.registerTool({ kind: ordinaryKind, result: noteResult });
     const before = personaReplies(fx, mode).length;
 
     fx.script([
@@ -69,7 +71,7 @@ describe.each(modes)("whole-turn capture — %s", (mode) => {
     expect(personaReplies(fx, mode)).toHaveLength(before + 1);
     expect(finalRow(fx, mode).tool_calls).toEqual([
       { name: "find_memory", arguments: { query: "remember this" }, result: findResult, error: false, kind: "read" },
-      { name: ordinary.name, arguments: { note: "write this" }, result: noteResult, error: false, kind: "write" },
+      { name: ordinary.name, arguments: { note: "write this" }, result: noteResult, error: false, kind: ordinaryKind },
     ]);
     expect(fx.llmCalls).toHaveLength(3);
   });

@@ -42,10 +42,12 @@ describe.each(modes)("whole-turn notifications — %s", (mode) => {
     roomId = fx.roomId;
 
     const a = fx.registerTool({ kind: "read", result: "lookup result" });
-    const b = fx.registerTool({ kind: "write", result: "saved result" });
+    // Rooms only offer read tools, so the second tool is a write tool only in 1:1.
+    const secondKind = mode === "room" ? "read" : "write";
+    const b = fx.registerTool({ kind: secondKind, result: "saved result" });
     expectedCalls = [
       { name: a.name, arguments: { topic: "first" }, result: "lookup result", error: false, kind: "read" },
-      { name: b.name, arguments: { topic: "second" }, result: "saved result", error: false, kind: "write" },
+      { name: b.name, arguments: { topic: "second" }, result: "saved result", error: false, kind: secondKind },
     ];
     initialPersonaRows = fx.messages().length;
     initialRoomRows = fx.roomMessages().length;

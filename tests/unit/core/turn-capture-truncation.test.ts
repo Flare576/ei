@@ -76,10 +76,10 @@ describe.each(writers)("persisted tool result cap — $name", (writer) => {
     };
     const longArgument = "z".repeat(300);
     const tools = {
-      exact150: fx.registerTool({ personaId: owner, result: results.exact150 }),
-      over151: fx.registerTool({ personaId: owner, result: results.over151 }),
-      long300: fx.registerTool({ personaId: owner, result: results.long300 }),
-      pair: fx.registerTool({ personaId: owner, result: results.pair }),
+      exact150: fx.registerTool({ personaId: owner, kind: "read", result: results.exact150 }),
+      over151: fx.registerTool({ personaId: owner, kind: "read", result: results.over151 }),
+      long300: fx.registerTool({ personaId: owner, kind: "read", result: results.long300 }),
+      pair: fx.registerTool({ personaId: owner, kind: "read", result: results.pair }),
     };
 
     let carried: Array<{ name: string; arguments: Record<string, unknown>; result: string }> | undefined;

@@ -43,7 +43,7 @@ export interface ToolDefinition {
   max_calls_per_interaction?: number;  // Max times LLM may call this tool per response turn. Default: 3.
   is_submit?: boolean;                 // If true, calling this tool IS the structured response — terminates the tool loop immediately and its arguments become response.parsed
   heartbeat_eligible?: boolean;        // Whether heartbeat-classified requests may include this tool. Default: true (eligible) when absent.
-  // DISPLAY-only classification (ADR-039 item 4): "write" = authoring/persistence side effect on the persona's behalf; "read" = only reads/looks up. Required by convention on every built-in (completeness test), not by the type; absent/unclassified is treated as "write" by consumers. NOT the heartbeat-authorization mechanism — that is heartbeat_eligible, which is intentionally independent of this field.
+  // DISPLAY-only classification (ADR-039 item 4): "write" = authoring/persistence side effect on the persona's behalf; "read" = only reads/looks up. Required by convention on every built-in (completeness test), not by the type; absent/unclassified is treated as "write" by consumers (display and Rooms). Also the Room gate: HandleRoomResponse requests are offered only kind === "read" tools (deny-by-default). NOT the heartbeat-authorization mechanism — that is heartbeat_eligible, which is intentionally independent of this field.
   kind?: "read" | "write";
 }
 

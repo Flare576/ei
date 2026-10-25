@@ -57,6 +57,7 @@ import { seedBuiltinFacts, migrateLearnedOn, migrateMessageIds, migrateSlackToMu
 import { IntegrationSyncManager } from "./integration-sync-manager.js";
 import { registerFindMemoryExecutor, registerFetchMemoryExecutor, registerFetchMessageExecutor, registerFileReadExecutor, registerPersonaNoteExecutors, buildPersonaNoteTools, registerPersonaIdentityExecutors, buildPersonaIdentityTools, registerResolveSignalExecutor, buildResolveSignalTool, SYSTEM_TOOLS } from "./tools/index.js";
 import { dedupeToolsByName } from "./tools/dedupe.js";
+import { filterToolsForRoom } from "./tools/room-filter.js";
 import { createAddNoteExecutor, createClearNoteExecutor } from "./tools/builtin/persona-notes.js";
 import { createGetMyIdentityExecutor, createEditTraitExecutor, createEditTopicExecutor, createUpdateDescriptionExecutor } from "./tools/builtin/persona-identity.js";
 import { createResolveSignalExecutor } from "./tools/builtin/resolve-signal.js";
@@ -723,6 +724,13 @@ const toolNextSteps = new Set([
                 (request.data.originalNextStep === LLMNextStep.HandleHeartbeatCheck ||
                   request.data.originalNextStep === LLMNextStep.HandleEiHeartbeat));
 
+            // Room requests (including every later HandleToolContinuation round, which keeps
+            // `originalNextStep`) never get write tools: only `kind === "read"` survives.
+            const isRoomRequest =
+              request.next_step === LLMNextStep.HandleRoomResponse ||
+              (request.next_step === LLMNextStep.HandleToolContinuation &&
+                request.data.originalNextStep === LLMNextStep.HandleRoomResponse);
+
             let tools: ToolDefinition[] = [];
             if (isDedupRequest) {
               tools = SYSTEM_TOOLS.filter(t => t.name === "find_memory");
@@ -739,6 +747,9 @@ const toolNextSteps = new Set([
               tools = dedupeToolsByName([...SYSTEM_TOOLS, ...buildPersonaNoteTools(toolPersonaId), ...buildPersonaIdentityTools(toolPersonaId), ...buildResolveSignalTool(toolPersonaId), ...this.stateManager.tools_getForPersona(toolPersonaId, this.isTUI)]);
               if (isHeartbeatRequest) {
                 tools = tools.filter(t => t.heartbeat_eligible !== false);
+              }
+              if (isRoomRequest) {
+                tools = filterToolsForRoom(tools);
               }
             }
 
