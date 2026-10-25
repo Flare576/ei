@@ -111,7 +111,8 @@ ROOM COMMANDS
         delete from here.
 
     /tools
-        Manage tool providers — enable or disable tools per persona.
+        Enable or disable tool providers and their tools for everyone.
+        To choose a persona's tools, edit it in /details.
 
     /auth
         Authenticate with an external service.
