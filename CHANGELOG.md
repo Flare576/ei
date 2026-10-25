@@ -22,6 +22,9 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 
 ### Changed
 
+- **Personas in Rooms no longer have tools that write.** In a Room a Persona can still look things
+  up, but tools that edit its identity or notes (traits, topics, description, notes, signals) are
+  withheld; make those edits in a 1:1 conversation.
 - **A single-letter prefix and a hyphen on an agent name now fold into the bare name.** For every
   integration's persona lookup, `s-architect` resolves like `architect`.
 - **Pi now reads only `~/.pi`.** OMP sessions are no longer picked up through the Pi integration.
