@@ -6,7 +6,7 @@ Eval suites make live LLM calls against a local model. Each case takes 10–60 s
 
 ```typescript
 task(category="quick", load_skills=[], run_in_background=true, description="Run person-update evals",
-  prompt="Run: cd /Users/flare576/Projects/Personal/ei && npm run test:evals -- person-update --filter=identity-bleed\nReport the full output.")
+  prompt="Run: cd /Users/flare576/Projects/Personal/ei && npm run test:evals -- person-update --filter=cross-attribution\nReport the full output.")
 ```
 
 Use `--filter=<tag-or-substring>` to run a single case while iterating on a prompt. Full suite only when you need to check for regressions.
@@ -17,10 +17,10 @@ Use `--filter=<tag-or-substring>` to run a single case while iterating on a prom
 npm run test:evals                                      # all suites (auto-discovered)
 npm run test:evals -- person-update                     # person-update.eval.ts only (~5 min)
 npm run test:evals -- person                            # all person-*.eval.ts files
-npm run test:evals -- person-update --filter=identity-bleed  # file match + case filter (~1 min)
+npm run test:evals -- person-update --filter=cross-attribution  # file match + case filter (~1 min)
 npm run test:evals -- --filter=regression               # case filter across ALL files
 
-EVAL_FILTER=identity-bleed npm run test:evals -- person-update  # same via env var
+EVAL_FILTER=cross-attribution npm run test:evals -- person-update  # same via env var
 npm run test:evals -- --help                            # show full usage
 ```
 
@@ -72,8 +72,7 @@ Every eval case has a `tags` array — use those for precise targeting. Tag conv
 | Tag pattern | Meaning |
 |---|---|
 | `person-update` | All person-update cases |
-| `ei-persona` | Ei Persona log path cases |
-| `identity-bleed` | The identity restatement regression test |
+| `cross-attribution` | Another person's handle must not be added to this record |
 | `no-signal` | Cases that should return `{}` |
 | `known-model-limitation` | Expected failures — model behavior, not a bug |
 | `borderline` | Nondeterministic case — uses `pass_threshold` below 1.0, not all runs guaranteed to pass |
