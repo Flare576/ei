@@ -22,6 +22,26 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
 - **Personas now tell you when a tool fails and what to do about it.** A dead Spotify login or a
   missing Tavily key used to be invisible to the persona, which carried on as if the tool had
   worked. It now explains what broke and where to fix it (for example Settings → Toolkits).
+- **OpenCode and Pi importers no longer file a new agent's messages under an unrelated
+  persona.** A persona whose name merely contained the agent name (`Architect` under `Software
+  Architect`, `Pi` under `Spider`) used to catch them; names and aliases are now matched exactly.
+  Refreshing an archived persona's aliases keeps its existing aliases and adds the new ones
+  instead of replacing them. Name lookup in TUI commands is unchanged.
+- **A scanned name that matches several existing people no longer merges into the first one
+  when the embedding service fails.** The scan now creates a new person instead.
+- **Settings that make no operational sense are now rejected.** Heartbeat intervals below 5
+  minutes are refused for the global default (TUI `/settings` and web settings) and for
+  per-persona heartbeats (TUI persona editor and web persona settings; static personas are
+  exempt). In the TUI `/settings` editor, a zero, negative or non-numeric default context window,
+  rolling-backup interval or backup count, or integration polling interval is refused too.
+  Previously a `0` could blank conversation history, delete every rolling backup, or queue a
+  heartbeat on every loop pass. Settings already stored with such values are not migrated; the
+  `/settings` editor won't save until they are fixed.
+- **The web settings modal no longer shows a phantom default for message rolloff.** Unset
+  `message_max_age_days` and `message_min_count` display 0 (never prune), which is what applies.
+- **The `<ei-relationship>` block given to harness agents now lists every trait of the
+  persona.** That includes the "never do this" guardrail traits (strength 0) and moderate ones,
+  not only traits at strength 0.7 or above.
 
 ### Changed
 
@@ -92,12 +112,19 @@ read `git log`, or the per-document changelog tables in `CONTRACTS.md`.
   for any temperature other than 1, which previously sent every extraction request to the
   dead-letter queue), `max_output_tokens: 128000`, and a `token_limit` of 80k. That limit sits
   below Anthropic's 100k-token prompt-pricing threshold because Ei's character-based token
-  estimate runs about 1.5x low for Haiku 5.5's tokenizer.
+  estimate runs about 1.5x low for Haiku 5.5's tokenizer. `temperature_disabled` and
+  `max_output_tokens` apply to every Haiku 5.5 model, however it was configured; the
+  `token_limit` is copied onto a model only when onboarding or provider auto-detection creates
+  it, so models configured earlier, or added through `/providers` YAML, keep the default budget
+  until you set `token_limit` on them.
 - **Claude Sonnet 5.5 and Opus 5.5 (`claude-sonnet-5-5`, `claude-opus-5-5`) are known models.**
   Fresh Anthropic detection already selected them as the chat and bonus models, but neither
   had an entry, so Ei sent `temperature` and the API rejected every chat request with a 400.
   Both now get `temperature_disabled` and `max_output_tokens: 128000`, with a `token_limit` of
-  200k matching the other Sonnet/Opus entries.
+  200k matching the other Sonnet/Opus entries. `temperature_disabled` and `max_output_tokens`
+  apply to every such model however it was configured; as with Haiku, the `token_limit` is
+  copied only onto models created by onboarding or auto-detection, so existing models (and any
+  added through `/providers`) need `token_limit` set by hand.
 
 ## [1.10.0] — 2026-08-09
 
