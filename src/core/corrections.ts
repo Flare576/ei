@@ -340,7 +340,7 @@ export function resolveOwnPersona(
   personas: StorageState["personas"],
   personaId: string
 ): StorageState["personas"][string] | undefined {
-  return Object.hasOwn(personas, personaId) ? personas[personaId] : undefined;
+  return Object.prototype.hasOwnProperty.call(personas, personaId) ? personas[personaId] : undefined;
 }
 
 /** Strict allowlist for a `signal.confirm`/`signal.dismiss` correction
